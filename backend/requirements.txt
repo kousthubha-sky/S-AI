@@ -1,0 +1,8 @@
+fastapi
+pydantic
+uvicorn
+sqlalchemy
+supabase 
+razorpay 
+redis[async] 
+python-dotenv
