@@ -8,54 +8,77 @@ import {
   FieldSeparator,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
-import { Link } from "react-router"
+import { Link, Navigate } from "react-router"
+import { useAuth0 } from "@auth0/auth0-react"
 
 export function SignupForm({
   className,
   ...props
-}: React.ComponentProps<"form">) {
+}: React.ComponentProps<"div">) {
+  const { loginWithRedirect, isAuthenticated } = useAuth0();
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" />;
+  }
+  const handleSignup = async () => {
+    try {
+      await loginWithRedirect({
+        authorizationParams: {
+          redirect_uri: `${window.location.origin}/callback`,
+          screen_hint: 'signup'
+        },
+        appState: {
+          returnTo: '/dashboard',
+          type: 'signup'
+        }
+      });
+    } catch (error) {
+      console.error('Signup error:', error);
+    }
+  };
+
+const handleGoogleSignup = async () => {
+  try {
+    await loginWithRedirect({
+      authorizationParams: {
+        connection: 'google-oauth2',
+        redirect_uri: `${window.location.origin}/callback`,
+        screen_hint: 'signup'
+      },
+      appState: {
+        returnTo: '/dashboard',
+        type: 'signup',
+        provider: 'google'
+      }
+    });
+  } catch (error) {
+    console.error('Google signup error:', error);
+  }
+};
   return (
-    <form className={cn("flex flex-col gap-6", className)} {...props}>
+    <div className={cn("flex flex-col gap-6", className)} {...props}>
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-2xl font-bold">Create your account</h1>
           <p className="text-muted-foreground text-sm text-balance">
-            Fill in the form below to create your account
+            Choose your preferred signup method
           </p>
         </div>
         <Field>
-          <FieldLabel htmlFor="name">Full Name</FieldLabel>
-          <Input id="name" type="text" placeholder="John Doe" required />
+          <Button 
+            onClick={() => handleSignup()} 
+            className="w-full"
+          >
+            Sign up with Credentials
+          </Button>
         </Field>
-        <Field>
-          <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" type="email" placeholder="m@example.com" required />
-          <FieldDescription>
-            We&apos;ll use this to contact you. We will not share your email
-            with anyone else.
-          </FieldDescription>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="password">Password</FieldLabel>
-          <Input id="password" type="password" required />
-          <FieldDescription>
-            Must be at least 8 characters long.
-          </FieldDescription>
-        </Field>
-        <Field>
-          <FieldLabel htmlFor="confirm-password">Confirm Password</FieldLabel>
-          <Input id="confirm-password" type="password" required />
-          <FieldDescription>Please confirm your password.</FieldDescription>
-        </Field>
-        <Field>
-          <Button type="submit">Create Account</Button>
-        </Field>
-        <FieldSeparator>Or continue with</FieldSeparator>
+        <FieldSeparator>Or</FieldSeparator>
         <Field>
           <Button
             variant="outline"
             type="button"
-            className="flex items-center gap-2 border-gray-300 hover:bg-gray-100 text-gray-700"
+            className="flex w-full items-center gap-2 border-gray-300 hover:bg-gray-100 text-gray-700"
+            onClick={() => handleGoogleSignup()}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -79,7 +102,7 @@ export function SignupForm({
                 d="M24 46c5.94 0 10.92-1.97 14.56-5.36l-7.1-5.51c-1.98 1.34-4.54 2.13-7.46 2.13-6.41 0-11.8-4.66-13.64-10.93l-6.5 5.53C7.14 40.32 14.82 46 24 46z"
               />
             </svg>
-            Login with Google
+            Sign up with Google
           </Button>
           <FieldDescription className="px-6 text-center">
             Already have an account? 
@@ -89,6 +112,6 @@ export function SignupForm({
           </FieldDescription>
         </Field>
       </FieldGroup>
-    </form>
+    </div>
   )
 }

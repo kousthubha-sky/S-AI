@@ -1,8 +1,12 @@
-fastapi
+fastapi[all]
 pydantic
 uvicorn
 sqlalchemy
-supabase 
-razorpay 
-redis[async] 
+supabase
+razorpay
+redis[async]
 python-dotenv
+python-jose[cryptography]
+python-multipart
+httpx
+passlib[bcrypt]

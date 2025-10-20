@@ -8,47 +8,80 @@ import {
   FieldSeparator,
 } from "~/components/ui/field"
 import { Input } from "~/components/ui/input"
-import { Link } from "react-router"
+import { Link, Navigate } from "react-router"
 import routes from "~/routes"
+import { useAuth0 } from "@auth0/auth0-react"
 
 export function LoginForm({
   className,
   ...props
-}: React.ComponentProps<"form">) {
+}: React.ComponentProps<"div">) {
+  const { loginWithRedirect, isAuthenticated } = useAuth0();
+
+  if (isAuthenticated) {
+    return <Navigate to="/dashboard" />;
+  }
+
+  const handleAuth0Login = async () => {
+    try {
+      await loginWithRedirect({
+        authorizationParams: {
+          redirect_uri: `${window.location.origin}/callback`,
+          prompt: 'login',
+        },
+        appState: {
+          returnTo: '/dashboard',
+          type: 'login'
+        }
+      });
+    } catch (error) {
+      console.error('Login error:', error);
+    }
+  };
+
+const handleGoogleLogin = async () => {
+  try {
+    await loginWithRedirect({
+      authorizationParams: {
+        connection: 'google-oauth2',
+        redirect_uri: `${window.location.origin}/callback`,
+        prompt: 'login'
+      },
+      appState: {
+        returnTo: '/dashboard',
+        type: 'login',
+        provider: 'google'
+      }
+    });
+  } catch (error) {
+    console.error('Google login error:', error);
+  }
+};
+
   return (
-    <form className={cn("flex flex-col gap-6", className)} {...props}>
+    <div className={cn("flex flex-col gap-6", className)} {...props}>
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
           <h1 className="text-2xl font-bold">Login to your account</h1>
           <p className="text-muted-foreground text-sm text-balance">
-            Enter your email below to login to your account
+            Choose your preferred login method
           </p>
         </div>
         <Field>
-          <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input id="email" type="email" placeholder="m@example.com" required />
+          <Button 
+            onClick={handleAuth0Login} 
+            className="w-full"
+          >
+            Continue with Credentials
+          </Button>
         </Field>
-        <Field>
-          <div className="flex items-center">
-            <FieldLabel htmlFor="password">Password</FieldLabel>
-            <a
-              href="#"
-              className="ml-auto text-sm underline-offset-4 hover:underline"
-            >
-              Forgot your password?
-            </a>
-          </div>
-          <Input id="password" type="password" required />
-        </Field>
-        <Field>
-          <Button type="submit">Login</Button>
-        </Field>
-        <FieldSeparator>Or continue with</FieldSeparator>
+        <FieldSeparator>Or</FieldSeparator>
         <Field>
           <Button
             variant="outline"
             type="button"
-            className="flex items-center gap-2 border-gray-300 hover:bg-gray-100 text-gray-700"
+            className="flex w-full items-center gap-2 border-gray-300 hover:bg-gray-100 text-gray-700"
+            onClick={handleGoogleLogin} // Use the new function
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -82,6 +115,6 @@ export function LoginForm({
           </FieldDescription>
         </Field>
       </FieldGroup>
-    </form>
+    </div>
   )
 }
