@@ -11,13 +11,15 @@ export function useAuthApi() {
       const response = await fetch(url, {
         ...options,
         headers: {
+          'Content-Type': 'application/json',
           ...options.headers,
           Authorization: `Bearer ${token}`,
         },
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.detail || `HTTP error! status: ${response.status}`);
       }
 
       return await response.json();

@@ -6,7 +6,7 @@ supabase
 razorpay
 redis[async]
 python-dotenv
-python-jose[cryptography]
+PyJWT[crypto]
 python-multipart
 httpx
 passlib[bcrypt]

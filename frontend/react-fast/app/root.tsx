@@ -7,7 +7,7 @@ import {
   ScrollRestoration,
 } from "react-router";
 import AuthProvider from "./providers/Auth0Providers";
-
+import { ThemeProvider } from "./components/theme/theme-provider";
 import type { Route } from "./+types/root";
 import "./app.css";
 
@@ -44,9 +44,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <Outlet />
-    </AuthProvider>
+    <ThemeProvider defaultTheme="light">
+      <AuthProvider>
+        <Outlet />
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 

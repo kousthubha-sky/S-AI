@@ -26,7 +26,7 @@ export default function AuthProvider({ children }: AuthProviderProps) {
       authorizationParams={{
         ...auth0Config.authorizationParams,
         redirect_uri: `${window.location.origin}/callback`,
-        audience: import.meta.env.VITE_AUTH0_AUDIENCE,
+        audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
       }}
       cacheLocation="localstorage"
       useRefreshTokens={true}

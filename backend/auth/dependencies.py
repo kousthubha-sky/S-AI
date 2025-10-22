@@ -3,6 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional
 from functools import wraps
 import jwt
+from jwt import PyJWTError
 import httpx
 from functools import lru_cache
 import os
@@ -12,16 +13,29 @@ security = HTTPBearer()
 @lru_cache()
 def get_jwks():
     AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN")
+    if not AUTH0_DOMAIN:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="AUTH0_DOMAIN environment variable not set"
+        )
+    
     url = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json"
-    with httpx.Client() as client:
-        response = client.get(url)
-        return response.json()
-
-def get_key(token: str):
-    jwks = get_jwks()
     try:
+        with httpx.Client() as client:
+            response = client.get(url)
+            response.raise_for_status()
+            return response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch JWKS: {str(e)}"
+        )
+
+def get_rsa_key(token: str):
+    try:
+        jwks = get_jwks()
         unverified_header = jwt.get_unverified_header(token)
-    except jwt.JWTError:
+    except PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token header"
@@ -59,29 +73,51 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
     """
     try:
         token = credentials.credentials
-        rsa_key = get_key(token)
+        
+        # Check if required environment variables are set
+        auth0_domain = os.getenv("AUTH0_DOMAIN")
+        auth0_audience = os.getenv("AUTH0_API_AUDIENCE")
+        
+        if not auth0_domain or not auth0_audience:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Auth0 configuration missing"
+            )
+        
+        rsa_key = get_rsa_key(token)
+        
+        # Convert RSA key to PEM format for PyJWT
+        from jwt.algorithms import RSAAlgorithm
+        public_key = RSAAlgorithm.from_jwk(rsa_key)
+        
         payload = jwt.decode(
             token,
-            rsa_key,
+            public_key,
             algorithms=["RS256"],
-            audience=os.getenv("AUTH0_API_AUDIENCE"),
-            issuer=f"https://{os.getenv('AUTH0_DOMAIN')}/"
+            audience=auth0_audience,
+            issuer=f"https://{auth0_domain}/"
         )
         return payload
+        
     except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired"
         )
-    except jwt.JWTClaimsError:
+    except jwt.InvalidTokenError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid claims"
+            detail=f"Invalid token: {str(e)}"
         )
-    except jwt.JWTError:
+    except PyJWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
+            detail=f"JWT error: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Token verification failed: {str(e)}"
         )
 
 def has_permissions(required_permissions: List[str]):
@@ -106,7 +142,13 @@ def get_user_id(payload: dict = Depends(verify_token)) -> str:
     """
     Extract user ID from the token payload
     """
-    return payload.get("sub")
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User ID not found in token"
+        )
+    return user_id
 
 def get_user_permissions(payload: dict = Depends(verify_token)) -> List[str]:
     """
