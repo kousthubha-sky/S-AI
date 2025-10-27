@@ -5,6 +5,9 @@ import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
 import { cn } from "~/lib/utils"
 import { useAuthApi } from "~/hooks/useAuthApi"
+import { PaymentDialog } from "./payment-dialog"
+import { ModelSelector } from "./model-selector"
+import { AI_MODELS } from "~/lib/models"
 
 interface Attachment {
   id: string;
@@ -23,7 +26,20 @@ interface Message {
   isLoading?: boolean
 }
 
-export function ChatInterface() {
+interface ChatInterfaceProps {
+  userTier: 'free' | 'pro';
+  messageCount?: number;
+  maxDailyMessages?: number;
+  nextResetTime?: string;
+}
+
+export function ChatInterface({ 
+  userTier, 
+  messageCount = 0,
+  maxDailyMessages = 500,
+  nextResetTime
+}: ChatInterfaceProps) {
+  const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
@@ -35,6 +51,9 @@ export function ChatInterface() {
   const [newMessage, setNewMessage] = useState("")
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false)
+  const [tempMessage, setTempMessage] = useState<Message | null>(null)
+  const [isLimitReached, setIsLimitReached] = useState(false)
   const { fetchWithAuth } = useAuthApi()
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -95,7 +114,7 @@ export function ChatInterface() {
         method: 'POST',
         body: JSON.stringify({
           messages: apiMessages,
-          model: 'openai/gpt-3.5-turbo',
+          model: selectedModel,
           temperature: 0.7,
           max_tokens: 1000
         })
@@ -113,8 +132,27 @@ export function ChatInterface() {
             : msg
         )
       )
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to send message:', error)
+      
+      // Check if payment required or daily limit reached
+      console.log('Error details:', error);  // Add debug logging
+      if (error.status === 402 || error?.message?.includes('Free trial limit reached') || error?.message?.includes('Daily limit reached')) {
+        console.log('Payment required or limit reached, showing dialog');
+        setTempMessage(tempAssistantMessage)
+        
+        if (error?.message?.includes('Daily limit reached')) {
+          // Remove the temporary loading message
+          setMessages(prev => prev.filter(msg => msg.id !== tempAssistantMessage.id));
+          // Set limit reached flag and show payment dialog
+          setIsLimitReached(true);
+          setShowPaymentDialog(true);
+          return
+        }
+        
+        setShowPaymentDialog(true)
+        return
+      }
       
       // Update the loading message with error
       setMessages(prev => 
@@ -183,17 +221,112 @@ export function ChatInterface() {
     ])
   }
 
+  const retryLastMessage = async () => {
+    const lastUserMessage = messages[messages.length - 2];
+    if (!lastUserMessage || lastUserMessage.role !== 'user') return;
+
+    // Add temporary assistant message for loading state
+    const tempAssistantMessage: Message = {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: '',
+      timestamp: new Date(),
+      isLoading: true
+    }
+    setMessages(prev => [...prev.filter(msg => msg.id !== tempMessage?.id), tempAssistantMessage])
+
+    try {
+      // Prepare messages for API
+      const apiMessages = messages
+        .slice(0, -1) // Remove the last message (which was the error)
+        .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
+        .map(msg => ({
+          role: msg.role,
+          content: msg.content
+        }))
+
+      const response = await fetchWithAuth('http://localhost:8000/api/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          messages: apiMessages,
+          model: selectedModel,
+          temperature: 0.7,
+          max_tokens: 1000
+        })
+      })
+
+      setMessages(prev => 
+        prev.map(msg => 
+          msg.id === tempAssistantMessage.id 
+            ? {
+                ...msg,
+                content: response.message,
+                isLoading: false
+              }
+            : msg
+        )
+      )
+    } catch (error: any) {
+      console.error('Failed to retry message:', error)
+      setMessages(prev => 
+        prev.filter(msg => msg.id !== tempAssistantMessage.id)
+      )
+    }
+  }
+
+  const handlePaymentSuccess = async () => {
+    setShowPaymentDialog(false)
+    if (tempMessage) {
+      await retryLastMessage()
+    }
+    setTempMessage(null)
+  }
+
   return (
     <div className="flex flex-col h-[600px] rounded-lg border bg-background">
+      {showPaymentDialog && (
+        <PaymentDialog
+          onClose={() => {
+            setShowPaymentDialog(false)
+            setIsLimitReached(false)
+            // Remove the loading message if payment was cancelled
+            if (tempMessage) {
+              setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
+              setTempMessage(null)
+            }
+          }}
+          onSuccess={handlePaymentSuccess}
+          showLimitReachedMessage={isLimitReached}
+        />
+      )}
       {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b">
-        <div className="flex items-center gap-2">
-          <Bot className="h-5 w-5 text-primary" />
-          <h3 className="font-semibold">AI Assistant</h3>
+      <div className="flex flex-col gap-2 p-4 border-b">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Bot className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold">AI Assistant</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            {userTier === 'free' && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setShowPaymentDialog(true)}
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                Upgrade to Pro
+              </Button>
+            )}
+            <Button variant="outline" size="sm" onClick={clearChat}>
+              Clear Chat
+            </Button>
+          </div>
         </div>
-        <Button variant="outline" size="sm" onClick={clearChat}>
-          Clear Chat
-        </Button>
+        <ModelSelector
+          selectedModel={selectedModel}
+          onModelChange={setSelectedModel}
+          userTier={userTier}
+        />
       </div>
 
       {/* Messages */}

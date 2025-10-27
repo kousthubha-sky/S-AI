@@ -25,7 +25,8 @@ export function SignupForm({
       await loginWithRedirect({
         authorizationParams: {
           redirect_uri: `${window.location.origin}/callback`,
-          screen_hint: 'signup'
+          screen_hint: 'signup',
+          connection: 'Username-Password-Authentication' // Specify the database connection
         },
         appState: {
           returnTo: '/dashboard',

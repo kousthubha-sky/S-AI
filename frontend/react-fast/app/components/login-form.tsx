@@ -28,6 +28,7 @@ export function LoginForm({
         authorizationParams: {
           redirect_uri: `${window.location.origin}/callback`,
           prompt: 'login',
+          connection: 'Username-Password-Authentication' // Specify the database connection
         },
         appState: {
           returnTo: '/dashboard',

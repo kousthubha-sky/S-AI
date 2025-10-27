@@ -5,6 +5,7 @@ import { ProtectedRoute } from "~/components/protected-route";
 import { Button } from "~/components/ui/button";
 import { ThemeSwitch } from "~/components/theme/theme-switch";
 import { ChatInterface } from "~/components/chat/chat-interface";
+import { useAuthApi } from "~/hooks/useAuthApi";
 
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 
@@ -19,19 +20,59 @@ interface Document {
 
 export default function Dashboard() {
   const { user, logout } = useAuth0();
+  const { fetchWithAuth } = useAuthApi();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [selectedDocument, setSelectedDocument] = useState<string>("");
+  const [userTier, setUserTier] = useState<'free' | 'pro'>('free');
+  const [messageCount, setMessageCount] = useState<number>(0);
+  const [nextResetTime, setNextResetTime] = useState<string>('');
 
   useEffect(() => {
     loadDocuments();
+    checkUserSubscription();
+    
+    // Set up polling for message count updates
+    const pollInterval = setInterval(checkUserSubscription, 60000); // Poll every minute
+    return () => clearInterval(pollInterval);
   }, []);
+
+  const checkUserSubscription = async () => {
+    try {
+      const usage = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/usage`);
+      if (usage.subscription_tier) {
+        // Map the subscription tier to either 'free' or 'pro'
+        const tier = usage.subscription_tier === 'basic' ? 'free' : 'pro';
+        setUserTier(tier);
+      }
+      
+      // Update message count and reset time
+      if (usage.daily_message_count !== undefined) {
+        setMessageCount(usage.daily_message_count);
+      }
+      
+      if (usage.next_reset_time) {
+        const resetTime = new Date(usage.next_reset_time);
+        const now = new Date();
+        
+        if (resetTime.getTime() - now.getTime() < 24 * 60 * 60 * 1000) {
+          // Less than 24 hours away
+          setNextResetTime(`at ${resetTime.toLocaleTimeString()}`);
+        } else {
+          setNextResetTime(`tomorrow at midnight`);
+        }
+      }
+    } catch (error) {
+      console.error('Failed to check subscription:', error);
+    }
+  };
 
   const loadDocuments = async () => {
     try {
-      const response = await fetch('http://localhost:8000/api/documents/list', {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/documents/list`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-        }
+        },
+        credentials: 'include'
       });
       if (response.ok) {
         const data = await response.json();
@@ -73,7 +114,12 @@ export default function Dashboard() {
 
           <div className="flex flex-col lg:flex-row gap-4">
             <div className="flex-1">
-              <ChatInterface />
+              <ChatInterface 
+                userTier={userTier}
+                messageCount={messageCount}
+                maxDailyMessages={500}
+                nextResetTime={nextResetTime}
+              />
             </div>
             
             

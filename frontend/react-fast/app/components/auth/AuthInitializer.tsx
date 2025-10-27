@@ -18,10 +18,11 @@ export function AuthInitializer() {
           console.log('User authenticated:', user.email);
           
           // Make a test call to the backend
-          const response = await fetch('http://localhost:8000/protected', {
+          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/profile`, {
             headers: {
               Authorization: `Bearer ${token}`
-            }
+            },
+            credentials: 'include'
           });
           
           if (response.ok) {

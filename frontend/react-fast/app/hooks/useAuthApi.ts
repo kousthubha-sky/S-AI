@@ -19,7 +19,18 @@ export function useAuthApi() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.detail || `HTTP error! status: ${response.status}`);
+        const error = new Error(errorData?.detail || `HTTP error! status: ${response.status}`);
+        // Add more detailed error properties
+        (error as any).status = response.status;
+        (error as any).statusText = response.statusText;
+        (error as any).data = errorData;
+        console.log('API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          data: errorData,
+          error
+        });
+        throw error;
       }
 
       return await response.json();
