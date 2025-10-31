@@ -1,3 +1,4 @@
+// components/auth/AuthInitializer.tsx
 import { useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 
@@ -5,40 +6,41 @@ export function AuthInitializer() {
   const { isAuthenticated, getAccessTokenSilently, user } = useAuth0();
 
   useEffect(() => {
-    if (isAuthenticated && user) {
+    if (isAuthenticated) {
       const initializeAuth = async () => {
         try {
-          // Get the access token
-          const token = await getAccessTokenSilently();
-          
-          // Store the token in localStorage (or your preferred storage)
-          localStorage.setItem('auth_token', token);
-          
-          // Log successful authentication
-          console.log('User authenticated:', user.email);
-          
-          // Make a test call to the backend
-          const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/profile`, {
-            headers: {
-              Authorization: `Bearer ${token}`
-            },
-            credentials: 'include'
+          // Get the actual access token (not authorization code)
+          const token = await getAccessTokenSilently({
+            authorizationParams: {
+              audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
+              scope: 'openid profile email'
+            }
           });
           
-          if (response.ok) {
-            const data = await response.json();
-            console.log('Backend authentication successful:', data);
-          } else {
-            console.error('Backend authentication failed:', await response.text());
+          console.log('Access Token:', token); // Should start with "eyJ"
+          
+          // Store the token in localStorage
+          localStorage.setItem('auth_token', token);
+          
+          // Verify it's a JWT token
+          if (!token.startsWith('eyJ')) {
+            console.error('Invalid token format - received:', token.substring(0, 20));
+            return;
           }
+          
+          console.log('Authentication initialized successfully');
+          
         } catch (error) {
           console.error('Error during authentication:', error);
         }
       };
 
       initializeAuth();
+    } else {
+      // Clear token when not authenticated
+      localStorage.removeItem('auth_token');
     }
-  }, [isAuthenticated, user, getAccessTokenSilently]);
+  }, [isAuthenticated, getAccessTokenSilently]);
 
   return null;
 }

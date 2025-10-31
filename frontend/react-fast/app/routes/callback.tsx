@@ -16,7 +16,7 @@ export default function Callback() {
       try {
         decodedState = state ? JSON.parse(atob(state)) : null;
       } catch (e) {
-        console.error('Failed to parse state:', e);
+        console.error('Failed to parse state:',e);
         decodedState = null;
       }
 

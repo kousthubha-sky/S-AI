@@ -1,10 +1,19 @@
 import base64
 import uvicorn
+import os
+import re
 from fastapi import FastAPI, Depends, HTTPException, Request, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import HTTPBearer
 from dotenv import load_dotenv
+from redis_config import redis_client
+
+# Load environment variables first
+load_dotenv()
+
+# Import database service
+from services.database import db
 
 import os
 import httpx
@@ -16,9 +25,8 @@ from models.payment import UserUsage, SubscriptionCreate, SubscriptionVerify, Su
 from auth.dependencies import verify_token, has_permissions, get_user_id, get_user_permissions
 from auth.payment import PaymentManager
 from web.webhook import router as webhook_router
-from models.state import user_usage
-
-# Load environment variables
+from web.chat import router as chat_router
+from models.state import get_user_usage, increment_message_count, update_user_subscription, get_next_reset_time
 load_dotenv()
 
 app = FastAPI(
@@ -26,22 +34,57 @@ app = FastAPI(
     description="Backend API for SAAS application with Auth0 integration",
     version="1.0.0"
 )
+@app.middleware("http")
+async def filter_invalid_requests(request: Request, call_next):
+    """
+    Filter out invalid requests that are causing warnings
+    """
+    # Check if it's a valid HTTP request
+    if not request.headers.get("host"):
+        return JSONResponse(
+            status_code=400,
+            content={"detail": "Invalid HTTP request"}
+        )
+    
+    # Check for common bot/user-agent patterns that cause issues
+    user_agent = request.headers.get("user-agent", "").lower()
+    
+    # Block common malicious patterns
+    blocked_patterns = [
+        r"python", r"curl", r"wget", r"scanner", r"bot",
+        r"zgrab", r"masscan", r"nmap", r"sqlmap"
+    ]
+    
+    if any(re.search(pattern, user_agent) for pattern in blocked_patterns):
+        return JSONResponse(
+            status_code=403,
+            content={"detail": "Forbidden"}
+        )
+    
+    try:
+        response = await call_next(request)
+        return response
+    except Exception as e:
+        print(f"Request processing error: {e}")
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error"}
+        )
 
-# CORS configuration
-origins = [
-    "http://localhost:5173",  # React development server
-    "http://localhost:8000",  # FastAPI development server
-    os.getenv("FRONTEND_URL", ""),  # Production frontend URL
-    "*"  # Allow all origins temporarily for debugging
-]
-
+# Also update your CORS middleware to be more specific
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        os.getenv("FRONTEND_URL", "http://localhost:5173"),
+        # Remove the "*" and be specific
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # Error handling middleware
 @app.exception_handler(HTTPException)
@@ -54,29 +97,51 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 # Health check endpoint
 @app.get("/health", tags=["System"])
 async def health_check():
-    """Check if the API is running"""
-    return {"status": "healthy"}
+    """Check if the API is running and Redis is connected"""
+    redis_status = "connected" if redis_client and redis_client.ping() else "disconnected"
+    return {
+        "status": "healthy",
+        "redis": redis_status
+    }
 
 # User profile endpoints
 @app.get("/api/profile", response_model=UserProfile, tags=["User"])
 async def get_profile(payload: dict = Depends(verify_token)):
-    """Get the current user's profile"""
+    """Get the current user's profile - creates user if doesn't exist"""
     try:
-        from auth.management import auth0_management
         user_id = payload.get("sub")
+        
+        # First, try to get user from Auth0
+        from auth.management import auth0_management
         user_data = await auth0_management.get_user_info(user_id)
+        
+        # Check if user exists in database
+        db_user = await db.get_user_by_auth0_id(user_id)
+        
+        if not db_user:
+            # User doesn't exist, create them
+            new_user = {
+                "auth0_id": user_id,
+                "email": user_data.get("email", ""),
+                "name": user_data.get("name"),
+                "subscription_tier": "free"
+            }
+            
+            db_user = await db.create_user(new_user)
         
         return UserProfile(
             user_id=user_id,
-            email=user_data.get("email", ""),
-            name=user_data.get("name"),
+            email=db_user.get("email", user_data.get("email", "")),
+            name=db_user.get("name", user_data.get("name")),
             picture=user_data.get("picture"),
             permissions=payload.get("permissions", [])
         )
+        
     except Exception as e:
+        print(f"Profile error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e)
+            detail=f"Failed to get profile: {str(e)}"
         )
 
 # Protected routes with different permission levels
@@ -130,10 +195,61 @@ def get_monthly_limit(subscription_tier: str) -> int:
 async def get_usage(payload: dict = Depends(verify_token)):
     """Get current user's usage information"""
     user_id = payload.get("sub")
-    usage = user_usage.get(user_id, UserUsage(user_id=user_id, prompt_count=0, is_paid=False))
+    usage = get_user_usage(user_id)  # This now uses Redis
     return usage
 
-# In main.py, add these endpoints:
+# User endpoints
+from services.database import db
+
+# API endpoints
+@app.post("/api/users", tags=["User"])
+async def create_user(user_data: dict, payload: dict = Depends(verify_token)):
+    """Create a new user"""
+    try:
+        user_id = payload.get("sub")
+        
+        # Create new user data
+        new_user = {
+            "auth0_id": user_id,
+            "email": user_data.get("email"),
+            "name": user_data.get("name"),
+            "subscription_tier": "free"
+        }
+        
+        # Use database service to create user
+        result = await db.create_user(new_user)
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create user: {str(e)}"
+        )
+
+@app.get("/api/users/me", tags=["User"])
+async def get_current_user(payload: dict = Depends(verify_token)):
+    """Get current user data"""
+    try:
+        user_id = payload.get("sub")
+        user_data = await db.get_user_by_auth0_id(user_id)
+            
+        if not user_data:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+            
+        return user_data
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get user: {str(e)}"
+        )
 
 @app.post("/api/subscription/create", response_model=SubscriptionResponse, tags=["Subscription"])
 async def create_subscription(
@@ -166,7 +282,6 @@ async def verify_subscription(
     """Verify a subscription payment and activate user's subscription"""
     user_id = payload.get("sub")
     if await payment_manager.verify_subscription_payment(verification):
-        # Update user's subscription status
         subscription_details = await payment_manager.get_subscription_details(
             verification.razorpay_subscription_id
         )
@@ -176,16 +291,21 @@ async def verify_subscription(
         if subscription_details.get('current_end'):
             end_date = datetime.fromtimestamp(subscription_details['current_end'])
         else:
-            end_date = datetime.now() + timedelta(days=30)  # Default 30 days
+            end_date = datetime.now() + timedelta(days=30)
         
-        user_usage[user_id] = UserUsage(
-            user_id=user_id,
-            prompt_count=0,
-            last_payment_date=datetime.now(),
-            is_paid=True,
-            subscription_tier=subscription_details.get('plan_id'),
-            subscription_end_date=end_date
-        )
+        # Update in Redis
+        update_user_subscription(user_id, "pro", True, end_date)
+        
+        # Update user data in database
+        try:
+            await db.update_user(user_id, {
+                "subscription_tier": "pro",
+                "subscription_end_date": end_date.isoformat(),
+                "updated_at": datetime.now().isoformat()
+            })
+        except Exception as e:
+            print(f"Failed to update user data: {e}")
+        
         return {"status": "success", "message": "Subscription activated successfully"}
     return {"status": "error", "message": "Subscription verification failed"}
 
@@ -212,7 +332,7 @@ async def cancel_subscription(
 async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
     """Process chat messages through OpenRouter"""
     user_id = payload.get("sub")
-    usage = user_usage.get(user_id, UserUsage(user_id=user_id, prompt_count=0, is_paid=False))
+    usage = get_user_usage(user_id)  # This now uses Redis
     
     print(f"User {user_id} - Current usage: {usage.prompt_count} messages, Paid: {usage.is_paid}")
     
@@ -221,25 +341,25 @@ async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
         print(f"User {user_id} - Subscription expired")
         usage.is_paid = False
         usage.subscription_tier = None
-        user_usage[user_id] = usage  # Update stored usage
+        update_user_subscription(user_id, None, False, datetime.now())  # Update in Redis
     
     # Check if user has exceeded free limit and hasn't paid
-    if usage.prompt_count >= 3 and not usage.is_paid:
+    if usage.prompt_count >= 25 and not usage.is_paid:
         print(f"User {user_id} - Trial limit reached, requesting payment")
         raise HTTPException(
             status_code=status.HTTP_402_PAYMENT_REQUIRED,
             detail="Free trial limit reached. Please subscribe to continue."
         )
     
-    # Check monthly limits based on subscription tier
-    if usage.is_paid and usage.subscription_tier:
-        monthly_limit = get_monthly_limit(usage.subscription_tier)
-        if usage.prompt_count >= monthly_limit:
-            print(f"User {user_id} - Monthly limit reached for {usage.subscription_tier} plan")
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail=f"Monthly limit reached for {usage.subscription_tier} plan. Please upgrade."
-            )
+    FREE_TIER_DAILY_LIMIT = 25  # Define the daily limit for free tier
+    
+    # Check daily limits based on subscription tier
+    if not usage.is_paid and usage.daily_message_count >= FREE_TIER_DAILY_LIMIT:
+        print(f"User {user_id} - Daily limit reached")
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=f"Daily limit reached. Please upgrade to pro for unlimited messages."
+        )
 
     try:
         # Add more robust error handling for missing API key
@@ -290,9 +410,8 @@ async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
                 
             data = response.json()
             
-            # Increment usage counter
-            usage.prompt_count += 1
-            user_usage[user_id] = usage
+            # Increment usage counter in Redis
+            increment_message_count(user_id)
             
             return ChatResponse(
                 message=data["choices"][0]["message"]["content"],
@@ -350,20 +469,39 @@ async def list_documents(payload: dict = Depends(verify_token)):
     # For now, return an empty list until document storage is implemented
     return []
 
-# Include the webhook router
+# Include routers
 app.include_router(webhook_router)
+app.include_router(chat_router)
+
+@app.get("/api/chat/sessions", tags=["Chat History"])
+async def get_chat_sessions(payload: dict = Depends(verify_token)):
+    """Get user's chat sessions"""
+    user_id = payload.get("sub")
+    try:
+        # Get chat sessions using database service
+        sessions = await db.get_chat_sessions(user_id)
+        return sessions
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch chat sessions: {str(e)}"
+        )
+
+@app.get("/api/chat/sessions/{session_id}/messages", tags=["Chat History"])
+async def get_chat_messages(session_id: str, payload: dict = Depends(verify_token)):
+    """Get messages for a specific chat session"""
+    try:
+        # Get chat messages using database service
+        messages = await db.get_chat_messages(session_id)
+        return messages
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch chat messages: {str(e)}"
+        )
 
 if __name__ == "__main__":
-    
-    
-    # Update CORS settings with ngrok URL
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=origins,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
-    
     # Start the FastAPI server
-    uvicorn.run("main:app", host="0.0.0.0", port= 8000, reload=True)
+    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)

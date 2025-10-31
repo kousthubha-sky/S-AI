@@ -8,8 +8,11 @@ export default defineConfig({
   server: {
     allowedHosts: [
       'localhost',
-      'gadgets-projects-ports-cross.trycloudflare.com',//backend
-      'relaxation-xml-carlos-via.trycloudflare.com ' // Allow all localtunnel subdomains
+      'localhost:8000',
+      'localhost:5173' // Allow all localtunnel subdomains
     ],
   },
+  define: {
+    'process.env.VITE_API_BASE_URL': JSON.stringify(process.env.VITE_API_BASE_URL)
+  }
 });

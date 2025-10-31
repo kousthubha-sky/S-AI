@@ -5,9 +5,31 @@ import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
 import { cn } from "~/lib/utils"
 import { useAuthApi } from "~/hooks/useAuthApi"
+import { useAuth0 } from "@auth0/auth0-react"
 import { PaymentDialog } from "./payment-dialog"
 import { ModelSelector } from "./model-selector"
 import { AI_MODELS } from "~/lib/models"
+import { ChatHistory } from './chat-history'
+import { ChatService } from '~/services/chatService'
+import { UserService } from '~/services/userService'
+
+
+interface ChatSession {
+  id: string
+  title: string
+  created_at: string
+  updated_at: string
+}
+
+interface ChatHistoryProps {
+  sessions: ChatSession[];
+  currentSessionId: string | null;
+  onSessionSelect: (sessionId: string) => Promise<void>;
+  onNewChat: () => Promise<void>;
+}
+
+// Export the ChatHistoryProps interface for use in ChatHistory component
+export type { ChatHistoryProps };
 
 interface Attachment {
   id: string;
@@ -40,14 +62,10 @@ export function ChatInterface({
   nextResetTime
 }: ChatInterfaceProps) {
   const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: '1',
-      role: 'assistant',
-      content: 'Hello! How can I help you today?',
-      timestamp: new Date()
-    }
-  ])
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSession[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [user, setUser] = useState<any>(null);
   const [newMessage, setNewMessage] = useState("")
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
   const [isLoading, setIsLoading] = useState(false)
@@ -56,6 +74,7 @@ export function ChatInterface({
   const [isLimitReached, setIsLimitReached] = useState(false)
   const { fetchWithAuth } = useAuthApi()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const { user: auth0User } = useAuth0();
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -64,6 +83,77 @@ export function ChatInterface({
   useEffect(() => {
     scrollToBottom()
   }, [messages])
+
+  // Load user and sessions on component mount
+  useEffect(() => {
+    loadUserAndSessions()
+  }, [auth0User])
+
+  // In chat-interface.tsx, update the loadUserAndSessions function
+const loadUserAndSessions = async () => {
+  try {
+    if (auth0User) {
+      // Try to get user, but don't fail if it doesn't work
+      try {
+        const dbUser = await UserService.getOrCreateUser(auth0User)
+        setUser(dbUser)
+        
+        // Load chat sessions
+        const userSessions = await ChatService.getUserChatSessions(dbUser.id)
+        setSessions(userSessions)
+        
+        // Load the most recent session if exists
+        if (userSessions.length > 0) {
+          await loadSession(userSessions[0].id)
+        } else {
+          // Create first session
+          await createNewSession()
+        }
+      } catch (userError) {
+        console.error('User loading failed, continuing without user:', userError)
+        // Continue with basic functionality
+        await createNewSession()
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load user data:', error)
+    // Don't throw, just log and continue
+  }
+}
+  const createNewSession = async () => {
+    if (!user) return
+    
+    try {
+      const newSession = await ChatService.createChatSession(user.id, 'New Chat')
+      setCurrentSessionId(newSession.id)
+      setSessions(prev => [newSession, ...prev])
+      setMessages([{
+        id: '1',
+        role: 'assistant',
+        content: 'Hello! How can I help you today?',
+        timestamp: new Date()
+      }])
+    } catch (error) {
+      console.error('Failed to create new session:', error)
+    }
+  }
+
+  const loadSession = async (sessionId: string) => {
+    try {
+      const sessionMessages = await ChatService.getChatMessages(sessionId)
+      const formattedMessages: Message[] = sessionMessages.map(msg => ({
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: new Date(msg.created_at)
+      }))
+      
+      setCurrentSessionId(sessionId)
+      setMessages(formattedMessages)
+    } catch (error) {
+      console.error('Failed to load session:', error)
+    }
+  }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -78,10 +168,31 @@ export function ChatInterface({
     }
 
     // Add user message immediately
-    setMessages(prev => [...prev, userMessage])
+    const updatedMessages = [...messages, userMessage]
+    setMessages(updatedMessages)
     setNewMessage("")
     setPendingAttachments([])
     setIsLoading(true)
+
+    // Save user message to database
+    if (currentSessionId && user) {
+      try {
+        await ChatService.saveMessage(
+          currentSessionId,
+          'user',
+          newMessage,
+          selectedModel
+        )
+        
+        // Update session title if it's the first user message
+        if (messages.length === 1) { // Only assistant welcome message
+          const title = newMessage.slice(0, 50) + (newMessage.length > 50 ? '...' : '')
+          await ChatService.updateSessionTitle(currentSessionId, title)
+        }
+      } catch (error) {
+        console.error('Failed to save user message:', error)
+      }
+    }
 
     // Add temporary assistant message for loading state
     const tempAssistantMessage: Message = {
@@ -110,7 +221,7 @@ export function ChatInterface({
         apiMessages[apiMessages.length - 1].content += `\n${attachmentText}`
       }
 
-      const response = await fetchWithAuth('http://localhost:8000/api/chat', {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/chat`, {
         method: 'POST',
         body: JSON.stringify({
           messages: apiMessages,
@@ -132,13 +243,26 @@ export function ChatInterface({
             : msg
         )
       )
+
+      // Save assistant message to database
+      if (currentSessionId && user) {
+        try {
+          await ChatService.saveMessage(
+            currentSessionId,
+            'assistant',
+            response.message,
+            selectedModel,
+            response.usage?.total_tokens
+          )
+        } catch (error) {
+          console.error('Failed to save assistant message:', error)
+        }
+      }
     } catch (error: any) {
       console.error('Failed to send message:', error)
       
       // Check if payment required or daily limit reached
-      console.log('Error details:', error);  // Add debug logging
       if (error.status === 402 || error?.message?.includes('Free trial limit reached') || error?.message?.includes('Daily limit reached')) {
-        console.log('Payment required or limit reached, showing dialog');
         setTempMessage(tempAssistantMessage)
         
         if (error?.message?.includes('Daily limit reached')) {
@@ -210,15 +334,8 @@ export function ChatInterface({
     }
   }
 
-  const clearChat = () => {
-    setMessages([
-      {
-        id: '1',
-        role: 'assistant',
-        content: 'Hello! How can I help you today?',
-        timestamp: new Date()
-      }
-    ])
+  const clearChat = async () => {
+    await createNewSession();
   }
 
   const retryLastMessage = async () => {
@@ -245,7 +362,7 @@ export function ChatInterface({
           content: msg.content
         }))
 
-      const response = await fetchWithAuth('http://localhost:8000/api/chat', {
+      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/chat`, {
         method: 'POST',
         body: JSON.stringify({
           messages: apiMessages,
@@ -283,22 +400,33 @@ export function ChatInterface({
   }
 
   return (
-    <div className="flex flex-col h-[600px] rounded-lg border bg-background">
-      {showPaymentDialog && (
-        <PaymentDialog
-          onClose={() => {
-            setShowPaymentDialog(false)
-            setIsLimitReached(false)
-            // Remove the loading message if payment was cancelled
-            if (tempMessage) {
-              setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
-              setTempMessage(null)
-            }
-          }}
-          onSuccess={handlePaymentSuccess}
-          showLimitReachedMessage={isLimitReached}
-        />
-      )}
+    <div className="flex h-[600px] rounded-lg border bg-background">
+      {/* Chat History Sidebar */}
+      <ChatHistory
+        sessions={sessions}
+        currentSessionId={currentSessionId}
+        onSessionSelect={loadSession}
+        onNewChat={createNewSession}
+      />
+      
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col">
+        {showPaymentDialog && (
+          <PaymentDialog
+            onClose={() => {
+              setShowPaymentDialog(false)
+              setIsLimitReached(false)
+              // Remove the loading message if payment was cancelled
+              if (tempMessage) {
+                setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
+                setTempMessage(null)
+              }
+            }}
+            onSuccess={handlePaymentSuccess}
+            showLimitReachedMessage={isLimitReached}
+          />
+        )}
+      
       {/* Header */}
       <div className="flex flex-col gap-2 p-4 border-b">
         <div className="flex items-center justify-between">
@@ -482,6 +610,7 @@ export function ChatInterface({
           </div>
         </div>
       </form>
+      </div>
     </div>
   );
 }

@@ -42,11 +42,11 @@ const PLANS: Plan[] = [
       'Priority support',
       'Advanced document processing',
       'Custom prompts',
-      'API access',
+      'Image generation(nano-banana)',
       'Advanced analytics',
-      '5 concurrent chats',
-      'Code generation',
-      'Image generation'
+      'multimodal inputs',
+      'Code generation'
+      
     ],
     description: 'Great for power users'
   },
@@ -160,7 +160,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
             <h2 className="text-2xl font-bold">Choose Your Plan</h2>
             {showLimitReachedMessage && (
               <p className="text-sm text-muted-foreground mt-2">
-                You've reached your daily limit of 500 messages. Upgrade to Pro for unlimited messages!
+                You've reached your daily limit of 25 messages. Upgrade to Pro for unlimited messages!
               </p>
             )}
           </div>

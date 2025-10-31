@@ -5,7 +5,7 @@ import hmac
 import json
 import os
 from datetime import datetime, timedelta
-from models.state import user_usage
+from models.state import get_user_usage, update_user_subscription
 from models.payment import UserUsage
 
 router = APIRouter()
@@ -52,7 +52,7 @@ async def handle_subscription_event(payload: dict):
         # Calculate subscription end date (1 month from now)
         end_date = datetime.now() + timedelta(days=30)
         
-        user_usage[user_id] = UserUsage(
+        get_user_usage[user_id] = UserUsage(
             user_id=user_id,
             prompt_count=0,
             last_payment_date=datetime.now(),
@@ -66,6 +66,6 @@ async def handle_subscription_cancellation(payload: dict):
     subscription = payload.get('payload', {}).get('subscription', {})
     user_id = subscription.get('notes', {}).get('user_id')
     
-    if user_id and user_id in user_usage:
-        user_usage[user_id]['is_paid'] = False
-        user_usage[user_id]['subscription_tier'] = None
+    if user_id and user_id in get_user_usage:
+        get_user_usage[user_id]['is_paid'] = False
+        get_user_usage[user_id]['subscription_tier'] = None
