@@ -7,6 +7,10 @@ from jwt import PyJWTError
 import httpx
 from functools import lru_cache
 import os
+from datetime import datetime
+
+# Import Supabase database service
+from services.supabase_database import db
 
 security = HTTPBearer()
 
@@ -67,7 +71,7 @@ def get_rsa_key(token: str):
     
     return rsa_key
 
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
     """
     Verify the JWT token and return the payload
     """
@@ -97,6 +101,12 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
             audience=auth0_audience,
             issuer=f"https://{auth0_domain}/"
         )
+        
+        # Ensure user exists in Supabase database
+        user_id = payload.get("sub")
+        if user_id:
+            await ensure_user_in_database(payload)
+        
         return payload
         
     except jwt.ExpiredSignatureError:
@@ -120,6 +130,44 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)) 
             detail=f"Token verification failed: {str(e)}"
         )
 
+# In auth/dependencies.py - UPDATE ensure_user_in_database:
+
+async def ensure_user_in_database(payload: dict):
+    """
+    Ensure user exists in Supabase database, create if not exists
+    """
+    try:
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        name = payload.get("name")
+        
+        if not user_id:
+            return
+        
+        # Check if user exists in database
+        existing_user = await db.get_user_by_auth0_id(user_id)
+        if existing_user:
+            return existing_user
+        
+        # Create new user if doesn't exist
+        user_data = {
+            "auth0_id": user_id,
+            "email": email or "",
+            "name": name,
+            "subscription_tier": "free",
+            "is_active": True,
+            "is_paid": False,  # ADD THIS
+            "created_at": datetime.now().isoformat(),
+            "updated_at": datetime.now().isoformat()
+        }
+        
+        new_user = await db.create_user(user_data)
+        return new_user
+        
+    except Exception as e:
+        print(f"Error ensuring user in database: {str(e)}")
+        # Don't raise exception here to avoid breaking auth flow
+        
 def has_permissions(required_permissions: List[str]):
     """
     Dependency to check if the user has the required permissions
@@ -138,9 +186,9 @@ def has_permissions(required_permissions: List[str]):
         return wrapper
     return decorator
 
-def get_user_id(payload: dict = Depends(verify_token)) -> str:
+async def get_user_id(payload: dict = Depends(verify_token)) -> str:
     """
-    Extract user ID from the token payload
+    Extract user ID from the token payload and ensure user exists in database
     """
     user_id = payload.get("sub")
     if not user_id:
@@ -148,10 +196,81 @@ def get_user_id(payload: dict = Depends(verify_token)) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User ID not found in token"
         )
+    
+    # Ensure user exists in database
+    await ensure_user_in_database(payload)
+    
     return user_id
 
-def get_user_permissions(payload: dict = Depends(verify_token)) -> List[str]:
+async def get_user_permissions(payload: dict = Depends(verify_token)) -> List[str]:
     """
     Extract permissions from the token payload
     """
     return payload.get("permissions", [])
+
+async def get_current_user(payload: dict = Depends(verify_token)) -> dict:
+    """
+    Get current user data from Supabase database
+    """
+    try:
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User ID not found in token"
+            )
+        
+        user_data = await db.get_user_by_auth0_id(user_id)
+        if not user_data:
+            # Create user if doesn't exist
+            user_data = await ensure_user_in_database(payload)
+        
+        return user_data
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get user data: {str(e)}"
+        )
+
+def require_subscription(tier: str = "pro"):
+    """
+    Dependency to check if user has required subscription tier
+    """
+    def decorator(func):
+        @wraps(func)
+        async def wrapper(*args, payload: dict = Depends(verify_token), **kwargs):
+            user_id = payload.get("sub")
+            
+            # Get user from database to check subscription
+            user_data = await db.get_user_by_auth0_id(user_id)
+            if not user_data:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            user_tier = user_data.get("subscription_tier", "free")
+            is_paid = user_data.get("is_paid", False)
+            subscription_end = user_data.get("subscription_end_date")
+            
+            # Check if subscription is active and not expired
+            if subscription_end:
+                from datetime import datetime
+                if datetime.fromisoformat(subscription_end) < datetime.now():
+                    is_paid = False
+            
+            # Check tier requirements
+            tier_hierarchy = {"free": 0, "basic": 1, "pro": 2}
+            required_level = tier_hierarchy.get(tier, 0)
+            user_level = tier_hierarchy.get(user_tier, 0)
+            
+            if user_level < required_level or not is_paid:
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail=f"{tier.capitalize()} subscription required"
+                )
+            
+            return await func(*args, payload=payload, **kwargs)
+        return wrapper
+    return decorator

@@ -3,6 +3,7 @@ import { Send, Paperclip, X, Bot, User } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { Input } from "~/components/ui/input"
 import { Separator } from "~/components/ui/separator"
+import { useAuthState } from "~/components/auth/AuthInitializer"
 import { cn } from "~/lib/utils"
 import { useAuthApi } from "~/hooks/useAuthApi"
 import { useAuth0 } from "@auth0/auth0-react"
@@ -84,42 +85,75 @@ export function ChatInterface({
     scrollToBottom()
   }, [messages])
 
-  // Load user and sessions on component mount
+  const { isInitialized, hasValidToken, getToken } = useAuthState();
+
+  // Load user and sessions when auth is initialized
   useEffect(() => {
-    loadUserAndSessions()
-  }, [auth0User])
+    const initializeChat = async () => {
+      if (!isInitialized || !hasValidToken || !auth0User) {
+        return;
+      }
+
+      try {
+        const token = await getToken();
+        if (!token) {
+          console.error('No valid token available');
+          return;
+        }
+
+        await loadUserAndSessions();
+      } catch (error) {
+        console.error('Failed to initialize chat:', error);
+      }
+    };
+
+    initializeChat();
+  }, [isInitialized, hasValidToken, auth0User]);
 
   // In chat-interface.tsx, update the loadUserAndSessions function
-const loadUserAndSessions = async () => {
-  try {
-    if (auth0User) {
-      // Try to get user, but don't fail if it doesn't work
-      try {
-        const dbUser = await UserService.getOrCreateUser(auth0User)
-        setUser(dbUser)
-        
-        // Load chat sessions
-        const userSessions = await ChatService.getUserChatSessions(dbUser.id)
-        setSessions(userSessions)
-        
-        // Load the most recent session if exists
-        if (userSessions.length > 0) {
-          await loadSession(userSessions[0].id)
-        } else {
-          // Create first session
-          await createNewSession()
+  const loadUserAndSessions = async () => {
+    try {
+      if (auth0User) {
+        const token = localStorage.getItem('auth_token');
+        if (!token) {
+          console.error('No auth token available');
+          return;
         }
-      } catch (userError) {
-        console.error('User loading failed, continuing without user:', userError)
-        // Continue with basic functionality
-        await createNewSession()
+
+        try {
+          const dbUser = await UserService.getOrCreateUser(auth0User);
+          setUser(dbUser);
+          
+          // Load chat sessions
+          const userSessions = await ChatService.getUserChatSessions(dbUser.id);
+          setSessions(userSessions);
+          
+          // Load the most recent session if exists
+          if (userSessions.length > 0) {
+            await loadSession(userSessions[0].id);
+          } else {
+            // Create first session
+            await createNewSession();
+          }
+        } catch (userError: any) {
+          console.error('User loading failed:', userError);
+          
+          // Check for auth errors specifically
+          if (userError.message === 'Authentication required') {
+            console.error('Authentication error - redirecting to login');
+            window.location.href = '/login';
+            return;
+          }
+          
+          // For other errors, continue with basic functionality
+          await createNewSession();
+        }
       }
+    } catch (error) {
+      console.error('Failed to load user data:', error);
+      // Don't throw, just log and continue
     }
-  } catch (error) {
-    console.error('Failed to load user data:', error)
-    // Don't throw, just log and continue
   }
-}
   const createNewSession = async () => {
     if (!user) return
     

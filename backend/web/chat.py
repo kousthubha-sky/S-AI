@@ -3,8 +3,35 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from auth.dependencies import verify_token
 from services.database import db
+from models.ai_models import validate_model_access
+from models.state import get_user_usage
+from models.chat import ChatRequest, ChatResponse
 
 router = APIRouter()
+
+async def validate_chat_request(request: ChatRequest, user_id: str) -> None:
+    """Validate the chat request and user permissions"""
+    # Get user's current tier and usage
+    user_usage = await get_user_usage(user_id)
+    user_tier = user_usage.subscription_tier or "free"
+    
+    # Validate model access based on user tier
+    if not validate_model_access(request.model, user_tier):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this model. Please upgrade to Pro."
+        )
+    
+    # Check message limits for free users
+    if user_tier == "free" and user_usage.daily_message_count >= 500:  # Move to constants
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "message": "Daily message limit reached",
+                "limit": 500,
+                "reset_time": user_usage.next_reset_time.isoformat()
+            }
+        )
 
 @router.post("/api/chat/sessions")
 async def create_chat_session(
