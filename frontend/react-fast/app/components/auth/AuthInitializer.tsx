@@ -16,9 +16,11 @@ export const AuthStateContext = createContext<AuthState>({
 });
 
 export function AuthInitializer({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, getAccessTokenSilently, isLoading } = useAuth0();
+    const { isAuthenticated, getAccessTokenSilently, isLoading, user } = useAuth0();
   const [isInitialized, setIsInitialized] = useState(false);
   const [hasValidToken, setHasValidToken] = useState(false);
+
+
 
   const getToken = async () => {
     try {
@@ -60,20 +62,43 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const initializeAuth = async () => {
       try {
-        if (!isLoading) {
-          if (isAuthenticated) {
-            const token = await getToken();
-            setHasValidToken(!!token);
-          } else {
-            localStorage.removeItem('auth_token');
-            setHasValidToken(false);
-          }
+        // Clear any stale tokens if not authenticated
+        if (!isAuthenticated && !isLoading) {
+          localStorage.removeItem('auth_token');
+          setHasValidToken(false);
           setIsInitialized(true);
+          return;
         }
-      } catch (error) {
-        console.error('Auth initialization error:', error);
-        setIsInitialized(true);
+
+        // Wait for Auth0 loading to complete
+        if (isLoading) {
+          return;
+        }
+
+        if (isAuthenticated) {
+          try {
+            const token = await getAccessTokenSilently({
+              detailedResponse: true,
+              timeoutInSeconds: 60,
+              authorizationParams: {
+                audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
+                scope: 'openid profile email offline_access'
+              }
+            });
+            
+            localStorage.setItem('auth_token', token.access_token);
+            setHasValidToken(true);
+          } catch (tokenError: any) {
+            console.error('Token retrieval failed:', tokenError.message);
+            throw tokenError;
+          }
+        }
+      } catch (error: any) {
+        console.error('Auth initialization failed:', error.message);
+        localStorage.removeItem('auth_token');
         setHasValidToken(false);
+      } finally {
+        setIsInitialized(true);
       }
     };
 

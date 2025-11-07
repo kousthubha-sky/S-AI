@@ -1,4 +1,4 @@
-// components/payment-dialog.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
 declare global {
   interface Window {
     Razorpay: any;
@@ -7,10 +7,9 @@ declare global {
 
 import { useState, useEffect } from 'react';
 import { Button } from '~/components/ui/button';
-import { Card } from '~/components/ui/card';
-import { RadioGroup, RadioGroupItem } from '~/components/ui/radio-group';
-import { Label } from '~/components/ui/label';
 import { useAuthApi } from '~/hooks/useAuthApi';
+import { RefreshCw, CheckCircle2, Sparkles, Shield, Brain, Zap,X } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface PaymentDialogProps {
   onClose: () => void;
@@ -18,85 +17,60 @@ interface PaymentDialogProps {
   showLimitReachedMessage?: boolean;
 }
 
-interface Plan {
-  id: string;
-  name: string;
-  price: number;
-  features: string[];
-  description: string;
-}
-
-// Map to Razorpay plan IDs from environment variables
-const PLANS: Plan[] = [
-  {
-    id: 'plan_RXO8u03kq5VmFN', // RAZORPAY_PREMIUM_PLAN_ID
-    name: 'Student Pro Pack',
-    price: 249,
-    features: [
-      'Unlimited messages per day',
-      'All Free Models +',
-      'Pro Models:',
-      'x-ai/grok-4-fast',
-      'google/gemini-2.5-flash-image',
-      'meta-llama/llama-3.3-70b-instruct',
-      'Priority support',
-      'Advanced document processing',
-      'Custom prompts',
-      'Image generation(nano-banana)',
-      'Advanced analytics',
-      'multimodal inputs',
-      'Code generation'
-      
-    ],
-    description: 'Great for power users'
-  },
- 
-];
+const PLAN = {
+  id: 'plan_RXO8u03kq5VmFN',
+  name: 'Student Pro Pack',
+  price: 249,
+  description: 'Unlock full AI power & premium features for smarter workflows.',
+  features: [
+    'Unlimited messages per day',
+    'Pro AI Models (Grok, Gemini, Llama)',
+    'Priority support',
+    'Advanced document analysis',
+    'Image generation + multimodal input',
+    'Custom prompts & analytics',
+  ]
+};
 
 export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: PaymentDialogProps) {
-  const [selectedPlan, setSelectedPlan] = useState<string>('premium');
+  const [isFlipped, setIsFlipped] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { fetchWithAuth } = useAuthApi();
 
+  // ✅ Load Razorpay script (unchanged)
   useEffect(() => {
-    // Load Razorpay script
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
     document.body.appendChild(script);
-
     return () => {
       document.body.removeChild(script);
+      // No return value - cleanup function should return void
     };
   }, []);
 
+  // ✅ Razorpay logic (kept exactly same)
   const handleSubscription = async () => {
     try {
       setIsLoading(true);
-      
-      // Create subscription via your backend
       const subscriptionResponse = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/subscription/create`, {
         method: 'POST',
         body: JSON.stringify({
-          plan_type: selectedPlan, // This is already the Razorpay plan ID
-          total_count: 12, // 12 months
-          user_id: "" // This will be set by the backend from the token
+          plan_type: PLAN.id,
+          total_count: 12,
+          user_id: ""
         })
       });
 
       console.log('Subscription created:', subscriptionResponse);
 
-      // Initialize Razorpay checkout
       const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID, // Use environment variable
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
         subscription_id: subscriptionResponse.razorpay_subscription_id,
         name: 'AI Chat Subscription',
-        description: `${PLANS.find(p => p.id === selectedPlan)?.name} Plan - Monthly Subscription`,
+        description: `${PLAN.name} Plan - Monthly Subscription`,
         handler: async (response: any) => {
-          console.log('Razorpay response:', response);
-          
           try {
-            // Verify subscription payment
             const verifyResponse = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/subscription/verify`, {
               method: 'POST',
               body: JSON.stringify({
@@ -105,30 +79,16 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
                 razorpay_signature: response.razorpay_signature
               })
             });
-
-            console.log('Verification response:', verifyResponse);
-
-            if (verifyResponse.status === 'success') {
-              onSuccess();
-            } else {
-              alert('Payment verification failed. Please contact support.');
-            }
+            if (verifyResponse.status === 'success') onSuccess();
+            else alert('Payment verification failed. Please contact support.');
           } catch (error) {
             console.error('Verification error:', error);
             alert('Payment verification failed. Please contact support.');
           }
         },
-        prefill: {
-          // You can prefill customer details if available
-          name: '', // Add user name if available
-          email: '', // Add user email if available
-        },
-        theme: {
-          color: '#0066FF'
-        },
+        theme: { color: '#111111' },
         modal: {
-          ondismiss: function() {
-            console.log('Payment modal dismissed');
+          ondismiss: () => {
             setIsLoading(false);
           }
         }
@@ -136,13 +96,12 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
 
       const rzp = new window.Razorpay(options);
       rzp.open();
-      
-      rzp.on('payment.failed', function(response: any) {
+
+      rzp.on('payment.failed', (response: any) => {
         console.error('Payment failed:', response.error);
         alert(`Payment failed: ${response.error.description}`);
         setIsLoading(false);
       });
-
     } catch (error: any) {
       console.error('Subscription initiation failed:', error);
       alert(`Failed to create subscription: ${error.detail || 'Unknown error'}`);
@@ -150,68 +109,135 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
     }
   };
 
-  const selectedPlanData = PLANS.find(plan => plan.id === selectedPlan);
-
+  // ✅ New minimal UI with flip
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <Card className="w-[500px] max-h-[90vh] overflow-y-auto p-6 space-y-4">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2 className="text-2xl font-bold">Choose Your Plan</h2>
-            {showLimitReachedMessage && (
-              <p className="text-sm text-muted-foreground mt-2">
-                You've reached your daily limit of 25 messages. Upgrade to Pro for unlimited messages!
-              </p>
-            )}
-          </div>
-          <Button variant="ghost" size="sm" onClick={onClose}>×</Button>
-        </div>
-        
-        <RadioGroup value={selectedPlan} onValueChange={setSelectedPlan} className="space-y-3">
-          {PLANS.map((plan) => (
-            <div key={plan.id} className="flex items-center space-x-3 border rounded-lg p-4 hover:bg-muted/50 cursor-pointer">
-              <RadioGroupItem value={plan.id} id={plan.id} />
-              <Label htmlFor={plan.id} className="flex-1 cursor-pointer">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="font-semibold">{plan.name}</h3>
-                    <p className="text-sm text-muted-foreground">{plan.description}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md">
+      <motion.div
+        className="relative w-[360px] h-[480px] [perspective:1200px]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <AnimatePresence mode="wait">
+          {!isFlipped ? (
+            // ---------------- FRONT ----------------
+            <motion.div
+              key="front"
+              initial={{ rotateY: -180 }}
+              animate={{ rotateY: 0 }}
+              exit={{ rotateY: 180 }}
+              transition={{ duration: 0.6 }}
+              className="absolute inset-0 bg-gradient-to-b from-[#fafafa] to-[#f1f1f1] text-gray-900 rounded-3xl shadow-2xl flex flex-col items-center justify-between p-6"
+              style={{ backfaceVisibility: 'hidden' }}
+            >
+              {/* Header */}
+              <div className="flex justify-between w-full items-center">
+                <h2 className="text-lg font-semibold">{PLAN.name}</h2>
+                <button
+                  onClick={() => onClose()}
+                  className="text-gray-500 hover:text-gray-800 transition p-1 rounded-full hover:bg-gray-100"
+                  aria-label="Close dialog"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+                <button
+                  onClick={() => setIsFlipped(true)}
+                  className="text-gray-500 hover:text-gray-800 transition p-1 rounded-full hover:bg-gray-100"
+                  aria-label="More info"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Center minimal info */}
+              <div className="flex flex-col items-center justify-center text-center mt-6 space-y-3">
+                <p className="text-5xl font-bold">₹{PLAN.price}</p>
+                <p className="text-sm text-gray-500">per month</p>
+
+                <div className="flex justify-center gap-6 mt-6">
+                  <div className="flex flex-col items-center">
+                    <Sparkles className="w-6 h-6 text-gray-700" />
+                    <p className="text-xs mt-1 text-gray-600">AI Models</p>
                   </div>
-                  <div className="text-right">
-                    <p className="text-2xl font-bold">₹{plan.price}</p>
-                    <p className="text-sm text-muted-foreground">per month</p>
+                  <div className="flex flex-col items-center">
+                    <Brain className="w-6 h-6 text-gray-700" />
+                    <p className="text-xs mt-1 text-gray-600">Smart Tools</p>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <Shield className="w-6 h-6 text-gray-700" />
+                    <p className="text-xs mt-1 text-gray-600">Secure</p>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <Zap className="w-6 h-6 text-gray-700" />
+                    <p className="text-xs mt-1 text-gray-600">Fast</p>
                   </div>
                 </div>
-                <ul className="mt-2 space-y-1 text-sm">
-                  {plan.features.map((feature, index) => (
-                    <li key={index} className="flex items-center">
-                      <span className="w-2 h-2 bg-primary rounded-full mr-2"></span>
-                      {feature}
+              </div>
+
+              {/* Action */}
+              <Button
+                className="w-full bg-black text-white mt-6 rounded-xl hover:bg-gray-800"
+                onClick={() => setIsFlipped(true)}
+              >
+                View Details
+              </Button>
+            </motion.div>
+          ) : (
+            // ---------------- BACK ----------------
+            <motion.div
+              key="back"
+              initial={{ rotateY: 180 }}
+              animate={{ rotateY: 0 }}
+              exit={{ rotateY: -180 }}
+              transition={{ duration: 0.6 }}
+              className="absolute inset-0 bg-white rounded-3xl shadow-2xl flex flex-col p-6 justify-between"
+              style={{ backfaceVisibility: 'hidden' }}
+            >
+              <div className="flex justify-between items-center mb-4">
+                <h2 className="font-semibold text-lg">More About Pro</h2>
+                <button
+                  onClick={() => setIsFlipped(false)}
+                  className="text-gray-500 hover:text-gray-800 transition"
+                >
+                  <RefreshCw className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto text-sm text-gray-600 space-y-3">
+                <p><strong>{PLAN.name}</strong> gives you access to:</p>
+                <ul className="space-y-2">
+                  {PLAN.features.map((feature, i) => (
+                    <li key={i} className="flex items-center gap-2">
+                      <CheckCircle2 className="w-4 h-4 text-gray-800/70" /> {feature}
                     </li>
                   ))}
                 </ul>
-              </Label>
-            </div>
-          ))}
-        </RadioGroup>
 
-        {selectedPlanData && (
-          <div className="border-t pt-4 space-y-4">
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-sm text-muted-foreground">Selected plan</p>
-                <p className="font-semibold">{selectedPlanData.name} - ₹{selectedPlanData.price}/month</p>
+                {showLimitReachedMessage && (
+                  <div className="text-red-600 text-xs mt-3">
+                    You've reached your free message limit. Upgrade to continue using AI.
+                  </div>
+                )}
               </div>
-              <Button onClick={handleSubscription} disabled={isLoading} size="lg">
-                {isLoading ? 'Processing...' : 'Subscribe Now'}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground text-center">
-              You'll be redirected to Razorpay to complete your subscription
-            </p>
-          </div>
-        )}
-      </Card>
+
+              <div className="space-y-2 mt-4">
+                <Button
+                  className="w-full bg-black text-white rounded-xl"
+                  onClick={handleSubscription}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Processing...' : 'Proceed to Payment'}
+                </Button>
+                <Button variant="ghost" className="text-gray-600 w-full" onClick={onClose}>
+                  Cancel
+                </Button>
+              </div>
+
+              <p className="text-xs text-gray-400 text-center mt-2">
+                You’ll be redirected to Razorpay to complete payment
+              </p>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.div>
     </div>
   );
 }

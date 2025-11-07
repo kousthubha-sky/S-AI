@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react"
 
-type Theme = "dark" | "light"
+type Theme = "dark"
 
 type ThemeProviderProps = {
   children: React.ReactNode
@@ -13,45 +13,43 @@ type ThemeProviderState = {
 }
 
 const initialState: ThemeProviderState = {
-  theme: "light",
+  theme: "dark",
   setTheme: () => null,
 }
 
 const ThemeProviderContext = createContext<ThemeProviderState>(initialState)
 
-const getThemeFromStorage = (): Theme | null => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('theme') as Theme
-  }
-  return null
-}
-
 export function ThemeProvider({
   children,
-  defaultTheme = "light",
+  defaultTheme = "dark",
 }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme)
-
-  // Initialize theme from localStorage after mount
-  useEffect(() => {
-    const stored = getThemeFromStorage()
-    if (stored) {
-      setTheme(stored)
-    }
-  }, [])
+  const [theme] = useState<Theme>(defaultTheme)
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const root = window.document.documentElement
-      root.classList.remove("light", "dark")
-      root.classList.add(theme)
-      localStorage.setItem("theme", theme)
+      const body = window.document.body
+      
+      // Set dark theme
+      root.classList.remove("light")
+      root.classList.add("dark")
+      body.classList.remove("light")
+      body.classList.add("dark")
+      
+      // Set the data attribute
+      root.setAttribute('data-theme', 'dark')
+      
+      // Set the specific background colors for consistency
+      body.style.backgroundColor = "#0B0B0B"
+      
+      // Force a style recalculation
+      root.style.colorScheme = "dark"
     }
   }, [theme])
 
   const value = {
     theme,
-    setTheme: (theme: Theme) => setTheme(theme),
+    setTheme: (theme: Theme) => {}, // No-op since we only use dark
   }
 
   return (

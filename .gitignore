@@ -1,0 +1,9 @@
+
+# VS Code personal settings
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
+
+# VS Code folder (if you want to ignore the entire folder)
+/.vscode/
+.vscode/

@@ -7,9 +7,12 @@ import {
   ScrollRestoration,
 } from "react-router";
 import AuthProvider from "./providers/Auth0Providers";
-import { ThemeProvider } from "./components/theme/theme-provider";
+import ShortcutProvider from "./providers/ShortcutProvider";
+import Threads from "~/components/ui/Threads";
 import type { Route } from "./+types/root";
 import "./app.css";
+import "@fontsource/inter";
+
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -26,15 +29,36 @@ export const links: Route.LinksFunction = () => [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en">
+    <html lang="en" className="dark">
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
       </head>
-      <body>
-        {children}
+      <body className="text-black bg-[#0f0f0f]  selection:bg-purple-500 selection:text-white min-h-screen relative overflow-x-hidden">
+        {/* Full-screen background threads */}
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          zIndex: 0,
+          pointerEvents: 'inherit'
+        }}>
+          <Threads
+            amplitude={1}
+            distance={0}
+            enableMouseInteraction={true}
+          />
+        </div>
+        
+        {/* Content layer */}
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {children}
+        </div>
+        
         <ScrollRestoration />
         <Scripts />
       </body>
@@ -42,13 +66,15 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
+
+
 export default function App() {
   return (
-    <ThemeProvider defaultTheme="light">
-      <AuthProvider>
-        <Outlet />
-      </AuthProvider>
-    </ThemeProvider>
+    <AuthProvider>
+      <ShortcutProvider>
+        <Outlet/>
+      </ShortcutProvider>
+    </AuthProvider>
   );
 }
 
@@ -69,11 +95,11 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
   }
 
   return (
-    <main className="pt-16 p-4 container mx-auto">
+    <main className="pt-16 p-4 container mx-auto text-white">
       <h1>{message}</h1>
       <p>{details}</p>
       {stack && (
-        <pre className="w-full p-4 overflow-x-auto">
+        <pre className="w-full p-4 overflow-x-auto bg-[#0F0F0F] border border-white/10 rounded-lg">
           <code>{stack}</code>
         </pre>
       )}

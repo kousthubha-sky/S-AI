@@ -9,9 +9,11 @@ export class ChatService {
         title,
         user_id: userId
       });
+      
       return response.data;
     } catch (error: any) {
-      throw new Error(`Failed to create chat session: ${error.message}`);
+      console.error('Failed to create chat session:', error.message);
+      throw new Error(`Failed to create chat session: ${error.response?.data?.detail || error.message}`);
     }
   }
 
@@ -19,8 +21,8 @@ export class ChatService {
     try {
       const response = await apiClient.get('/api/chat/sessions');
       return response.data || [];
-    } catch (error) {
-      console.error('Error fetching chat sessions:', error);
+    } catch (error: any) {
+      console.error('Error fetching chat sessions:', error.message);
       return [];
     }
   }
@@ -29,8 +31,8 @@ export class ChatService {
     try {
       const response = await apiClient.get(`/api/chat/sessions/${sessionId}/messages`);
       return response.data || [];
-    } catch (error) {
-      console.error('Error fetching chat messages:', error);
+    } catch (error: any) {
+      console.error('Error fetching chat messages:', error.message);
       return [];
     }
   }
@@ -52,7 +54,8 @@ export class ChatService {
 
       return response.data;
     } catch (error: any) {
-      throw new Error(`Failed to save message: ${error.message}`);
+      console.error('Failed to save message:', error.message);
+      throw new Error(`Failed to save message: ${error.response?.data?.detail || error.message}`);
     }
   }
 
@@ -60,7 +63,8 @@ export class ChatService {
     try {
       await apiClient.delete(`/api/chat/sessions/${sessionId}`);
     } catch (error: any) {
-      throw new Error(`Failed to delete chat session: ${error.message}`);
+      console.error('Failed to delete chat session:', error.message);
+      throw new Error(`Failed to delete chat session: ${error.response?.data?.detail || error.message}`);
     }
   }
 
@@ -71,7 +75,8 @@ export class ChatService {
         updated_at: new Date().toISOString()
       });
     } catch (error: any) {
-      throw new Error(`Failed to update session title: ${error.message}`);
+      // Only log warning for title updates as it's not critical
+      console.warn('Failed to update session title:', error.message);
     }
   }
 }

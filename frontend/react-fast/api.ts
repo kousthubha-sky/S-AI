@@ -18,12 +18,21 @@ apiClient.interceptors.request.use(
             
             // Set the Authorization header
             config.headers.Authorization = `Bearer ${token}`;
+            
+            // Log request details (but not the full token)
+            console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
+                headers: { 
+                    ...config.headers,
+                    Authorization: 'Bearer ' + token.substring(0, 20) + '...'
+                }
+            });
         } else {
-            console.warn('No auth token available for request to:', config.url);
+            console.error('No auth token available for request to:', config.url);
         }
         return config;
     },
     (error) => {
+        console.error('Request interceptor error:', error);
         return Promise.reject(error);
     }
 );

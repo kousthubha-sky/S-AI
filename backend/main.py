@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+from jose import jwt, JWTError
 
 load_dotenv()
 
@@ -22,6 +23,7 @@ from auth.dependencies import verify_token, has_permissions, get_user_id, get_us
 from auth.payment import PaymentManager
 from web.webhook import router as webhook_router
 from web.chat import router as chat_router
+from web.auth_actions import router as auth_actions_router
 
 # Import Supabase state management
 from models.supabase_state import (
@@ -121,18 +123,20 @@ async def get_profile(payload: dict = Depends(verify_token)):
     try:
         user_id = payload.get("sub")
         
-        # First, try to get user from Auth0
-        from auth.management import auth0_management
-        user_data = await auth0_management.get_user_info(user_id)
-        
-        # Check if user exists in database, create if not
+        # Ensure user exists in database first
         db_user = await create_user_if_not_exists(payload)
+        
+        if not db_user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found in database"
+            )
         
         return UserProfile(
             user_id=user_id,
-            email=db_user.get("email", user_data.get("email", "")),
-            name=db_user.get("name", user_data.get("name")),
-            picture=user_data.get("picture"),
+            email=db_user.get("email", ""),
+            name=db_user.get("name", "User"),
+            picture=db_user.get("picture"),
             permissions=payload.get("permissions", [])
         )
         
@@ -501,6 +505,7 @@ async def list_documents(payload: dict = Depends(verify_token)):
 # Include routers
 app.include_router(webhook_router)
 app.include_router(chat_router)
+app.include_router(auth_actions_router)
 
 # Chat history endpoints
 @app.get("/api/chat/sessions", tags=["Chat History"])

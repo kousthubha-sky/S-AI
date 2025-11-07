@@ -114,19 +114,28 @@ class SupabaseService:
                 detail=f"Database error: {str(e)}"
             )
 
+    # In SupabaseService class, update create_user method:
     async def create_user(self, user_data: Dict) -> Dict:
         """Create a new user"""
         try:
             # Check if user exists
             existing = await self.get_user_by_auth0_id(user_data['auth0_id'])
             if existing:
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail="User already exists"
-                )
+                return existing  # Return existing user instead of raising error
+            
+            # Map to your Supabase schema
+            supabase_user_data = {
+                "auth0_id": user_data['auth0_id'],
+                "email": user_data.get('email', ''),
+                "name": user_data.get('name'),
+                "subscription_tier": user_data.get('subscription_tier', 'free'),
+                "is_paid": user_data.get('is_paid', False),
+                "created_at": datetime.now().isoformat(),
+                "updated_at": datetime.now().isoformat()
+            }
             
             # Create user
-            response = self.client.table('users').insert(user_data).execute()
+            response = self.client.table('users').insert(supabase_user_data).execute()
             
             if not response.data:
                 raise HTTPException(
@@ -141,14 +150,16 @@ class SupabaseService:
             
             return user
             
-        except HTTPException:
-            raise
         except Exception as e:
+            print(f"Error creating user: {str(e)}")
+            # If user already exists or other error, try to return existing
+            existing = await self.get_user_by_auth0_id(user_data['auth0_id'])
+            if existing:
+                return existing
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database error: {str(e)}"
             )
-
     async def update_user(self, auth0_id: str, update_data: Dict) -> Dict:
         """Update user data"""
         try:
@@ -173,87 +184,87 @@ class SupabaseService:
     # ==================== Usage Tracking ====================
     # services/supabase_database.py - UPDATE THESE METHODS:
 
-async def initialize_usage_tracking(self, user_id: str):
-    """Initialize usage tracking for a user"""
-    try:
-        month_year = datetime.now().strftime("%Y-%m")
-        
-        usage_data = {
-            'user_id': user_id,
-            'month_year': month_year,
-            'daily_message_count': 0,
-            'total_message_count': 0,
-            'daily_token_count': 0,
-            'total_token_count': 0,
-            'last_reset_date': datetime.now().isoformat(),
-            'is_paid': False,  # NEW COLUMN
-            'subscription_tier': 'free',  # NEW COLUMN
-            'subscription_end_date': None  # NEW COLUMN
-        }
-        
-        self.client.table('user_usage').upsert(usage_data).execute()  # CHANGED TABLE NAME
-        
-    except Exception as e:
-        print(f"Failed to initialize usage tracking: {e}")
-
-async def get_user_usage(self, user_id: str) -> Dict:
-    """Get user usage statistics"""
-    try:
-        month_year = datetime.now().strftime("%Y-%m")
-        
-        # CHANGED TABLE NAME from usage_tracking to user_usage
-        response = self.client.table('user_usage').select('*').eq('user_id', user_id).eq('month_year', month_year).execute()
-        
-        if not response.data:
-            # Initialize if doesn't exist
-            await self.initialize_usage_tracking(user_id)
-            response = self.client.table('user_usage').select('*').eq('user_id', user_id).eq('month_year', month_year).execute()
-        
-        usage = response.data[0] if response.data else {}
-        
-        # Check if daily reset is needed
-        last_reset = datetime.fromisoformat(usage.get('last_reset_date', datetime.now().isoformat()))
-        now = datetime.now()
-        
-        if last_reset.date() < now.date():
-            # Reset daily counts
-            update_data = {
+    async def initialize_usage_tracking(self, user_id: str):
+        """Initialize usage tracking for a user"""
+        try:
+            month_year = datetime.now().strftime("%Y-%m")
+            
+            usage_data = {
+                'user_id': user_id,
+                'month_year': month_year,
                 'daily_message_count': 0,
+                'total_message_count': 0,
                 'daily_token_count': 0,
-                'last_reset_date': now.isoformat()
+                'total_token_count': 0,
+                'last_reset_date': datetime.now().isoformat(),
+                'is_paid': False,  # NEW COLUMN
+                'subscription_tier': 'free',  # NEW COLUMN
+                'subscription_end_date': None  # NEW COLUMN
             }
-            self.client.table('user_usage').update(update_data).eq('user_id', user_id).eq('month_year', month_year).execute()
-            usage.update(update_data)
-        
-        return usage
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get usage: {str(e)}"
-        )
+            
+            self.client.table('user_usage').upsert(usage_data).execute()  # CHANGED TABLE NAME
+            
+        except Exception as e:
+            print(f"Failed to initialize usage tracking: {e}")
 
-async def increment_usage(self, user_id: str, message_count: int = 1, token_count: int = 0):
-    """Increment usage counters"""
-    try:
-        month_year = datetime.now().strftime("%Y-%m")
-        
-        # Get current usage
-        usage = await self.get_user_usage(user_id)
-        
-        # Increment counts
-        update_data = {
-            'daily_message_count': usage['daily_message_count'] + message_count,
-            'total_message_count': usage['total_message_count'] + message_count,
-            'daily_token_count': usage['daily_token_count'] + token_count,
-            'total_token_count': usage['total_token_count'] + token_count
-        }
-        
-        # CHANGED TABLE NAME
-        self.client.table('user_usage').update(update_data).eq('user_id', user_id).eq('month_year', month_year).execute()
-        
-    except Exception as e:
-        print(f"Failed to increment usage: {e}")
+    async def get_user_usage(self, user_id: str) -> Dict:
+        """Get user usage statistics"""
+        try:
+            month_year = datetime.now().strftime("%Y-%m")
+            
+            # CHANGED TABLE NAME from usage_tracking to user_usage
+            response = self.client.table('user_usage').select('*').eq('user_id', user_id).eq('month_year', month_year).execute()
+            
+            if not response.data:
+                # Initialize if doesn't exist
+                await self.initialize_usage_tracking(user_id)
+                response = self.client.table('user_usage').select('*').eq('user_id', user_id).eq('month_year', month_year).execute()
+            
+            usage = response.data[0] if response.data else {}
+            
+            # Check if daily reset is needed
+            last_reset = datetime.fromisoformat(usage.get('last_reset_date', datetime.now().isoformat()))
+            now = datetime.now()
+            
+            if last_reset.date() < now.date():
+                # Reset daily counts
+                update_data = {
+                    'daily_message_count': 0,
+                    'daily_token_count': 0,
+                    'last_reset_date': now.isoformat()
+                }
+                self.client.table('user_usage').update(update_data).eq('user_id', user_id).eq('month_year', month_year).execute()
+                usage.update(update_data)
+            
+            return usage
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to get usage: {str(e)}"
+            )
+
+    async def increment_usage(self, user_id: str, message_count: int = 1, token_count: int = 0):
+        """Increment usage counters"""
+        try:
+            month_year = datetime.now().strftime("%Y-%m")
+            
+            # Get current usage
+            usage = await self.get_user_usage(user_id)
+            
+            # Increment counts
+            update_data = {
+                'daily_message_count': usage['daily_message_count'] + message_count,
+                'total_message_count': usage['total_message_count'] + message_count,
+                'daily_token_count': usage['daily_token_count'] + token_count,
+                'total_token_count': usage['total_token_count'] + token_count
+            }
+            
+            # CHANGED TABLE NAME
+            self.client.table('user_usage').update(update_data).eq('user_id', user_id).eq('month_year', month_year).execute()
+            
+        except Exception as e:
+            print(f"Failed to increment usage: {e}")
 
     # ==================== Subscription Management ====================
     async def create_subscription(self, subscription_data: Dict) -> Dict:
@@ -430,6 +441,52 @@ async def increment_usage(self, user_id: str, message_count: int = 1, token_coun
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to get transactions: {str(e)}"
             )
+            
+    async def create_security_event(self, event_data: Dict) -> Dict:
+        """Log a security event"""
+        try:
+            response = self.client.table('security_events').insert(event_data).execute()
+            
+            if not response.data:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Failed to create security event"
+                )
+            
+            return response.data[0]
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Security event error: {str(e)}"
+            )
+
+    async def get_user_security_events(self, user_id: str, limit: int = 50) -> List[Dict]:
+        """Get user's security events"""
+        try:
+            response = self.client.table('security_events')\
+                .select('*')\
+                .eq('user_id', user_id)\
+                .order('timestamp', desc=True)\
+                .limit(limit)\
+                .execute()
+            
+            return response.data or []
+            
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to get security events: {str(e)}"
+            )
+
+    async def check_email_exists(self, email: str) -> bool:
+        """Check if email exists"""
+        try:
+            response = self.client.table('users').select('id').eq('email', email).execute()
+            return len(response.data) > 0
+        except:
+            return False
+
 
 # Create singleton instance
 db = SupabaseService()

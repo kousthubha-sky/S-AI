@@ -8,6 +8,7 @@ import httpx
 from functools import lru_cache
 import os
 from datetime import datetime
+from jose import jwt, JWTError
 
 # Import Supabase database service
 from services.supabase_database import db
@@ -153,10 +154,10 @@ async def ensure_user_in_database(payload: dict):
         user_data = {
             "auth0_id": user_id,
             "email": email or "",
-            "name": name,
+            "name": name or "User",
             "subscription_tier": "free",
             "is_active": True,
-            "is_paid": False,  # ADD THIS
+            "is_paid": False,
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
         }
@@ -167,7 +168,8 @@ async def ensure_user_in_database(payload: dict):
     except Exception as e:
         print(f"Error ensuring user in database: {str(e)}")
         # Don't raise exception here to avoid breaking auth flow
-        
+        return None
+            
 def has_permissions(required_permissions: List[str]):
     """
     Dependency to check if the user has the required permissions

@@ -11,6 +11,7 @@ import { Input } from "~/components/ui/input"
 import { Link, Navigate } from "react-router"
 import routes from "~/routes"
 import { useAuth0 } from "@auth0/auth0-react"
+import Orb from "./ui/background-orb"
 
 export function LoginForm({
   className,
@@ -61,13 +62,15 @@ const handleGoogleLogin = async () => {
 
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
+      
       <FieldGroup>
         <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl font-bold">Login to your account</h1>
+          <h1 className="text-2xl text-white font-bold">Login to your account</h1>
           <p className="text-muted-foreground text-sm text-balance">
             Choose your preferred login method
           </p>
         </div>
+        
         <Field>
           <Button 
             onClick={handleAuth0Login} 
@@ -81,7 +84,7 @@ const handleGoogleLogin = async () => {
           <Button
             variant="outline"
             type="button"
-            className="flex w-full items-center gap-2 border-gray-300 hover:bg-gray-100 text-gray-700"
+            className="flex w-full items-center gap-2   hover:bg-gray-100 text-white "
             onClick={handleGoogleLogin} // Use the new function
           >
             <svg

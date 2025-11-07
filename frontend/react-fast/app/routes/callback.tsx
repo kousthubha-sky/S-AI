@@ -1,43 +1,70 @@
+// Updated Callback.tsx with better error handling
 import { useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useNavigate } from 'react-router';
 
 export default function Callback() {
-  const { isAuthenticated, error } = useAuth0();
+  const { isAuthenticated, error, isLoading } = useAuth0();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isAuthenticated) {
-      // Get the intended destination from Auth0's state
-      const searchParams = new URLSearchParams(window.location.search);
-      const state = searchParams.get('state');
-      let decodedState;
+    console.log('Callback - Auth status:', { isAuthenticated, isLoading, error });
+    
+    if (error) {
+      console.error('Auth error in callback:', error);
+      navigate('/login?error=auth_failed');
+      return;
+    }
+
+    if (!isLoading && isAuthenticated) {
+      // Try to get return URL from multiple sources
+      const urlParams = new URLSearchParams(window.location.search);
+      const stateParam = urlParams.get('state');
+      
+      let returnTo = '/dashboard'; // Default fallback
       
       try {
-        decodedState = state ? JSON.parse(atob(state)) : null;
+        if (stateParam) {
+          // Auth0 state is usually base64 encoded JSON
+          const decodedState = JSON.parse(atob(stateParam));
+          if (decodedState.returnTo) {
+            returnTo = decodedState.returnTo;
+          }
+        }
       } catch (e) {
-        console.error('Failed to parse state:',e);
-        decodedState = null;
+        console.warn('Could not parse state, using default redirect');
       }
 
-      // Navigate to the return URL or fallback to dashboard
-      const returnTo = decodedState?.returnTo || '/dashboard';
-      navigate(returnTo);
+      console.log('Redirecting to:', returnTo);
+      navigate(returnTo, { replace: true });
     }
-  }, [isAuthenticated, navigate]);
+
+    // If not authenticated and not loading, redirect to login
+    if (!isLoading && !isAuthenticated) {
+      console.warn('Not authenticated in callback, redirecting to login');
+      setTimeout(() => navigate('/login'), 2000);
+    }
+  }, [isAuthenticated, isLoading, error, navigate]);
 
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen">
-        <h1 className="text-2xl font-bold text-red-600">Oops... {error.message}</h1>
+        <h1 className="text-2xl font-bold text-red-600">Authentication Error</h1>
+        <p className="mt-2 text-gray-600">{error.message}</p>
+        <button 
+          onClick={() => navigate('/login')}
+          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded"
+        >
+          Return to Login
+        </button>
       </div>
     );
   }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen">
-      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-gray-900"></div>
-      <p className="mt-4 text-lg">Completing authentication...</p>
+      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      <p className="mt-4 text-lg text-gray-600">Completing authentication...</p>
     </div>
   );
 }

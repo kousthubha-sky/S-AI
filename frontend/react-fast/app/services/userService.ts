@@ -1,72 +1,84 @@
-// services/userService.ts
+// services/userService.ts - Improved version
 import apiClient from '../../api';
-import { useAuthState } from '../components/auth/AuthInitializer';
+
+interface Auth0User {
+  sub?: string;
+  email: string;
+  name?: string;
+  picture?: string;
+  [key: string]: any; // Allow other properties from Auth0
+}
+
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  picture?: string;
+}
 
 export class UserService {
-  static async getOrCreateUser(auth0User: any): Promise<any> {
+  static async getOrCreateUser(auth0User: Auth0User): Promise<User> {
     const token = localStorage.getItem('auth_token');
     if (!token) {
-      console.error('No auth token available');
-      throw new Error('Authentication not initialized');
+      throw new Error('No authentication token available');
     }
 
     try {
-      // Always try to create the user first
+      console.log('Attempting to get existing user profile...');
+      // First, try to get the current user
       try {
-        const createResponse = await apiClient.post('/api/users', {
-          email: auth0User.email,
-          name: auth0User.name
-        }, {
+        const profileResponse = await apiClient.get('/api/profile');
+        console.log('Profile response:', profileResponse.data);
+        if (profileResponse.data?.id) {
+          return profileResponse.data;
+        }
+      } catch (getError: any) {
+        console.log('Profile fetch error:', getError.response?.data || getError.message);
+        console.log('Profile not found, will create new user...');
+      }
+
+      console.log('Creating new user with data:', {
+        email: auth0User.email,
+        name: auth0User.name || auth0User.email?.split('@')[0] || 'User',
+        sub: auth0User.sub
+      });
+
+      // Create user with Auth0 data
+      const createResponse = await apiClient.post('/api/users', {
+        email: auth0User.email,
+        name: auth0User.name || auth0User.email?.split('@')[0] || 'User',
+        picture: auth0User.picture,
+        auth0_id: auth0User.sub // Make sure to include the Auth0 ID
+      });
+      
+      console.log('Create user response:', createResponse.data);
+      
+      if (!createResponse.data?.id) {
+        throw new Error('Created user response missing ID');
+      }
+      
+      return createResponse.data;
+
+    } catch (error: any) {
+      console.error('Error in getOrCreateUser:', error);
+      
+      // Handle specific error cases
+      if (error.response?.status === 409) {
+        // User already exists, try to get profile again
+        const profileResponse = await apiClient.get('/api/profile', {
           headers: {
             Authorization: `Bearer ${token}`
           }
         });
-        return createResponse.data.user;
-      } catch (createError: any) {
-        // If user already exists (409), proceed to get profile
-        if (createError.response?.status !== 409) {
-          console.error('Unexpected error creating user:', createError);
-        }
+        return profileResponse.data;
       }
-
-      // Get or return existing profile
-      const profileResponse = await apiClient.get('/api/profile', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      return profileResponse.data;
-    } catch (error: any) {
-      console.error('Error in getOrCreateUser:', error);
       
-      // Handle auth errors
-      if (error.response?.status === 403 || error.response?.status === 401) {
-        console.error('Authentication error - token might be invalid');
+      if (error.response?.status === 401 || error.response?.status === 403) {
         localStorage.removeItem('auth_token');
-        throw new Error('Authentication required');
+        throw new Error('Authentication failed');
       }
       
-      throw error;
-    }
-  }
-
-  static async getCurrentUser(): Promise<any> {
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      console.error('No auth token available');
-      throw new Error('Authentication not initialized');
-    }
-
-    try {
-      const response = await apiClient.get('/api/users/me', {
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      return response.data;
-    } catch (error) {
-      console.error('Error getting current user:', error);
-      throw error;
+      throw new Error(`Failed to get or create user: ${error.message}`);
     }
   }
 }

@@ -163,7 +163,7 @@ function FieldSeparator({
       data-slot="field-separator"
       data-content={!!children}
       className={cn(
-        "relative -my-2 h-5 text-sm group-data-[variant=outline]/field-group:-mb-2",
+        "relative -my-2 h-5  group-data-[variant=outline]/field-group:-mb-2",
         className
       )}
       {...props}
@@ -171,7 +171,7 @@ function FieldSeparator({
       <Separator className="absolute inset-0 top-1/2" />
       {children && (
         <span
-          className="bg-background text-muted-foreground relative mx-auto block w-fit px-2"
+          className=" text-white bg-black rounded-4xl relative mx-auto block w-fit px-2"
           data-slot="field-separator-content"
         >
           {children}
