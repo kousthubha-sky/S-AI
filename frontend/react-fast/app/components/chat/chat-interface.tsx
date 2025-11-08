@@ -301,6 +301,9 @@ export function ChatInterface({
   showPaymentDialog, setShowPaymentDialog, onMenuClick,
   isSidebarCollapsed = false
 }: ChatInterfaceProps) {
+   const { user: auth0User, isLoading: auth0Loading, isAuthenticated } = useAuth0();
+  const { fetchWithAuth } = useAuthApi();
+
   const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
   const [newMessage, setNewMessage] = useState("")
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
@@ -328,12 +331,11 @@ export function ChatInterface({
   const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
   const promptCategoriesRef = useRef<HTMLDivElement>(null)
-  const { user: auth0User } = useAuth0();
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editedContent, setEditedContent] = useState("");
-  const { fetchWithAuth } = useAuthApi();
+
   
   // Dynamic model selection hook
   const { selectModel } = useDynamicModel();
@@ -369,6 +371,29 @@ export function ChatInterface({
     }
     return 'Best model for your query';
   };
+
+    if (auth0Loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
+          <p className="text-sm text-muted-foreground">Initializing authentication...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ✅ ADD THIS: Check if user is authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="text-center">
+          <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">Please log in to continue</p>
+        </div>
+      </div>
+    );
+  }
 
   // Detect mobile device and handle viewport changes
   useEffect(() => {

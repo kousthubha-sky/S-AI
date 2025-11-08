@@ -383,7 +383,7 @@ export default function ProfileSettingsPage({
                     <div className="divide-y divide-white/10">
                       <DetailRow label="Full name" value={displayName} />
                       <DetailRow label="Email" value={displayEmail} />
-                      <DetailRow label="User ID" value={getUserId(profileUser)} />
+                     
                       <DetailRow label="Account Type" value="Free" />
                       <DetailRow label="Member Since" value="Recently" />
                       <DetailRow label="Status" value="Active" />

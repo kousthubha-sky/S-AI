@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from pathlib import Path
+from services.redis_cache import RedisCache
 import uuid
 
 # Import slowapi for rate limiting
@@ -451,56 +452,73 @@ async def cancel_subscription(
 from models.ai_models import validate_model_access
 
 # Chat endpoint
+# In main.py - REPLACE the entire /api/chat endpoint (around line 408)
+
 @app.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
 @limiter.limit("30/minute") 
-async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
-    # ✅ Sanitize chat messages
-    sanitized_messages = []
-    for msg in request.messages:
-        sanitized_messages.append({
-            "role": msg.role,
-            "content": InputValidator.sanitize_string(msg.content, max_length=10000)
-        })
+async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depends(verify_token)):
     """Process chat messages through OpenRouter"""
     user_id = payload.get("sub")
-    usage = await get_user_usage(user_id)  # This now uses Supabase
     
-    print(f"User {user_id} - Current usage: {usage.daily_message_count} messages, Paid: {usage.is_paid}")
+    # ✅ Add detailed logging
+    print(f"\n{'='*50}")
+    print(f"🔍 Chat Request Debug")
+    print(f"{'='*50}")
+    print(f"User ID: {user_id}")
+    print(f"Model requested: {chat_request.model}")
+    print(f"Message count: {len(chat_request.messages)}")
     
-    # Check subscription status and expiry
-    if usage.subscription_end_date and usage.subscription_end_date < datetime.now():
-        print(f"User {user_id} - Subscription expired")
-        usage.is_paid = False
-        usage.subscription_tier = "free"
-        await update_user_subscription(user_id, "free", False, datetime.now())
-    
-    # Validate model access based on user's tier
-    tier = usage.subscription_tier or "free"
-    has_access = validate_model_access(request.model, tier == "pro")
-    if not has_access:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This model is only available to Pro users. Please upgrade your subscription."
-        )
-    
-    # Check if user has exceeded free limit and hasn't paid
-    FREE_TIER_DAILY_LIMIT = 25
-    
-    if usage.daily_message_count >= FREE_TIER_DAILY_LIMIT and not usage.is_paid:
-        print(f"User {user_id} - Daily limit reached, requesting payment")
-        raise HTTPException(
-            status_code=status.HTTP_402_PAYMENT_REQUIRED,
-            detail="Daily limit reached. Please subscribe to continue."
-        )
-
     try:
-        # Add more robust error handling for missing API key
+        # ✅ Sanitize chat messages INSIDE the function
+        sanitized_messages = []
+        for msg in chat_request.messages:
+            sanitized_messages.append({
+                "role": msg.role,
+                "content": InputValidator.sanitize_string(msg.content, max_length=10000)
+            })
+        print(f"✅ Messages sanitized")
+        
+        # Get user usage
+        usage = await get_user_usage(user_id)
+        print(f"✅ User usage: {usage.daily_message_count} messages, Paid: {usage.is_paid}")
+        
+        # Check subscription status and expiry
+        if usage.subscription_end_date and usage.subscription_end_date < datetime.now():
+            print(f"⚠️ User subscription expired")
+            usage.is_paid = False
+            usage.subscription_tier = "free"
+            await update_user_subscription(user_id, "free", False, datetime.now())
+        
+        # Validate model access based on user's tier
+        tier = usage.subscription_tier or "free"
+        has_access = validate_model_access(chat_request.model, tier == "pro")
+        if not has_access:
+            print(f"❌ Model access denied for tier: {tier}")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="This model is only available to Pro users. Please upgrade your subscription."
+            )
+        print(f"✅ Model access granted")
+        
+        # Check if user has exceeded free limit and hasn't paid
+        FREE_TIER_DAILY_LIMIT = 25
+        
+        if usage.daily_message_count >= FREE_TIER_DAILY_LIMIT and not usage.is_paid:
+            print(f"❌ Daily limit reached")
+            raise HTTPException(
+                status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                detail="Daily limit reached. Please subscribe to continue."
+            )
+        
+        # Check for API key
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
+            print(f"❌ OpenRouter API key not configured")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="OpenRouter API key not configured"
             )
+        print(f"✅ API key present: {api_key[:15]}...")
         
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -509,30 +527,39 @@ async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
             "Content-Type": "application/json"
         }
         
-        # Prepare messages with system prompt if needed
-        messages = [{"role": msg.role, "content": msg.content} for msg in request.messages]
+        # ✅ Use sanitized messages
+        messages = sanitized_messages
         
         # Add system message for better responses
-        if request.system_prompt:
-            messages.insert(0, {"role": "system", "content": request.system_prompt})
+        if chat_request.system_prompt:
+            messages.insert(0, {"role": "system", "content": chat_request.system_prompt})
         
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        # Prepare request body
+        request_body = {
+            "model": chat_request.model or "anthropic/claude-3.5-sonnet",
+            "messages": messages,
+            "max_tokens": chat_request.max_tokens or 1000,
+            "temperature": chat_request.temperature or 0.7
+        }
+        
+        print(f"📤 Sending request to OpenRouter...")
+        print(f"Model: {request_body['model']}")
+        
+        async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
                 "https://openrouter.ai/api/v1/chat/completions",
                 headers=headers,
-                json={
-                    "model": request.model or "tngtech/deepseek-r1t2-chimera:free",
-                    "messages": messages,
-                    "max_tokens": request.max_tokens or 1000,
-                    "temperature": request.temperature or 0.7
-                }
+                json=request_body
             )
+            
+            print(f"📥 OpenRouter response status: {response.status_code}")
             
             if response.status_code != 200:
                 error_detail = f"OpenRouter API error: {response.status_code}"
                 try:
                     error_data = response.json()
                     error_detail = error_data.get('error', {}).get('message', error_detail)
+                    print(f"❌ OpenRouter error: {error_data}")
                 except:
                     pass
                 raise HTTPException(
@@ -541,28 +568,50 @@ async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
                 )
                 
             data = response.json()
+            print(f"✅ Got response from OpenRouter")
+            
+            # Check if we got a valid response
+            if not data.get("choices") or len(data["choices"]) == 0:
+                print(f"❌ No choices in response: {data}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="No response from AI model"
+                )
+            
+            # Extract message content
+            message_content = data["choices"][0]["message"]["content"]
+            print(f"✅ Message content length: {len(message_content)} chars")
             
             # Increment usage counter in Supabase
             tokens_used = data.get("usage", {}).get("total_tokens", 0)
             await increment_message_count(user_id, token_count=tokens_used)
+            print(f"✅ Usage incremented by {tokens_used} tokens")
+            
+            print(f"{'='*50}\n")
             
             return ChatResponse(
-                message=data["choices"][0]["message"]["content"],
+                message=message_content,
                 usage=data.get("usage", {}),
                 model=data.get("model", "unknown")
             )
             
+    except HTTPException:
+        raise
     except httpx.TimeoutException:
+        print(f"❌ Request timed out")
         raise HTTPException(
             status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Request to OpenRouter timed out"
         )
     except Exception as e:
+        print(f"❌ Unexpected error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Chat processing error: {str(e)}"
         )
-
+        
 # Document upload endpoint
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_MIME_TYPES = {
@@ -776,36 +825,200 @@ app.include_router(auth_actions_router)
 # Chat history endpoints
 @app.get("/api/chat/sessions", tags=["Chat History"])
 async def get_chat_sessions(payload: dict = Depends(verify_token)):
-    """Get user's chat sessions"""
+    """Get user's chat sessions - WITH REDIS CACHING"""
     user_id = payload.get("sub")
+    
     try:
+        # ✅ Try to get from cache first
+        cached_sessions = await RedisCache.get_user_sessions(user_id)
+        
+        if cached_sessions:
+            print(f"✅ Cache HIT: User sessions for {user_id[:8]}...")
+            return cached_sessions
+        
+        print(f"⚠️ Cache MISS: Fetching from database for {user_id[:8]}...")
+        
         # Get user from database
         user = await db.get_user_by_auth0_id(user_id)
         if user:
-            # Get chat sessions using Supabase database service
+            # Get chat sessions from database
             sessions = await db.get_chat_sessions(user['id'])
+            
+            # ✅ Cache the results for 30 minutes
+            await RedisCache.cache_user_sessions(user_id, sessions, ttl=1800)
+            
             return sessions
         return []
         
     except Exception as e:
+        print(f"Error fetching chat sessions: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch chat sessions: {str(e)}"
         )
-
+        
 @app.get("/api/chat/sessions/{session_id}/messages", tags=["Chat History"])
 async def get_chat_messages(session_id: str, payload: dict = Depends(verify_token)):
-    """Get messages for a specific chat session"""
+    """Get messages for a specific chat session - WITH REDIS CACHING"""
+    user_id = payload.get("sub")
+    
     try:
-        # Get chat messages using Supabase database service
+        # ✅ Try to get from cache first
+        cached_messages = await RedisCache.get_messages(session_id)
+        
+        if cached_messages:
+            print(f"✅ Cache HIT: Messages for session {session_id[:8]}...")
+            return cached_messages
+        
+        print(f"⚠️ Cache MISS: Fetching messages from database for session {session_id[:8]}...")
+        
+        # Get chat messages from database
         messages = await db.get_chat_messages(session_id)
+        
+        # ✅ Cache the messages for 1 hour
+        await RedisCache.cache_messages(session_id, messages, ttl=3600)
+        
         return messages
         
     except Exception as e:
+        print(f"Error fetching chat messages: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch chat messages: {str(e)}"
         )
+
+# ADD new endpoint to save messages with cache
+@app.post("/api/chat/sessions/{session_id}/messages", tags=["Chat History"])
+async def save_message(
+    session_id: str,
+    message_data: dict,
+    payload: dict = Depends(verify_token)
+):
+    """Save a message to a session - UPDATES CACHE"""
+    user_id = payload.get("sub")
+    
+    try:
+        # Save to database first
+        saved_message = await db.save_chat_message(
+            session_id=session_id,
+            role=message_data.get("role"),
+            content=message_data.get("content"),
+            model=message_data.get("model"),
+            tokens=message_data.get("tokens")
+        )
+        
+        # ✅ Update cache immediately
+        await RedisCache.append_message(session_id, saved_message)
+        
+        # ✅ Invalidate user sessions cache (since it might need updating)
+        await RedisCache.invalidate_user_sessions(user_id)
+        
+        return saved_message
+        
+    except Exception as e:
+        print(f"Error saving message: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save message: {str(e)}"
+        )
+
+# ADD new endpoint to create session with cache
+@app.post("/api/chat/sessions", tags=["Chat History"])
+async def create_chat_session(
+    session_data: dict,
+    payload: dict = Depends(verify_token)
+):
+    """Create a new chat session - UPDATES CACHE"""
+    user_id = payload.get("sub")
+    
+    try:
+        user = await db.get_user_by_auth0_id(user_id)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Create session in database
+        new_session = await db.create_chat_session(
+            user_id=user['id'],
+            title=session_data.get("title", "New Chat")
+        )
+        
+        # ✅ Invalidate user sessions cache to force refresh
+        await RedisCache.invalidate_user_sessions(user_id)
+        
+        return new_session
+        
+    except Exception as e:
+        print(f"Error creating session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create session: {str(e)}"
+        )
+
+# ADD new endpoint to delete session with cache
+@app.delete("/api/chat/sessions/{session_id}", tags=["Chat History"])
+async def delete_chat_session(
+    session_id: str,
+    payload: dict = Depends(verify_token)
+):
+    """Delete a chat session - INVALIDATES CACHE"""
+    user_id = payload.get("sub")
+    
+    try:
+        # Delete from database
+        await db.delete_chat_session(session_id)
+        
+        # ✅ Invalidate caches
+        await RedisCache.invalidate_session(session_id)
+        await RedisCache.invalidate_user_sessions(user_id)
+        
+        return {"status": "success", "message": "Session deleted"}
+        
+    except Exception as e:
+        print(f"Error deleting session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete session: {str(e)}"
+        )
+
+# ADD new endpoint to update session title with cache
+@app.patch("/api/chat/sessions/{session_id}", tags=["Chat History"])
+async def update_session_title(
+    session_id: str,
+    update_data: dict,
+    payload: dict = Depends(verify_token)
+):
+    """Update session title - UPDATES CACHE"""
+    user_id = payload.get("sub")
+    
+    try:
+        # Update in database
+        updated_session = await db.update_chat_session(
+            session_id=session_id,
+            title=update_data.get("title")
+        )
+        
+        # ✅ Update cache
+        await RedisCache.cache_session(session_id, updated_session)
+        await RedisCache.invalidate_user_sessions(user_id)
+        
+        return updated_session
+        
+    except Exception as e:
+        print(f"Error updating session: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update session: {str(e)}"
+        )
+
+# ADD cache stats endpoint for monitoring
+@app.get("/api/cache/stats", tags=["System"])
+async def get_cache_stats(payload: dict = Depends(verify_token)):
+    """Get Redis cache statistics"""
+    stats = await RedisCache.get_stats()
+    return stats
 
 if __name__ == "__main__":
     # Start the FastAPI server
