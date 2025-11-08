@@ -159,51 +159,69 @@ function DashboardContent() {
     }
   };
 
-  const initializeUser = async () => {
-    if (!auth0User?.email) {
-      console.error('No valid auth0User available');
+  // In dashboard.tsx - REPLACE the initializeUser function with this:
+
+const initializeUser = async () => {
+  if (!auth0User?.email) {
+    console.error('No valid auth0User available');
+    return;
+  }
+  
+  try {
+    const auth0UserData: Auth0User = {
+      sub: auth0User.sub,
+      email: auth0User.email,
+      name: auth0User.name,
+      picture: auth0User.picture
+    };
+    
+    // ✅ Check authentication status
+    if (!isAuthenticated) {
+      console.error('User not authenticated, redirecting to login...');
+      logout({ logoutParams: { returnTo: window.location.origin } });
       return;
     }
     
-    try {
-      const auth0UserData: Auth0User = {
-        sub: auth0User.sub,
-        email: auth0User.email,
-        name: auth0User.name,
-        picture: auth0User.picture
-      };
-      
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        console.error('No auth token found, redirecting to login...');
-        logout({ logoutParams: { returnTo: window.location.origin } });
-        return;
+    // ✅ Create token getter function that Auth0 SDK will use
+    const getToken = async () => {
+      try {
+        const token = await getAccessTokenSilently({
+          authorizationParams: {
+            audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
+            scope: 'openid profile email'
+          }
+        });
+        return token;
+      } catch (error) {
+        console.error('Failed to get access token:', error);
+        throw error;
       }
-      
-      const dbUser = await UserService.getOrCreateUser(auth0UserData);
-      if (!dbUser?.id) {
-        console.error('API returned user without ID:', dbUser);
-        return;
-      }
-      
-      setUser(dbUser);
-      
-      const userSessions = await ChatService.getUserChatSessions(dbUser.id);
-      setSessions(userSessions);
-      
-      // FIXED: Don't auto-select first session - let user choose
-      // This keeps the welcome screen visible after refresh
-      // User must click on a session or "New Chat" to start
-      setCurrentSessionId(null);
-      
-    } catch (error: any) {
-      console.error('Failed to initialize user:', error);
-      
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        logout({ logoutParams: { returnTo: window.location.origin } });
-      }
+    };
+    
+    // ✅ Pass the token getter to UserService
+    const dbUser = await UserService.getOrCreateUser(auth0UserData, getToken);
+    if (!dbUser?.id) {
+      console.error('API returned user without ID:', dbUser);
+      return;
     }
-  };
+    
+    setUser(dbUser);
+    
+    // Get user sessions using fetchWithAuth
+    const userSessions = await ChatService.getUserChatSessions(dbUser.id, fetchWithAuth);
+    setSessions(userSessions);
+    
+    // Don't auto-select first session - let user choose
+    setCurrentSessionId(null);
+    
+  } catch (error: any) {
+    console.error('Failed to initialize user:', error);
+    
+    if (error.response?.status === 401 || error.response?.status === 403) {
+      logout({ logoutParams: { returnTo: window.location.origin } });
+    }
+  }
+};
 
   const checkUserSubscription = async () => {
     try {
@@ -242,7 +260,7 @@ function DashboardContent() {
   const handleDeleteSession = async (sessionId: string, event: React.MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     try {
-      await ChatService.deleteChatSession(sessionId);
+      await ChatService.deleteChatSession(sessionId, fetchWithAuth);
       setSessions(prev => prev.filter(session => session.id !== sessionId));
       
       if (currentSessionId === sessionId) {

@@ -1,12 +1,10 @@
-// services/userService.ts - Improved version
-import apiClient from '../../api';
+// services/userService.ts - REPLACE ENTIRE FILE
 
 interface Auth0User {
   sub?: string;
   email: string;
   name?: string;
   picture?: string;
-  [key: string]: any; // Allow other properties from Auth0
 }
 
 interface User {
@@ -14,71 +12,128 @@ interface User {
   email: string;
   name: string;
   picture?: string;
+  subscription_tier?: string;
 }
 
 export class UserService {
-  static async getOrCreateUser(auth0User: Auth0User): Promise<User> {
-    const token = localStorage.getItem('auth_token');
-    if (!token) {
-      throw new Error('No authentication token available');
-    }
-
+  static async getOrCreateUser(
+    auth0User: Auth0User,
+    getToken: () => Promise<string>
+  ): Promise<User> {
     try {
-      console.log('Attempting to get existing user profile...');
-      // First, try to get the current user
-      try {
-        const profileResponse = await apiClient.get('/api/profile');
-        console.log('Profile response:', profileResponse.data);
-        if (profileResponse.data?.id) {
-          return profileResponse.data;
-        }
-      } catch (getError: any) {
-        console.log('Profile fetch error:', getError.response?.data || getError.message);
-        console.log('Profile not found, will create new user...');
+      const token = await getToken();
+      
+      if (!token) {
+        throw new Error('No authentication token available');
       }
 
-      console.log('Creating new user with data:', {
-        email: auth0User.email,
-        name: auth0User.name || auth0User.email?.split('@')[0] || 'User',
-        sub: auth0User.sub
-      });
-
-      // Create user with Auth0 data
-      const createResponse = await apiClient.post('/api/users', {
-        email: auth0User.email,
-        name: auth0User.name || auth0User.email?.split('@')[0] || 'User',
-        picture: auth0User.picture,
-        auth0_id: auth0User.sub // Make sure to include the Auth0 ID
-      });
-      
-      console.log('Create user response:', createResponse.data);
-      
-      if (!createResponse.data?.id) {
-        throw new Error('Created user response missing ID');
-      }
-      
-      return createResponse.data;
-
-    } catch (error: any) {
-      console.error('Error in getOrCreateUser:', error);
-      
-      // Handle specific error cases
-      if (error.response?.status === 409) {
-        // User already exists, try to get profile again
-        const profileResponse = await apiClient.get('/api/profile', {
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/users`,
+        {
+          method: 'POST',
           headers: {
-            Authorization: `Bearer ${token}`
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            email: auth0User.email,
+            name: auth0User.name,
+            picture: auth0User.picture,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.detail || 'Failed to create user');
+      }
+
+      return await response.json();
+    } catch (error: any) {
+      // If user already exists, fetch their data
+      if (error.message?.includes('409') || error.message?.includes('400')) {
+        try {
+          const token = await getToken();
+          const response = await fetch(
+            `${import.meta.env.VITE_API_BASE_URL}/api/users/me`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+          
+          if (!response.ok) {
+            throw new Error('Failed to fetch user');
           }
-        });
-        return profileResponse.data;
+          
+          return await response.json();
+        } catch (fetchError) {
+          console.error('Failed to fetch existing user:', fetchError);
+          throw fetchError;
+        }
       }
       
-      if (error.response?.status === 401 || error.response?.status === 403) {
-        localStorage.removeItem('auth_token');
-        throw new Error('Authentication failed');
-      }
+      console.error('Failed to get or create user:', error);
+      throw error;
+    }
+  }
+
+  static async getUserById(
+    userId: string,
+    getToken: () => Promise<string>
+  ): Promise<User> {
+    try {
+      const token = await getToken();
       
-      throw new Error(`Failed to get or create user: ${error.message}`);
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/users/${userId}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch user');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to fetch user:', error);
+      throw error;
+    }
+  }
+
+  static async updateUser(
+    userId: string,
+    updates: Partial<User>,
+    getToken: () => Promise<string>
+  ): Promise<User> {
+    try {
+      const token = await getToken();
+      
+      const response = await fetch(
+        `${import.meta.env.VITE_API_BASE_URL}/api/users/${userId}`,
+        {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(updates),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to update user');
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Failed to update user:', error);
+      throw error;
     }
   }
 }

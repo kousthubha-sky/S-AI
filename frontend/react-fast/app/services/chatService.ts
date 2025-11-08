@@ -1,82 +1,136 @@
-// services/chatService.ts
-import apiClient from '../../api'
-import type { ChatSession, ChatMessage } from '~/lib/database.types'
+// services/chatService.ts - REPLACE ENTIRE FILE
+
+interface ChatSession {
+  id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string;
+}
+
+// Type for the fetchWithAuth function
+type FetchWithAuth = (url: string, options?: RequestInit) => Promise<any>;
 
 export class ChatService {
-  static async createChatSession(userId: string, title: string = 'New Chat'): Promise<ChatSession> {
+  static async getUserChatSessions(
+    userId: string,
+    fetchWithAuth: FetchWithAuth
+  ): Promise<ChatSession[]> {
     try {
-      const response = await apiClient.post('/api/chat/sessions', {
-        title,
-        user_id: userId
-      });
-      
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to create chat session:', error.message);
-      throw new Error(`Failed to create chat session: ${error.response?.data?.detail || error.message}`);
-    }
-  }
-
-  static async getUserChatSessions(userId: string): Promise<ChatSession[]> {
-    try {
-      const response = await apiClient.get('/api/chat/sessions');
-      return response.data || [];
-    } catch (error: any) {
-      console.error('Error fetching chat sessions:', error.message);
+      const sessions = await fetchWithAuth(
+        `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions`
+      );
+      return sessions || [];
+    } catch (error) {
+      console.error('Failed to fetch chat sessions:', error);
       return [];
     }
   }
 
-  static async getChatMessages(sessionId: string): Promise<ChatMessage[]> {
-    try {
-      const response = await apiClient.get(`/api/chat/sessions/${sessionId}/messages`);
-      return response.data || [];
-    } catch (error: any) {
-      console.error('Error fetching chat messages:', error.message);
-      return [];
-    }
-  }
-
-  static async saveMessage(
+  static async getChatMessages(
     sessionId: string,
-    role: 'user' | 'assistant' | 'system',
-    content: string,
-    modelUsed?: string,
-    tokensUsed?: number
-  ): Promise<ChatMessage> {
+    fetchWithAuth: FetchWithAuth
+  ): Promise<ChatMessage[]> {
     try {
-      const response = await apiClient.post(`/api/chat/sessions/${sessionId}/messages`, {
-        role,
-        content,
-        model_used: modelUsed,
-        tokens_used: tokensUsed
-      });
-
-      return response.data;
-    } catch (error: any) {
-      console.error('Failed to save message:', error.message);
-      throw new Error(`Failed to save message: ${error.response?.data?.detail || error.message}`);
+      const messages = await fetchWithAuth(
+        `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${sessionId}/messages`
+      );
+      return messages || [];
+    } catch (error) {
+      console.error('Failed to fetch chat messages:', error);
+      return [];
     }
   }
 
-  static async deleteChatSession(sessionId: string): Promise<void> {
+  static async deleteChatSession(
+    sessionId: string,
+    fetchWithAuth: FetchWithAuth
+  ): Promise<void> {
     try {
-      await apiClient.delete(`/api/chat/sessions/${sessionId}`);
-    } catch (error: any) {
-      console.error('Failed to delete chat session:', error.message);
-      throw new Error(`Failed to delete chat session: ${error.response?.data?.detail || error.message}`);
+      await fetchWithAuth(
+        `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${sessionId}`,
+        {
+          method: 'DELETE',
+        }
+      );
+    } catch (error) {
+      console.error('Failed to delete chat session:', error);
+      throw error;
     }
   }
 
-  static async updateSessionTitle(sessionId: string, title: string): Promise<void> {
+  static async createChatSession(
+    title: string,
+    fetchWithAuth: FetchWithAuth
+  ): Promise<ChatSession> {
     try {
-      await apiClient.patch(`/api/chat/sessions/${sessionId}`, {
-        title,
-        updated_at: new Date().toISOString()
-      });
-    } catch (error: any) {
-      // Only log warning for title updates as it's not critical
-      console.warn('Failed to update session title:', error.message);
+      const session = await fetchWithAuth(
+        `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ title }),
+        }
+      );
+      return session;
+    } catch (error) {
+      console.error('Failed to create chat session:', error);
+      throw error;
     }
   }
+  static async saveMessage(
+  sessionId: string,
+  role: 'user' | 'assistant',
+  content: string,
+  model: string,
+  tokens?: number,
+  fetchWithAuth?: FetchWithAuth
+): Promise<void> {
+  if (!fetchWithAuth) {
+    console.error('fetchWithAuth is required but not provided');
+    return;
+  }
+  
+  try {
+    await fetchWithAuth(
+      `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${sessionId}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          role,
+          content,
+          model,
+          tokens
+        }),
+      }
+    );
+  } catch (error) {
+    console.error('Failed to save message:', error);
+    throw error;
+  }
+}
+
+static async updateSessionTitle(
+  sessionId: string,
+  title: string,
+  fetchWithAuth: FetchWithAuth
+): Promise<void> {
+  try {
+    await fetchWithAuth(
+      `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${sessionId}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ title }),
+      }
+    );
+  } catch (error) {
+    console.error('Failed to update session title:', error);
+    throw error;
+  }
+}
 }

@@ -1,5 +1,5 @@
 // components/auth/AuthInitializer.tsx
-import { useEffect, useState } from 'react';
+import { useEffect, useState,useRef } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { createContext, useContext } from 'react';
 
@@ -16,94 +16,47 @@ export const AuthStateContext = createContext<AuthState>({
 });
 
 export function AuthInitializer({ children }: { children: React.ReactNode }) {
-    const { isAuthenticated, getAccessTokenSilently, isLoading, user } = useAuth0();
-  const [isInitialized, setIsInitialized] = useState(false);
-  const [hasValidToken, setHasValidToken] = useState(false);
+    const { isAuthenticated, getAccessTokenSilently, isLoading } = useAuth0();
+  const tokenRef = useRef<string | null>(null);
 
 
 
   const getToken = async () => {
     try {
       if (!isAuthenticated) {
+        tokenRef.current = null;
         return null;
       }
 
-      // First try to get from localStorage to avoid unnecessary requests
-      const cachedToken = localStorage.getItem('auth_token');
-      if (cachedToken?.startsWith('eyJ')) {
-        // TODO: Add JWT expiration check here if needed
-        return cachedToken;
+      // If we have a cached token in memory and it's not expired, return it.
+      if (tokenRef.current) {
+        // (Optionally) check expiry by decoding JWT 'exp' claim here.
+        return tokenRef.current;
       }
 
-      // Get a fresh token if cached one is invalid or missing
       const token = await getAccessTokenSilently({
         authorizationParams: {
           audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
           scope: 'openid profile email'
-        },
-        detailedResponse: true
+        }
       });
 
-      if (token.access_token) {
-        localStorage.setItem('auth_token', token.access_token);
-        setHasValidToken(true);
-        return token.access_token;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Error getting token:', error);
-      localStorage.removeItem('auth_token');
-      setHasValidToken(false);
+      tokenRef.current = token as string;
+      return tokenRef.current;
+    } catch (err) {
+      console.error('Error getting token (silent):', err);
+      tokenRef.current = null;
       return null;
     }
   };
 
+  // Refresh logic: call getToken periodically but do not persist to localStorage
   useEffect(() => {
-    const initializeAuth = async () => {
-      try {
-        // Clear any stale tokens if not authenticated
-        if (!isAuthenticated && !isLoading) {
-          localStorage.removeItem('auth_token');
-          setHasValidToken(false);
-          setIsInitialized(true);
-          return;
-        }
-
-        // Wait for Auth0 loading to complete
-        if (isLoading) {
-          return;
-        }
-
-        if (isAuthenticated) {
-          try {
-            const token = await getAccessTokenSilently({
-              detailedResponse: true,
-              timeoutInSeconds: 60,
-              authorizationParams: {
-                audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
-                scope: 'openid profile email offline_access'
-              }
-            });
-            
-            localStorage.setItem('auth_token', token.access_token);
-            setHasValidToken(true);
-          } catch (tokenError: any) {
-            console.error('Token retrieval failed:', tokenError.message);
-            throw tokenError;
-          }
-        }
-      } catch (error: any) {
-        console.error('Auth initialization failed:', error.message);
-        localStorage.removeItem('auth_token');
-        setHasValidToken(false);
-      } finally {
-        setIsInitialized(true);
-      }
-    };
-
-    initializeAuth();
-  }, [isAuthenticated, isLoading]);
+    if (!isAuthenticated) return;
+    const refresh = async () => { await getToken(); };
+    const id = setInterval(refresh, 55 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [isAuthenticated]);
 
   // Set up token refresh interval
   useEffect(() => {
@@ -119,7 +72,7 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
   }, [isAuthenticated]);
 
   return (
-    <AuthStateContext.Provider value={{ isInitialized, hasValidToken, getToken }}>
+    <AuthStateContext.Provider value={{ isInitialized: !isLoading, hasValidToken: !!tokenRef.current, getToken }}>
       {children}
     </AuthStateContext.Provider>
   );

@@ -2,12 +2,32 @@ import base64
 import uvicorn
 import os
 import re
+import mimetypes
 from fastapi import FastAPI, Depends, HTTPException, Request, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
-from jose import jwt, JWTError
+from pathlib import Path
+import uuid
+
+# Import slowapi for rate limiting
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Import security middleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
+# Create limiter instance
+def get_rate_limit_key(request: Request):
+    # Use user ID if authenticated, otherwise use IP address
+    if hasattr(request.state, 'user_id'):
+        return request.state.user_id
+    return get_remote_address(request)
+
+limiter = Limiter(key_func=get_rate_limit_key)
 
 load_dotenv()
 
@@ -34,11 +54,19 @@ from models.supabase_state import (
     create_user_if_not_exists
 )
 
+# Import validation utilities
+from utils.validators import InputValidator
+
 app = FastAPI(
     title="SAAS API",
     description="Backend API for SAAS application with Supabase integration",
     version="2.0.0"
 )
+
+# Add rate limiting middleware
+limiter = Limiter(key_func=get_remote_address, default_limits=["200/hour"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.middleware("http")
 async def filter_invalid_requests(request: Request, call_next):
@@ -78,17 +106,81 @@ async def filter_invalid_requests(request: Request, call_next):
         )
 
 # CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
+ALLOWED_ORIGINS = []
+frontend_url = os.getenv("FRONTEND_URL")
+if frontend_url:
+    ALLOWED_ORIGINS.append(frontend_url)
+
+# Only add localhost in development
+if os.getenv("ENVIRONMENT", "development") == "development":
+    ALLOWED_ORIGINS.extend([
         "http://localhost:5173",
         "http://localhost:3000",
-        os.getenv("FRONTEND_URL", "http://localhost:5173"),
-    ],
+    ])
+
+if not ALLOWED_ORIGINS:
+    raise ValueError("No CORS origins configured. Set FRONTEND_URL environment variable.")
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=ALLOWED_ORIGINS,  # ✅ Explicit list
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # ✅ Specific methods
+    allow_headers=[  # ✅ Specific headers only
+        "Content-Type",
+        "Authorization",
+        "Accept",
+        "Origin",
+        "User-Agent",
+        "DNT",
+        "Cache-Control",
+        "X-Requested-With",
+    ],
+    max_age=600,  # ✅ Cache preflight for 10 minutes
 )
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """
+    Add security headers to all responses
+    """
+    async def dispatch(self, request: Request, call_next):
+        response = await call_next(request)
+        
+        # ✅ Prevent clickjacking
+        response.headers["X-Frame-Options"] = "DENY"
+        
+        # ✅ Prevent MIME type sniffing
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        
+        # ✅ Enable XSS protection (for older browsers)
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        
+        # ✅ Control referrer information
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        
+        # ✅ Content Security Policy
+        csp_directives = [
+            "default-src 'self'",
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com",
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+            "font-src 'self' https://fonts.gstatic.com",
+            "img-src 'self' data: https: blob:",
+            "connect-src 'self' https://api.anthropic.com https://openrouter.ai https://*.auth0.com",
+            "frame-ancestors 'none'",
+        ]
+        response.headers["Content-Security-Policy"] = "; ".join(csp_directives)
+        
+        # ✅ Permissions Policy (formerly Feature Policy)
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+        
+        # ✅ Strict Transport Security (HSTS) - only in production
+        if os.getenv("ENVIRONMENT") == "production":
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+        
+        return response
+
+# Add the middleware (place after CORS middleware):
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Error handling middleware
 @app.exception_handler(HTTPException)
@@ -200,22 +292,23 @@ async def get_usage(payload: dict = Depends(verify_token)):
     usage = await get_user_usage(user_id)  # This now uses Supabase
     return usage
 
-# User endpoints
+# Update create_user endpoint:
 @app.post("/api/users", tags=["User"])
 async def create_user(user_data: dict, payload: dict = Depends(verify_token)):
-    """Create a new user"""
     try:
         user_id = payload.get("sub")
         
-        # Create new user data
+        # ✅ Validate inputs
+        email = InputValidator.validate_email(user_data.get("email"))
+        name = InputValidator.sanitize_string(user_data.get("name", ""), max_length=100)
+        
         new_user = {
             "auth0_id": user_id,
-            "email": user_data.get("email"),
-            "name": user_data.get("name"),
+            "email": email,
+            "name": name,
             "subscription_tier": "free"
         }
         
-        # Use Supabase database service to create user
         result = await db.create_user(new_user)
         return result
         
@@ -224,7 +317,7 @@ async def create_user(user_data: dict, payload: dict = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create user: {str(e)}"
+            detail="Failed to create user"  # ✅ Don't expose error details
         )
 
 @app.get("/api/users/me", tags=["User"])
@@ -359,7 +452,15 @@ from models.ai_models import validate_model_access
 
 # Chat endpoint
 @app.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
+@limiter.limit("30/minute") 
 async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
+    # ✅ Sanitize chat messages
+    sanitized_messages = []
+    for msg in request.messages:
+        sanitized_messages.append({
+            "role": msg.role,
+            "content": InputValidator.sanitize_string(msg.content, max_length=10000)
+        })
     """Process chat messages through OpenRouter"""
     user_id = payload.get("sub")
     usage = await get_user_usage(user_id)  # This now uses Supabase
@@ -463,36 +564,201 @@ async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
         )
 
 # Document upload endpoint
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+ALLOWED_MIME_TYPES = {
+    'text/plain',
+    'text/markdown',
+    'application/pdf',
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'image/webp',
+}
+
+ALLOWED_EXTENSIONS = {'.txt', '.md', '.pdf', '.png', '.jpg', '.jpeg', '.webp'}
+
 @app.post("/api/upload-document")
+@limiter.limit("5/minute")  # Rate limit
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     payload: dict = Depends(verify_token)
 ):
-    """Upload and process documents for chat context"""
+    """Upload and process documents for chat context - SECURED"""
+    user_id = payload.get("sub")
+    
     try:
-        # Read file content
+        # ✅ 1. Validate filename
+        if not file.filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No filename provided"
+            )
+        
+        filename = InputValidator.validate_filename(file.filename)
+        file_ext = Path(filename).suffix.lower()
+        
+        # ✅ 2. Check extension
+        if file_ext not in ALLOWED_EXTENSIONS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"File type {file_ext} not allowed"
+            )
+        
+        # ✅ 3. Read file content
         content = await file.read()
         
-        # For text files, extract text
-        if file.content_type.startswith('text/') or file.filename.endswith('.txt'):
-            text_content = content.decode('utf-8')
-            # Store in database or process as needed
-            return {"filename": file.filename, "content_preview": text_content[:200] + "..."}
+        # ✅ 4. Check file size
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                detail=f"File too large. Maximum size is {MAX_FILE_SIZE // (1024*1024)}MB"
+            )
         
-        # For images, you could use OCR or other processing
-        elif file.content_type.startswith('image/'):
-            # Convert to base64 or process with vision models
-            base64_content = base64.b64encode(content).decode('utf-8')
-            return {"filename": file.filename, "type": "image", "processed": True}
-            
+        # ✅ 5. Validate MIME type using mimetypes
+        detected_mime, _ = mimetypes.guess_type(filename)
+        if detected_mime is None:
+            # Try to detect from content for images
+            if content.startswith(b'\x89PNG'):
+                detected_mime = 'image/png'
+            elif content.startswith(b'\xFF\xD8\xFF'):
+                detected_mime = 'image/jpeg'
+            elif content.startswith(b'RIFF') and b'WEBP' in content[:20]:
+                detected_mime = 'image/webp'
+            elif content.startswith(b'%PDF'):
+                detected_mime = 'application/pdf'
+            elif content.startswith(b'\xFF\xFE') or content.startswith(b'\xFE\xFF') or content.startswith(b'\xEF\xBB\xBF'):
+                detected_mime = 'text/plain'
+            else:
+                # Default to text for unknown files
+                detected_mime = 'text/plain'
+        
+        if detected_mime not in ALLOWED_MIME_TYPES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid file type: {detected_mime}"
+            )
+        
+        # ✅ 6. Generate secure filename
+        secure_filename = f"{uuid.uuid4()}_{filename}"
+        
+        # ✅ 7. Process based on file type
+        if detected_mime.startswith('text/'):
+            try:
+                text_content = content.decode('utf-8')
+                # Sanitize text content
+                text_content = InputValidator.sanitize_string(text_content, max_length=50000)
+                
+                # Store in database with user_id
+                # await db.store_document(user_id, secure_filename, text_content)
+                
+                return {
+                    "filename": filename,
+                    "secure_filename": secure_filename,
+                    "type": "text",
+                    "size": len(content),
+                    "content_preview": text_content[:200] + "..."
+                }
+            except UnicodeDecodeError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid text encoding"
+                )
+        
+        elif detected_mime == 'application/pdf':
+            # ✅ Scan PDF for malicious content
+            try:
+                import PyPDF2
+                from io import BytesIO
+                
+                pdf_reader = PyPDF2.PdfReader(BytesIO(content))
+                
+                # Check for JavaScript in PDF
+                for page in pdf_reader.pages:
+                    if '/JS' in str(page) or '/JavaScript' in str(page):
+                        raise HTTPException(
+                            status_code=status.HTTP_400_BAD_REQUEST,
+                            detail="PDF contains potentially malicious content"
+                        )
+                
+                # Extract text
+                text_content = ""
+                for page in pdf_reader.pages:
+                    text_content += page.extract_text()
+                
+                text_content = InputValidator.sanitize_string(text_content, max_length=50000)
+                
+                return {
+                    "filename": filename,
+                    "secure_filename": secure_filename,
+                    "type": "pdf",
+                    "size": len(content),
+                    "pages": len(pdf_reader.pages),
+                    "content_preview": text_content[:200] + "..."
+                }
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid or corrupted PDF file"
+                )
+        
+        elif detected_mime.startswith('image/'):
+            # ✅ Validate and sanitize image
+            try:
+                from PIL import Image
+                from io import BytesIO
+                
+                img = Image.open(BytesIO(content))
+                
+                # Check image size
+                max_dimension = 4096
+                if img.width > max_dimension or img.height > max_dimension:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=f"Image dimensions too large. Max: {max_dimension}x{max_dimension}"
+                    )
+                
+                # Convert to safe format and re-encode to remove any malicious data
+                safe_img = BytesIO()
+                img.save(safe_img, format='PNG')
+                safe_content = safe_img.getvalue()
+                
+                # Convert to base64 for storage
+                base64_content = base64.b64encode(safe_content).decode('utf-8')
+                
+                return {
+                    "filename": filename,
+                    "secure_filename": secure_filename,
+                    "type": "image",
+                    "size": len(safe_content),
+                    "width": img.width,
+                    "height": img.height,
+                    "format": img.format
+                }
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid or corrupted image file"
+                )
+        
         else:
-            return {"filename": file.filename, "message": "File uploaded successfully"}
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Unsupported file type"
+            )
             
+    except HTTPException:
+        raise
     except Exception as e:
+        # ✅ Log error but don't expose details
+        print(f"File upload error for user {user_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"File upload failed: {str(e)}"
+            detail="File upload failed"
         )
+    finally:
+        # ✅ Ensure file is closed
+        await file.close()
 
 # Document list endpoint
 @app.get("/api/documents/list", tags=["Documents"])

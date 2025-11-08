@@ -691,27 +691,28 @@ export function ChatInterface({
   }, [currentSessionId]);
 
   const loadSession = async (sessionId: string) => {
-    try {
-      setIsInitializing(true);
-      const sessionMessages = await ChatService.getChatMessages(sessionId);
-      const formattedMessages: Message[] = sessionMessages.map(msg => ({
-        id: msg.id,
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-        timestamp: new Date(msg.created_at)
-      }));
-      setMessages(formattedMessages);
-      setHasStartedChat(formattedMessages.length > 0);
-      setError(null);
-    } catch (error: any) {
-      console.error('Failed to load session:', error);
-      setError('Failed to load chat session');
-      setMessages([]);
-      setHasStartedChat(false);
-    } finally {
-      setIsInitializing(false);
-    }
+  try {
+    setIsInitializing(true);
+    // ✅ Add fetchWithAuth as second parameter
+    const sessionMessages = await ChatService.getChatMessages(sessionId, fetchWithAuth);
+    const formattedMessages: Message[] = sessionMessages.map(msg => ({
+      id: msg.id,
+      role: msg.role as 'user' | 'assistant',
+      content: msg.content,
+      timestamp: new Date(msg.created_at)
+    }));
+    setMessages(formattedMessages);
+    setHasStartedChat(formattedMessages.length > 0);
+    setError(null);
+  } catch (error: any) {
+    console.error('Failed to load session:', error);
+    setError('Failed to load chat session');
+    setMessages([]);
+    setHasStartedChat(false);
+  } finally {
+    setIsInitializing(false);
   }
+}
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -763,33 +764,34 @@ export function ChatInterface({
     
     // If no current session exists, create one NOW (when user sends first message)
     if (!sessionIdToUse && user) {
-      try {
-        
-        const newSession = await ChatService.createChatSession(user.id, 'New Chat');
-        sessionIdToUse = newSession.id;
-        
-        // Update the sessions list in parent component
-        onSessionUpdate([newSession, ...sessions]);
-        
-        // Store the new session ID temporarily
-        setActiveSessionId(newSession.id);
-        
-        
-      } catch (error) {
-        
-        setIsLoading(false);
-        setIsGenerating(false);
-        // Show error to user
-        setMessages(prev => [...prev, {
-          id: Date.now().toString(),
-          role: 'assistant',
-          content: 'Sorry, I couldn\'t create a new chat session. Please try again.',
-          timestamp: new Date(),
-          isLoading: false
-        }]);
-        return;
-      }
-    }
+  try {
+    console.log('Creating new chat session...');
+    // ✅ Pass title first, then fetchWithAuth
+    const newSession = await ChatService.createChatSession('New Chat', fetchWithAuth);
+    sessionIdToUse = newSession.id;
+    
+    // Update the sessions list in parent component
+    onSessionUpdate([newSession, ...sessions]);
+    
+    // Store the new session ID temporarily
+    setActiveSessionId(newSession.id);
+    
+    console.log('New session created:', newSession.id);
+  } catch (error) {
+    console.error('Failed to create chat session:', error);
+    setIsLoading(false);
+    setIsGenerating(false);
+    // Show error to user
+    setMessages(prev => [...prev, {
+      id: Date.now().toString(),
+      role: 'assistant',
+      content: 'Sorry, I couldn\'t create a new chat session. Please try again.',
+      timestamp: new Date(),
+      isLoading: false
+    }]);
+    return;
+  }
+}
     // ====== END SESSION CREATION LOGIC ======
 
     const userMessage: Message = {
@@ -808,12 +810,13 @@ export function ChatInterface({
     // Use the session ID (either existing or newly created)
     if (sessionIdToUse && user) {
       try {
-        await ChatService.saveMessage(sessionIdToUse, 'user', newMessage, modelToUse)
+        await ChatService.saveMessage(sessionIdToUse, 'user', newMessage, modelToUse, undefined, fetchWithAuth)
         
         // Update session title with first message
         if (messages.length === 0) {
           const title = newMessage.slice(0, 50) + (newMessage.length > 50 ? '...' : '')
-          await ChatService.updateSessionTitle(sessionIdToUse, title)
+          // ✅ Add fetchWithAuth as last parameter
+          await ChatService.updateSessionTitle(sessionIdToUse, title, fetchWithAuth)
           
           // Update the session title in the list
           onSessionUpdate(sessions.map(s => 
@@ -866,7 +869,7 @@ export function ChatInterface({
 
       // Save assistant message using the session ID
       if (sessionIdToUse && user) {
-        await ChatService.saveMessage(sessionIdToUse, 'assistant', messageContent, modelToUse, response.usage?.total_tokens)
+        await ChatService.saveMessage(sessionIdToUse, 'assistant', messageContent, modelToUse, response.usage?.total_tokens, fetchWithAuth)
       }
     } catch (error: any) {
       if (error.name === 'AbortError') {

@@ -5,48 +5,30 @@ const apiClient = axios.create({
     headers: {
         'Content-Type': 'application/json',
     },
-    withCredentials: true,  // Important for CORS with credentials
+    withCredentials: true,
 });
 
-// Add request interceptor to include auth token
+// ✅ REMOVED token interceptor - tokens handled by useAuthApi hook
+// Request interceptor is now simplified
 apiClient.interceptors.request.use(
     async (config) => {
-        const token = localStorage.getItem('auth_token');
-        if (token) {
-            // Ensure headers object exists
-            config.headers = config.headers || {};
-            
-            // Set the Authorization header
-            config.headers.Authorization = `Bearer ${token}`;
-            
-            // Log request details (but not the full token)
-            console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`, {
-                headers: { 
-                    ...config.headers,
-                    Authorization: 'Bearer ' + token.substring(0, 20) + '...'
-                }
-            });
-        } else {
-            console.error('No auth token available for request to:', config.url);
-        }
+        // No localStorage access - tokens added per-request by useAuthApi
         return config;
     },
     (error) => {
-        console.error('Request interceptor error:', error);
         return Promise.reject(error);
     }
 );
 
-// Add response interceptor to handle auth errors
+// ✅ IMPROVED response interceptor - no localStorage removal
 apiClient.interceptors.response.use(
     (response) => response,
     (error) => {
         if (error.response?.status === 401 || error.response?.status === 403) {
-            // Clear invalid token
-            localStorage.removeItem('auth_token');
-            
-            // Redirect to login if needed
-            if (window.location.pathname !== '/login') {
+            // Don't clear tokens - Auth0 SDK handles this
+            // Just redirect to login
+            if (window.location.pathname !== '/login' && window.location.pathname !== '/callback') {
+                console.warn('Auth error, redirecting to login');
                 window.location.href = '/login';
             }
         }

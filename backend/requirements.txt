@@ -11,3 +11,4 @@ python-multipart
 httpx
 passlib[bcrypt]
 websockets>=10.0
+slowapi==0.1.9
