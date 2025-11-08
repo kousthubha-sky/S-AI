@@ -4,6 +4,7 @@ import { useAuth0 } from "@auth0/auth0-react";
 import { ProtectedRoute } from "~/components/protected-route";
 import { Button } from "~/components/ui/button";
 import { ChatInterface } from "~/components/chat/chat-interface";
+
 import { useAuthApi } from "~/hooks/useAuthApi";
 import { useToast } from "~/components/ui/toast";
 import { 
@@ -117,7 +118,8 @@ function DashboardContent() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const isCollapsed = sidebarState === 'collapsed';
   const { showToast } = useToast();
-  
+  const [isLoadingSessions, setIsLoadingSessions] = useState<boolean>(true);
+
   useEffect(() => {
     if (auth0User) {
       
@@ -170,6 +172,7 @@ const initializeUser = async () => {
   }
   
   try {
+    setIsLoadingSessions(true);
     const auth0UserData: Auth0User = {
       sub: auth0User.sub,
       email: auth0User.email,
@@ -215,7 +218,7 @@ const initializeUser = async () => {
     
     // Don't auto-select first session - let user choose
     setCurrentSessionId(null);
-     showToast('Welcome back!', 'success');
+     showToast('Welcome back!', 'success',2000);
   } catch (error: any) {
     showToast('Failed to load user data', 'error');
     
@@ -223,7 +226,9 @@ const initializeUser = async () => {
     if (error.response?.status === 401 || error.response?.status === 403) {
       logout({ logoutParams: { returnTo: window.location.origin } });
     }
-  }
+  }finally {
+     setIsLoadingSessions(false);
+    }
 };
 
   const checkUserSubscription = async () => {
@@ -384,27 +389,35 @@ const toggleSection = (sectionId: string) => {
                 {section.items.length > 0 && expandedSection === section.id && !isCollapsed && (
                   <SidebarMenuSub>
                     {section.id === 'playground' ? (
-                      // Show chat sessions for playground
-                      sessions.slice(0, 10).map((session) => (
-                        <SidebarMenuSubItem key={session.id}>
-                          <SidebarMenuSubButton
-                            onClick={() => {
-                              handleSessionSelect(session.id);
-                              setActiveNav('history');
-                            }}
-                            isActive={currentSessionId === session.id}
-                            className="pr-8 text-white hover:bg-[#0f0f0f]"
-                          >
-                            <ArrowRight className="h-3 w-3 text-white bg-white rounded-3xl" />
-                            <span className="truncate text-white">{session.title}</span>
-                          </SidebarMenuSubButton>
-                          <SidebarMenuAction
-                            onClick={(e) => handleDeleteSession(session.id, e)}
-                          >
-                            <Trash2 className="h-3 w-3 text-red-700 hover:glow" />
-                          </SidebarMenuAction>
-                        </SidebarMenuSubItem>
-                      ))
+                      // Show chat sessions for playground with skeleton loading
+                      isLoadingSessions ? (
+                        <div className="space-y-2">
+                          {[...Array(5)].map((_, i) => (
+                            <div key={i} className="h-12 bg-white/5 rounded-lg animate-pulse" />
+                          ))}
+                        </div>
+                      ) : (
+                        sessions.slice(0, 10).map((session) => (
+                          <SidebarMenuSubItem key={session.id}>
+                            <SidebarMenuSubButton
+                              onClick={() => {
+                                handleSessionSelect(session.id);
+                                setActiveNav('history');
+                              }}
+                              isActive={currentSessionId === session.id}
+                              className="pr-8 text-white hover:bg-[#0f0f0f]"
+                            >
+                              <ArrowRight className="h-3 w-3 text-white bg-white rounded-3xl" />
+                              <span className="truncate text-white">{session.title}</span>
+                            </SidebarMenuSubButton>
+                            <SidebarMenuAction
+                              onClick={(e) => handleDeleteSession(session.id, e)}
+                            >
+                              <Trash2 className="h-3 w-3 text-red-700 hover:glow" />
+                            </SidebarMenuAction>
+                          </SidebarMenuSubItem>
+                        ))
+                      )
                     ) : (
                       // Show regular sub-items
                       section.items.map((item) => (
@@ -696,8 +709,15 @@ const toggleSection = (sectionId: string) => {
 
                 {/* Session List */}
                 {expandedSection === section.id && section.id === 'playground' && (
-                  <div className="ml-4 mt-1 space-y-1">
-                    {sessions.slice(0, 10).map((session) => (
+                <div className="ml-4 mt-1 space-y-1">
+                  {isLoadingSessions ? (
+                    <div className="space-y-2">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="h-10 bg-white/5 rounded-lg animate-pulse" />
+                      ))}
+                    </div>
+                  ) : (
+                    sessions.slice(0, 10).map((session) => (
                       <div key={session.id} className="flex items-center gap-2 group">
                         <button
                           onClick={() => {
@@ -719,14 +739,15 @@ const toggleSection = (sectionId: string) => {
                             e.stopPropagation();
                             handleDeleteSession(session.id, e);
                           }}
-                          className=" group-hover:opacity-100 p-1 rounded hover:bg-red-500/20"
+                          className="group-hover:opacity-100 p-1 rounded hover:bg-red-500/20"
                         >
                           <Trash2 className="h-3 w-3 text-red-500" />
                         </button>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    ))
+                  )}
+                </div>
+              )}
               </div>
             ))}
           </div>

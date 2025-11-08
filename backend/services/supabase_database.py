@@ -3,6 +3,7 @@ from typing import Dict, List, Optional, Any
 from datetime import datetime, timedelta
 from fastapi import HTTPException, status
 from supabase import create_client, Client
+from functools import lru_cache
 import os
 
 class SupabaseService:
@@ -14,6 +15,19 @@ class SupabaseService:
             raise ValueError("Supabase credentials not configured")
         
         self.client: Client = create_client(supabase_url, supabase_key)
+        
+    @lru_cache()
+    def get_supabase_client():
+        return create_client(
+            os.getenv("SUPABASE_URL"),
+            os.getenv("SUPABASE_SERVICE_KEY"),
+            options={
+                "pool_config": {
+                    "max_connections": 10,
+                    "max_idle_time": 300
+                }
+            }
+        )    
         
     async def get_user_tier(self, user_id: str) -> str:
         """Get user's subscription tier and validate it"""

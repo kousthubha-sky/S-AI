@@ -28,6 +28,7 @@ class RedisCache:
             print("⚠️ Running without cache")
             self.enabled = False
             self.redis = None
+            self.memory_cache = {}
     
     def _get_session_key(self, session_id: str) -> str:
         """Generate cache key for session metadata"""

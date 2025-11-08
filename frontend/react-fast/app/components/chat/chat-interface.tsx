@@ -14,7 +14,7 @@ import React from "react"
 import { useDynamicModel } from "~/hooks/useDynamicModel"
 import ColorBends from '~/components/ui/ColorBends'
 import { useToast } from "~/components/ui/toast"
-
+import Orb from "../ui/background-orb"
 interface ChatSession {
   id: string
   title: string
@@ -718,6 +718,17 @@ export function ChatInterface({
     }
   }, [currentSessionId]);
 
+  // Add to ChatInterface
+useEffect(() => {
+  const savedMessage = localStorage.getItem(`draft_${currentSessionId}`);
+  if (savedMessage) setNewMessage(savedMessage);
+}, [currentSessionId]);
+
+useEffect(() => {
+  if (currentSessionId) {
+    localStorage.setItem(`draft_${currentSessionId}`, newMessage);
+  }
+}, [newMessage, currentSessionId]);
   const loadSession = async (sessionId: string) => {
   try {
     setIsInitializing(true);
@@ -742,7 +753,7 @@ export function ChatInterface({
   }
 }
 
-  const handleSendMessage = async (e: React.FormEvent) => {
+ const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if ((!newMessage.trim() && pendingAttachments.length === 0) || isLoading) return
 
@@ -782,55 +793,9 @@ export function ChatInterface({
     
     if (!userManuallySelected && !selectedModel) {
       modelToUse = suggestedModel;
-     
     } else if (userManuallySelected) {
       console.log('Using user-selected model:', selectedModel);
     }
-
-    // ====== NEW SESSION CREATION LOGIC ======
-    let sessionIdToUse = currentSessionId;
-    
-    // If no current session exists, create one NOW (when user sends first message)
-    if (!sessionIdToUse && user) {
-  try {
-    showToast('Creating new chat session...', 'info', 2000);
-    // ✅ Pass title first, then fetchWithAuth
-    const newSession = await ChatService.createChatSession('New Chat', fetchWithAuth);
-    sessionIdToUse = newSession.id;
-    
-    // Update the sessions list in parent component
-    onSessionUpdate([newSession, ...sessions]);
-    
-    // Store the new session ID temporarily
-    setActiveSessionId(newSession.id);
-    
-    console.log('New session created:', newSession.id);
-  } catch (error) {
-    console.error('Failed to create chat session:', error);
-    setIsLoading(false);
-    setIsGenerating(false);
-    // Show error to user
-    setMessages(prev => [...prev, {
-      id: Date.now().toString(),
-      role: 'assistant',
-      content: 'Sorry, I couldn\'t create a new chat session. Please try again.',
-      timestamp: new Date(),
-      isLoading: false
-    }]);
-    if (error === 402) {
-        showToast('Daily limit reached. Upgrade to continue.','error');
-        setShowPaymentDialog(true);
-      } else if (error === 403) {
-        showToast('This model requires Pro subscription', 'error');
-      } else if (error === 'AbortError') {
-        showToast('Response stopped','info');
-      } else {
-        showToast('Failed to send message. Please try again.','error');
-      }
-    return;
-  }
-}
-    // ====== END SESSION CREATION LOGIC ======
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -845,27 +810,6 @@ export function ChatInterface({
     setPendingAttachments([])
     setIsLoading(true)
 
-    // Use the session ID (either existing or newly created)
-    if (sessionIdToUse && user) {
-      try {
-        await ChatService.saveMessage(sessionIdToUse, 'user', newMessage, modelToUse, undefined, fetchWithAuth)
-        
-        // Update session title with first message
-        if (messages.length === 0) {
-          const title = newMessage.slice(0, 50) + (newMessage.length > 50 ? '...' : '')
-          // ✅ Add fetchWithAuth as last parameter
-          await ChatService.updateSessionTitle(sessionIdToUse, title, fetchWithAuth)
-          
-          // Update the session title in the list
-          onSessionUpdate(sessions.map(s => 
-            s.id === sessionIdToUse ? { ...s, title } : s
-          ))
-        }
-      } catch (error) {
-        console.error('Failed to save user message:', error)
-      }
-    }
-
     const tempAssistantMessage: Message = {
       id: (Date.now() + 1).toString(),
       role: 'assistant',
@@ -874,6 +818,33 @@ export function ChatInterface({
       isLoading: true
     }
     setMessages(prev => [...prev, tempAssistantMessage])
+
+    // ====== OPTIMIZED SESSION CREATION ======
+    let sessionIdToUse = currentSessionId || activeSessionId;
+    let sessionCreationPromise: Promise<void> = Promise.resolve();
+
+    // If no session exists, create one BUT don't wait for it to complete
+    if (!sessionIdToUse && user && messages.length === 0) {
+      sessionCreationPromise = (async () => {
+        try {
+          // Show quick toast
+          showToast('Creating new chat...', 'info', 1000);
+          
+          const newSession = await ChatService.createChatSession('New Chat', fetchWithAuth);
+          sessionIdToUse = newSession.id;
+          
+          // Update state but don't block the main flow
+          setActiveSessionId(newSession.id);
+          onSessionUpdate([newSession, ...sessions]);
+          
+          console.log('New session created:', newSession.id);
+        } catch (error) {
+          console.error('Failed to create chat session:', error);
+          // Don't block the chat flow if session creation fails
+        }
+      })();
+    }
+    // ====== END OPTIMIZED SESSION CREATION ======
 
     try {
       const apiMessages = [...messages, userMessage]
@@ -884,40 +855,75 @@ export function ChatInterface({
         apiMessages[apiMessages.length - 1].content += '\n' + pendingAttachments.map(a => `[Attachment: ${a.name}]`).join('\n')
       }
 
+      // Start API call immediately without waiting for session creation
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/chat`, {
         method: 'POST',
         body: JSON.stringify({ messages: apiMessages, model: modelToUse, temperature: 0.7, max_tokens: 1000 }),
         signal: abortControllerRef.current.signal
       })
 
-      
-
       const messageContent = response.message || response.data?.message || response.content || response.choices?.[0]?.message?.content || response.result;
       
       if (!messageContent) {
-       
         throw new Error('No message content received from API');
       }
 
+      // Update UI immediately with AI response
       setMessages(prev => prev.map(msg => 
         msg.id === tempAssistantMessage.id ? { ...msg, content: messageContent, isLoading: false } : msg
       ))
 
       setDynamicModelSelection({ isAutoSelected: false });
 
-      // Save assistant message using the session ID
+      // Wait for session creation to complete (if it's still running)
+      await sessionCreationPromise;
+
+      // Now save messages with the final session ID (in background)
       if (sessionIdToUse && user) {
-        await ChatService.saveMessage(sessionIdToUse, 'assistant', messageContent, modelToUse, response.usage?.total_tokens, fetchWithAuth)
+        // Use setTimeout to defer saving so it doesn't block UI
+        setTimeout(async () => {
+          try {
+            // Save user message
+            await ChatService.saveMessage(sessionIdToUse!, 'user', newMessage, modelToUse, undefined, fetchWithAuth)
+            
+            // Update session title if it's the first message
+            if (messages.length === 0) {
+              const title = newMessage.slice(0, 50) + (newMessage.length > 50 ? '...' : '')
+              await ChatService.updateSessionTitle(sessionIdToUse!, title, fetchWithAuth)
+              
+              onSessionUpdate(sessions.map(s => 
+                s.id === sessionIdToUse ? { ...s, title } : s
+              ))
+            }
+            
+            // Save assistant message
+            await ChatService.saveMessage(sessionIdToUse!, 'assistant', messageContent, modelToUse, response.usage?.total_tokens, fetchWithAuth)
+          } catch (error) {
+            console.error('Failed to save messages:', error)
+            // User won't notice if saving fails in background
+          }
+        }, 0);
       }
+
     } catch (error: any) {
       if (error.name === 'AbortError') {
         setMessages(prev => prev.map(msg => 
           msg.id === tempAssistantMessage.id ? { ...msg, content: 'Response stopped by user.', isLoading: false } : msg
         ))
+        
+        // Still try to save what we have if aborted
+        if (sessionIdToUse && user) {
+          setTimeout(async () => {
+            try {
+              await ChatService.saveMessage(sessionIdToUse!, 'user', newMessage, modelToUse, undefined, fetchWithAuth)
+            } catch (e) {
+              console.error('Failed to save aborted message:', e)
+            }
+          }, 0);
+        }
         return;
       }
 
-     
       if (error.status === 402 || error?.message?.includes('limit reached')) {
         setTempMessage(tempAssistantMessage)
         if (error?.message?.includes('Daily limit reached')) {
@@ -927,6 +933,7 @@ export function ChatInterface({
         setShowPaymentDialog(true)
         return
       }
+      
       setMessages(prev => prev.map(msg => 
         msg.id === tempAssistantMessage.id ? { ...msg, content: 'Sorry, I encountered an error. Please try again.', isLoading: false } : msg
       ))
@@ -1076,7 +1083,7 @@ export function ChatInterface({
                 
                 {/* FIXED: Prompt categories with proper ref and min-height */}
                 <div 
-                  className="flex flex-wrap justify-center gap-2" 
+                  className="flex flex-wrap justify-center gap-2 z-100" 
                   ref={!hasStartedChat ? promptCategoriesRef : null}
                   style={{ minHeight: '40px' }}
                 >
@@ -1134,124 +1141,161 @@ export function ChatInterface({
                   <span>{error}</span>
                 </div>
               )}
-              <AnimatePresence>
-                {messages.map((msg) => (
-                  <motion.div
-                    key={msg.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className={cn(
-                      "flex w-full gap-3 items-start group",
-                      msg.role === "user" ? "justify-end" : "justify-start"
-                    )}
-                  >
-                    {/* User Message with Actions */}
-                    {msg.role === "user" ? (
-                      <div className="flex flex-col items-end max-w-full sm:max-w-[85%]">
-                        {/* Action Buttons - Only show on hover for desktop, always show on mobile */}
-                        <div className={cn(
-                          "flex items-center gap-1 transition-all duration-200",
-                          isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                        )}>
-                          {editingMessageId === msg.id ? (
-                            <>
-                              <button
-                                onClick={() => handleSaveEdit(msg.id)}
-                                className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors"
-                                title="Save changes"
-                              >
-                                <Check className="h-3.5 w-3.5" />
-                              </button>
-                              <button
-                                onClick={handleCancelEdit}
-                                className="p-1.5 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                title="Cancel edit"
-                              >
-                                <X className="h-3.5 w-3.5" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={() => handleEditMessage(msg)}
-                                className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
-                                title="Edit message"
-                              >
-                                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                </svg>
-                              </button>
-                              <button
-                                onClick={() => handleCopyMessage(msg.content, msg.id)}
-                                className="p-1.5 text-gray-400 hover:bg-gray-400/10 rounded-lg transition-colors"
-                                title="Copy message"
-                              >
-                                {copiedMessageId === msg.id ? (
-                                  <Check className="h-3.5 w-3.5 text-green-400" />
-                                ) : (
-                                  <Copy className="h-3.5 w-3.5" />
-                                )}
-                              </button>
-                            </>
-                          )}
+             <AnimatePresence>
+                  {messages.map((msg) => (
+                    <motion.div
+                      key={msg.id}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className={cn(
+                        "flex w-full gap-3 items-start group",
+                        msg.role === "user" ? "justify-end" : "justify-start"
+                      )}
+                    >
+                      {/* User Message with Actions */}
+                      {msg.role === "user" ? (
+                        <div className="flex flex-col items-end max-w-full sm:max-w-[85%]">
+                          {/* Action Buttons */}
+                          <div className={cn(
+                            "flex items-center gap-1 transition-all duration-200",
+                            isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"
+                          )}>
+                            {editingMessageId === msg.id ? (
+                              <>
+                                <button
+                                  onClick={() => handleSaveEdit(msg.id)}
+                                  className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors"
+                                  title="Save changes"
+                                >
+                                  <Check className="h-3.5 w-3.5" />
+                                </button>
+                                <button
+                                  onClick={handleCancelEdit}
+                                  className="p-1.5 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
+                                  title="Cancel edit"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={() => handleEditMessage(msg)}
+                                  className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
+                                  title="Edit message"
+                                >
+                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => handleCopyMessage(msg.content, msg.id)}
+                                  className="p-1.5 text-gray-400 hover:bg-gray-400/10 rounded-lg transition-colors"
+                                  title="Copy message"
+                                >
+                                  {copiedMessageId === msg.id ? (
+                                    <Check className="h-3.5 w-3.5 text-green-400" />
+                                  ) : (
+                                    <Copy className="h-3.5 w-3.5" />
+                                  )}
+                                </button>
+                              </>
+                            )}
+                          </div>
+                          
+                          {/* Message Content */}
+                          <div
+                            className={cn(
+                              "px-4 rounded-2xl leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words overflow-hidden",
+                              "text-white relative"
+                            )}
+                          >
+                            {msg.isLoading ? (
+                            <div className="flex items-center justify-center py-2 space-x-2">
+                              <div className="w-12 h-12 relative">
+                                <Orb 
+                                  hue={160} 
+                                  hoverIntensity={0.2}
+                                  rotateOnHover={true}
+                                  forceHoverState={true}
+                                />
+                              </div>
+                              <div className="relative">
+                                <motion.span
+                                  className="text-sm font-medium bg-gradient-to-r from-green-200 to-emerald-200 bg-clip-text text-transparent"
+                                  animate={{
+                                    opacity: [0.4, 0.8, 0.4],
+                                  }}
+                                  transition={{
+                                    duration: 1.5,
+                                    repeat: Infinity,
+                                    ease: "easeInOut"
+                                  }}
+                                >
+                                  Thinking
+                                </motion.span>
+                                <motion.span
+                                  className="absolute left-0 top-0 bg-gradient-to-r from-transparent via-green-200 to-transparent h-full w-6 opacity-60"
+                                  animate={{
+                                    x: ["0%", "400%"],
+                                  }}
+                                  transition={{
+                                    duration: 1.5,
+                                    repeat: Infinity,
+                                    ease: "easeInOut",
+                                    delay: 0.3
+                                  }}
+                                />
+                              </div>
+                            </div>
+                          ) : editingMessageId === msg.id ? (
+                              <textarea
+                                value={editedContent}
+                                onChange={(e) => setEditedContent(e.target.value)}
+                                className="w-full bg-transparent text-white outline-none resize-none min-h-[80px]"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter' && e.ctrlKey) {
+                                    handleSaveEdit(msg.id);
+                                  }
+                                  if (e.key === 'Escape') {
+                                    handleCancelEdit();
+                                  }
+                                }}
+                              />
+                            ) : (
+                              <FormattedMessage content={msg.content} />
+                            )}
+                          </div>
                         </div>
-                        
-                        {/* Message Content */}
+                      ) : (
+                        /* Assistant Message */
                         <div
                           className={cn(
-                            "px-4 rounded-2xl leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words overflow-hidden",
-                            "text-white relative"
+                            "max-w-full sm:max-w-[85%] px-4 py-2 rounded-2xl leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words overflow-hidden",
+                            "text-white backdrop-blur-lg rounded-bl-none"
                           )}
                         >
                           {msg.isLoading ? (
-                            <div className="flex gap-2">
-                              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
-                              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
-                              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
+                            <div className="flex items-center justify-center py-4">
+                              <div className="w-16 h-16 relative">
+                                <Orb 
+                                  hue={220} 
+                                  hoverIntensity={0.8}
+                                  rotateOnHover={true}
+                                  forceHoverState={true}
+                                />
+                              </div>
                             </div>
-                          ) : editingMessageId === msg.id ? (
-                            <textarea
-                              value={editedContent}
-                              onChange={(e) => setEditedContent(e.target.value)}
-                              className="w-full bg-transparent text-white outline-none resize-none min-h-[80px]"
-                              autoFocus
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter' && e.ctrlKey) {
-                                  handleSaveEdit(msg.id);
-                                }
-                                if (e.key === 'Escape') {
-                                  handleCancelEdit();
-                                }
-                              }}
-                            />
                           ) : (
                             <FormattedMessage content={msg.content} />
                           )}
                         </div>
-                      </div>
-                    ) : (
-                      /* Assistant Message (unchanged) */
-                      <div
-                        className={cn(
-                          "max-w-full sm:max-w-[85%] px-4 py-2 rounded-2xl leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words overflow-hidden",
-                          "text-white backdrop-blur-lg rounded-bl-none"
-                        )}
-                      >
-                        {msg.isLoading ? (
-                          <div className="flex gap-2">
-                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" />
-                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0.2s" }} />
-                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "0.4s" }} />
-                          </div>
-                        ) : (
-                          <FormattedMessage content={msg.content} />
-                        )}
-                      </div>
-                    )}
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+                      )}
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               <div ref={messagesEndRef} />
             </div>
           )}

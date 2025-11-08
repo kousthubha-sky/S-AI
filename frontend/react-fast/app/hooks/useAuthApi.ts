@@ -26,12 +26,10 @@ export function useAuthApi() {
 
       // ✅ Try to use cached token first (if not expired)
       if (tokenCacheRef.current && tokenCacheRef.current.expiresAt > Date.now()) {
-        console.log('Using cached token');
+       
         token = tokenCacheRef.current.token;
       } else {
         // ✅ Get fresh token from Auth0
-        console.log('Getting fresh token from Auth0...');
-        
         try {
           token = await getAccessTokenSilently({
             authorizationParams: {
@@ -47,13 +45,13 @@ export function useAuthApi() {
             expiresAt: Date.now() + (50 * 60 * 1000)
           };
 
-          console.log('Token obtained successfully');
+        
         } catch (tokenError: any) {
           console.error('Failed to get access token:', tokenError);
           
           // ✅ Handle specific Auth0 errors
           if (tokenError.error === 'login_required') {
-            console.log('Login required, redirecting...');
+            
             await loginWithRedirect({
               appState: { returnTo: window.location.pathname }
             });
@@ -61,7 +59,7 @@ export function useAuthApi() {
           }
           
           if (tokenError.error === 'consent_required') {
-            console.log('Consent required');
+         
             throw new Error('Additional consent required. Please contact support.');
           }
 
@@ -97,7 +95,7 @@ export function useAuthApi() {
           tokenCacheRef.current = null; // Clear cached token
           
           // Try once more with fresh token
-          console.log('Retrying with fresh token...');
+         
           try {
             token = await getAccessTokenSilently({
               authorizationParams: {
@@ -118,7 +116,7 @@ export function useAuthApi() {
             });
 
             if (retryResponse.ok) {
-              console.log('Retry successful');
+              
               return await retryResponse.json();
             }
           } catch (retryError) {
@@ -158,7 +156,6 @@ export function useAuthApi() {
 
       // ✅ Return successful response
       const data = await response.json();
-      console.log('API call successful');
       return data;
 
     } catch (error: any) {

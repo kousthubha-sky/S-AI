@@ -16,7 +16,7 @@ export const AuthStateContext = createContext<AuthState>({
 });
 
 export function AuthInitializer({ children }: { children: React.ReactNode }) {
-    const { isAuthenticated, getAccessTokenSilently, isLoading } = useAuth0();
+  const { isAuthenticated, getAccessTokenSilently, isLoading } = useAuth0();
   const tokenRef = useRef<string | null>(null);
 
 
@@ -58,18 +58,20 @@ export function AuthInitializer({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, [isAuthenticated]);
 
-  // Set up token refresh interval
-  useEffect(() => {
-    if (!isAuthenticated) return;
-
-    const refreshToken = async () => {
-      await getToken();
-    };
-
-    // Refresh token every 55 minutes (tokens typically expire in 1 hour)
-    const interval = setInterval(refreshToken, 55 * 60 * 1000);
-    return () => clearInterval(interval);
-  }, [isAuthenticated]);
+// In AuthInitializer.tsx
+useEffect(() => {
+  const refreshInterval = setInterval(async () => {
+    if (isAuthenticated) {
+      try {
+        await getAccessTokenSilently({ cacheMode: 'off' });
+      } catch (error) {
+        console.error('Token refresh failed:', error);
+      }
+    }
+  }, 45 * 60 * 1000); // Refresh every 45 minutes
+  
+  return () => clearInterval(refreshInterval);
+}, [isAuthenticated]);
 
   return (
     <AuthStateContext.Provider value={{ isInitialized: !isLoading, hasValidToken: !!tokenRef.current, getToken }}>
