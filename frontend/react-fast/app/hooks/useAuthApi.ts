@@ -2,22 +2,23 @@
 
 import { useAuth0 } from '@auth0/auth0-react';
 import { useCallback, useRef } from 'react';
+import { useToast } from '~/components/ui/toast';
 
 export function useAuthApi() {
   const { getAccessTokenSilently, isAuthenticated, isLoading, loginWithRedirect } = useAuth0();
   const tokenCacheRef = useRef<{ token: string; expiresAt: number } | null>(null);
-
+  const { showToast } = useToast();
   const fetchWithAuth = useCallback(async (url: string, options: RequestInit = {}) => {
     try {
       // ✅ Check if user is authenticated
       if (!isAuthenticated) {
-        console.error('User not authenticated');
+        showToast('User not authenticated. Please log in.', 'error');
         throw new Error('User not authenticated. Please log in.');
       }
 
       // ✅ Wait if Auth0 is still loading
       if (isLoading) {
-        console.log('Waiting for Auth0 to load...');
+        showToast('Authentication in progress, please wait...', 'info');
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
@@ -69,7 +70,6 @@ export function useAuthApi() {
       }
       
       // ✅ Make API request with token
-      console.log(`Making request to: ${url}`);
       const response = await fetch(url, {
         ...options,
         headers: {
@@ -93,7 +93,7 @@ export function useAuthApi() {
 
         // ✅ Handle 401 - token might be expired
         if (response.status === 401) {
-          console.warn('401 Unauthorized - clearing token cache');
+          showToast('Session expired. Redirecting to login...', 'warning');
           tokenCacheRef.current = null; // Clear cached token
           
           // Try once more with fresh token

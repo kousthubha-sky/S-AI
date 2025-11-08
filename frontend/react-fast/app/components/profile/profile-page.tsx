@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { getPlatformKey } from "../../hooks/useKeyboardShortcuts";
+import { useToast } from "~/components/ui/toast";
 
 interface ProfileSettingsPageProps {
   onClose: () => void;
@@ -72,6 +73,7 @@ export default function ProfileSettingsPage({
   const [loading, setLoading] = useState(false);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [passwordLastChanged, setPasswordLastChanged] = useState<string>('');
+  const { showToast } = useToast();
 
   // Use auth0User as primary source, fallback to user
   const profileUser = auth0User || user;
@@ -160,10 +162,10 @@ export default function ProfileSettingsPage({
       setLoading(true);
       // In a real implementation, you would call your backend to revoke the session
       setSessions(prev => prev.filter(s => s.id !== sessionId));
-      alert('Session revoked successfully');
+      showToast('Session revoked successfully', 'success');
+    
     } catch (error) {
-      console.error('Session revocation error:', error);
-      alert('Failed to revoke session');
+      showToast('Failed to revoke session', 'error');
     } finally {
       setLoading(false);
     }
@@ -520,6 +522,7 @@ function NotificationsSection() {
   const [emailNotifications, setEmailNotifications] = useState(true);
   const [pushNotifications, setPushNotifications] = useState(false);
   const [weeklyDigest, setWeeklyDigest] = useState(true);
+  
 
   return (
     <div className="space-y-6">
@@ -573,14 +576,25 @@ function NotificationToggle({
   checked: boolean; 
   onChange: (checked: boolean) => void;
 }) {
+  function showToast(arg0: string, arg1: string, arg2: number) {
+    throw new Error("Function not implemented.");
+  }
+
   return (
     <div className="flex items-center justify-between px-5 py-4">
       <div className="flex-1">
         <div className="text-white/90 text-sm font-medium">{label}</div>
         <div className="text-white/60 text-sm mt-1">{description}</div>
       </div>
-      <button
-        onClick={() => onChange(!checked)}
+       <button
+          onClick={() => {
+            onChange(!checked);
+            showToast(
+              checked ? `${label} disabled` : `${label} enabled`, 
+              'success', 
+              2000
+            );
+          }}
         className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
           checked ? 'bg-sky-500' : 'bg-white/10'
         }`}

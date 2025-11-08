@@ -2,16 +2,17 @@
 import { useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useNavigate } from 'react-router';
+import { useToast } from '~/components/ui/toast';
 
 export default function Callback() {
   const { isAuthenticated, error, isLoading } = useAuth0();
   const navigate = useNavigate();
+  const { showToast } = useToast();
 
   useEffect(() => {
-    console.log('Callback - Auth status:', { isAuthenticated, isLoading, error });
-    
+        
     if (error) {
-      console.error('Auth error in callback:', error);
+      showToast(`Authentication error: ${error.message}`, 'error');
       navigate('/login?error=auth_failed');
       return;
     }
@@ -41,7 +42,7 @@ export default function Callback() {
 
     // If not authenticated and not loading, redirect to login
     if (!isLoading && !isAuthenticated) {
-      console.warn('Not authenticated in callback, redirecting to login');
+      showToast('User not authenticated. Redirecting to login.', 'warning');
       setTimeout(() => navigate('/login'), 2000);
     }
   }, [isAuthenticated, isLoading, error, navigate]);

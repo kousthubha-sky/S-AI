@@ -5,6 +5,7 @@ import { ProtectedRoute } from "~/components/protected-route";
 import { Button } from "~/components/ui/button";
 import { ChatInterface } from "~/components/chat/chat-interface";
 import { useAuthApi } from "~/hooks/useAuthApi";
+import { useToast } from "~/components/ui/toast";
 import { 
   SidebarProvider, 
   Sidebar, 
@@ -115,7 +116,8 @@ function DashboardContent() {
   const [showV0Clone, setShowV0Clone] = useState<boolean>(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const isCollapsed = sidebarState === 'collapsed';
-
+  const { showToast } = useToast();
+  
   useEffect(() => {
     if (auth0User) {
       
@@ -148,7 +150,7 @@ function DashboardContent() {
 
   const handleNewChatFunc = async () => {
     if (!user) {
-      console.error('Cannot create new chat: No user available');
+      showToast('session loading please wait','info');
       return;
     }
 
@@ -213,9 +215,10 @@ const initializeUser = async () => {
     
     // Don't auto-select first session - let user choose
     setCurrentSessionId(null);
-    
+     showToast('Welcome back!', 'success');
   } catch (error: any) {
-    console.error('Failed to initialize user:', error);
+    showToast('Failed to load user data', 'error');
+    
     
     if (error.response?.status === 401 || error.response?.status === 403) {
       logout({ logoutParams: { returnTo: window.location.origin } });
@@ -237,7 +240,9 @@ const initializeUser = async () => {
       if (usage.daily_message_count !== undefined) {
         setMessageCount(usage.daily_message_count);
       }
-      
+      if (usage.daily_message_count >= 20 && !usage.is_paid) {
+        showToast('You have 5 messages remaining today', 'warning');
+      }
       if (usage.last_reset_date) {
         const resetTime = new Date(usage.last_reset_date);
         resetTime.setDate(resetTime.getDate() + 1);

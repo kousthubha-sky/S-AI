@@ -10,6 +10,7 @@ import { Button } from '~/components/ui/button';
 import { useAuthApi } from '~/hooks/useAuthApi';
 import { RefreshCw, CheckCircle2, Sparkles, Shield, Brain, Zap,X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from "~/components/ui/toast";
 
 interface PaymentDialogProps {
   onClose: () => void;
@@ -36,6 +37,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
   const [isFlipped, setIsFlipped] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const { fetchWithAuth } = useAuthApi();
+  const { showToast } = useToast();
 
   // ✅ Load Razorpay script (unchanged)
   useEffect(() => {
@@ -79,10 +81,14 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
                 razorpay_signature: response.razorpay_signature
               })
             });
-            if (verifyResponse.status === 'success') onSuccess();
+            if (verifyResponse.status === 'success'){
+              showToast('Payment successful! Subscription activated.', 'success');
+              onSuccess();
+            } 
             else alert('Payment verification failed. Please contact support.');
+            showToast('Payment verification failed. Contact support.', 'error');
           } catch (error) {
-            console.error('Verification error:', error);
+            showToast('Verification error. Your payment is being processed.', 'warning');
             alert('Payment verification failed. Please contact support.');
           }
         },
@@ -90,6 +96,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
         modal: {
           ondismiss: () => {
             setIsLoading(false);
+            showToast('Payment cancelled', 'info');
           }
         }
       };
@@ -98,12 +105,12 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
       rzp.open();
 
       rzp.on('payment.failed', (response: any) => {
-        console.error('Payment failed:', response.error);
+        showToast(`Payment failed: ${response.error.description}`, 'error');
         alert(`Payment failed: ${response.error.description}`);
         setIsLoading(false);
       });
     } catch (error: any) {
-      console.error('Subscription initiation failed:', error);
+      showToast('Failed to create subscription. Please try again.', 'error');
       alert(`Failed to create subscription: ${error.detail || 'Unknown error'}`);
       setIsLoading(false);
     }

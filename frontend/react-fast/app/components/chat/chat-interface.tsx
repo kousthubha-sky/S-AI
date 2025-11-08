@@ -13,6 +13,7 @@ import { motion, AnimatePresence } from "framer-motion"
 import React from "react"
 import { useDynamicModel } from "~/hooks/useDynamicModel"
 import ColorBends from '~/components/ui/ColorBends'
+import { useToast } from "~/components/ui/toast"
 
 interface ChatSession {
   id: string
@@ -61,6 +62,7 @@ const PROMPT_CATEGORIES = {
   life: ["Plan my weekly schedule", "Relationship advice", "Financial planning tips", "Health and wellness advice", "Travel recommendations"],
   claudes: ["Creative brainstorming", "Philosophical discussions", "Book recommendations", "Career guidance", "Personal growth tips"]
 }
+
 
 // Improved CodeBlock with mobile responsiveness and better colors
 const CodeBlock = ({ code, language = 'text' }: { code: string; language?: string }) => {
@@ -302,8 +304,9 @@ export function ChatInterface({
   isSidebarCollapsed = false
 }: ChatInterfaceProps) {
    const { user: auth0User, isLoading: auth0Loading, isAuthenticated } = useAuth0();
-  const { fetchWithAuth } = useAuthApi();
-
+   const { fetchWithAuth } = useAuthApi();
+   const { showToast } = useToast();
+   
   const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
   const [newMessage, setNewMessage] = useState("")
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
@@ -790,7 +793,7 @@ export function ChatInterface({
     // If no current session exists, create one NOW (when user sends first message)
     if (!sessionIdToUse && user) {
   try {
-    console.log('Creating new chat session...');
+    showToast('Creating new chat session...', 'info', 2000);
     // ✅ Pass title first, then fetchWithAuth
     const newSession = await ChatService.createChatSession('New Chat', fetchWithAuth);
     sessionIdToUse = newSession.id;
@@ -814,6 +817,16 @@ export function ChatInterface({
       timestamp: new Date(),
       isLoading: false
     }]);
+    if (error === 402) {
+        showToast('Daily limit reached. Upgrade to continue.','error');
+        setShowPaymentDialog(true);
+      } else if (error === 403) {
+        showToast('This model requires Pro subscription', 'error');
+      } else if (error === 'AbortError') {
+        showToast('Response stopped','info');
+      } else {
+        showToast('Failed to send message. Please try again.','error');
+      }
     return;
   }
 }
@@ -930,20 +943,27 @@ export function ChatInterface({
     }
   }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files?.length) return
+ const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files?.length) return;
+    
     Array.from(files).forEach(file => {
+      if (file.size > 10 * 1024 * 1024) {
+        showToast(`File "${file.name}" is too large (max 10MB)`, 'error');
+        return;
+      }
+      
       setPendingAttachments(prev => [...prev, {
         id: Date.now().toString() + Math.random(),
         type: file.type,
         url: URL.createObjectURL(file),
         name: file.name,
         file
-      }])
-    })
-    e.target.value = ''
-  }
+      }]);
+      
+      showToast(`File "${file.name}" attached`, 'success');
+    });
+  };
 
   const removeAttachment = (id: string) => {
     setPendingAttachments(prev => prev.filter(a => {
@@ -1457,3 +1477,5 @@ export function ChatInterface({
     </div>
   );
 }
+
+

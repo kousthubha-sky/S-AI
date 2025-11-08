@@ -12,7 +12,7 @@ import Threads from "~/components/ui/Threads";
 import type { Route } from "./+types/root";
 import "./app.css";
 import "@fontsource/inter";
-
+import { ToastProvider } from "~/components/ui/toast";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -55,9 +55,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         
         {/* Content layer */}
-        <div style={{ position: 'relative', zIndex: 1 }}>
-          {children}
-        </div>
+         <ToastProvider>
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            {children}
+          </div>
+        </ToastProvider>
         
         <ScrollRestoration />
         <Scripts />
@@ -71,9 +73,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 export default function App() {
   return (
     <AuthProvider>
-      <ShortcutProvider>
-        <Outlet/>
-      </ShortcutProvider>
+      <ToastProvider>
+        <ShortcutProvider>
+          <Outlet/>
+        </ShortcutProvider>
+      </ToastProvider>
     </AuthProvider>
   );
 }
