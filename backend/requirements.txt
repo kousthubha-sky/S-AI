@@ -1,6 +1,6 @@
 fastapi[all]
 pydantic
-uvicorn
+uvicorn[standard]
 sqlalchemy
 supabase
 razorpay
@@ -12,3 +12,7 @@ httpx
 passlib[bcrypt]
 websockets>=10.0
 slowapi==0.1.9
+bleach
+redis
+python-jose[cryptography]
+cryptography

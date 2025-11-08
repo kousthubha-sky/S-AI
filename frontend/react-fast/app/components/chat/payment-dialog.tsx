@@ -8,7 +8,7 @@ declare global {
 import { useState, useEffect } from 'react';
 import { Button } from '~/components/ui/button';
 import { useAuthApi } from '~/hooks/useAuthApi';
-import { RefreshCw, CheckCircle2, Sparkles, Shield, Brain, Zap,X } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Sparkles, Shield, Brain, Zap, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from "~/components/ui/toast";
 
@@ -39,7 +39,6 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
   const { fetchWithAuth } = useAuthApi();
   const { showToast } = useToast();
 
-  // ✅ Load Razorpay script (unchanged)
   useEffect(() => {
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
@@ -47,24 +46,35 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
     document.body.appendChild(script);
     return () => {
       document.body.removeChild(script);
-      // No return value - cleanup function should return void
     };
   }, []);
 
-  // ✅ Razorpay logic (kept exactly same)
   const handleSubscription = async () => {
     try {
       setIsLoading(true);
-      const subscriptionResponse = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/subscription/create`, {
-        method: 'POST',
-        body: JSON.stringify({
-          plan_type: PLAN.id,
-          total_count: 12,
-          user_id: ""
-        })
+      
+      console.log('🔵 Creating subscription with:', {
+        plan_type: "pro",  // ✅ Send "pro" instead of Razorpay plan ID
+        total_count: 12
       });
+      
+      const subscriptionResponse = await fetchWithAuth(
+        `${import.meta.env.VITE_API_BASE_URL}/api/subscription/create`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            plan_type: "pro",  // ✅ Use "pro" - backend will map to Razorpay plan ID
+            total_count: 12,
+            user_id: ""  // Backend will use authenticated user ID
+          })
+        }
+      );
 
-      console.log('Subscription created:', subscriptionResponse);
+      console.log('✅ Subscription created:', subscriptionResponse);
+
+      if (!subscriptionResponse.razorpay_subscription_id) {
+        throw new Error('No subscription ID returned from server');
+      }
 
       const options = {
         key: import.meta.env.VITE_RAZORPAY_KEY_ID,
@@ -73,23 +83,32 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
         description: `${PLAN.name} Plan - Monthly Subscription`,
         handler: async (response: any) => {
           try {
-            const verifyResponse = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/subscription/verify`, {
-              method: 'POST',
-              body: JSON.stringify({
-                razorpay_payment_id: response.razorpay_payment_id,
-                razorpay_subscription_id: response.razorpay_subscription_id,
-                razorpay_signature: response.razorpay_signature
-              })
-            });
-            if (verifyResponse.status === 'success'){
+            console.log('💳 Payment successful, verifying:', response);
+            
+            const verifyResponse = await fetchWithAuth(
+              `${import.meta.env.VITE_API_BASE_URL}/api/subscription/verify`,
+              {
+                method: 'POST',
+                body: JSON.stringify({
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_subscription_id: response.razorpay_subscription_id,
+                  razorpay_signature: response.razorpay_signature
+                })
+              }
+            );
+            
+            console.log('✅ Verification response:', verifyResponse);
+            
+            if (verifyResponse.status === 'success') {
               showToast('Payment successful! Subscription activated.', 'success');
               onSuccess();
-            } 
-            else alert('Payment verification failed. Please contact support.');
-            showToast('Payment verification failed. Contact support.', 'error');
-          } catch (error) {
+            } else {
+              showToast('Payment verification failed. Contact support.', 'error');
+              console.error('Verification failed:', verifyResponse);
+            }
+          } catch (error: any) {
+            console.error('❌ Verification error:', error);
             showToast('Verification error. Your payment is being processed.', 'warning');
-            alert('Payment verification failed. Please contact support.');
           }
         },
         theme: { color: '#111111' },
@@ -105,18 +124,26 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
       rzp.open();
 
       rzp.on('payment.failed', (response: any) => {
+        console.error('❌ Payment failed:', response);
         showToast(`Payment failed: ${response.error.description}`, 'error');
-        alert(`Payment failed: ${response.error.description}`);
         setIsLoading(false);
       });
     } catch (error: any) {
-      showToast('Failed to create subscription. Please try again.', 'error');
-      alert(`Failed to create subscription: ${error.detail || 'Unknown error'}`);
+      console.error('❌ Subscription creation failed:', error);
+      console.error('Error details:', {
+        status: error.status,
+        data: error.data,
+        message: error.message
+      });
+      
+      // Better error handling
+      const errorMessage = error.data?.detail || error.message || 'Unknown error';
+      showToast(`Failed to create subscription: ${errorMessage}`, 'error');
+      
       setIsLoading(false);
     }
   };
 
-  // ✅ New minimal UI with flip
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md">
       <motion.div
@@ -125,7 +152,6 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
       >
         <AnimatePresence mode="wait">
           {!isFlipped ? (
-            // ---------------- FRONT ----------------
             <motion.div
               key="front"
               initial={{ rotateY: -180 }}
@@ -135,26 +161,26 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
               className="absolute inset-0 bg-gradient-to-b from-[#fafafa] to-[#f1f1f1] text-gray-900 rounded-3xl shadow-2xl flex flex-col items-center justify-between p-6"
               style={{ backfaceVisibility: 'hidden' }}
             >
-              {/* Header */}
               <div className="flex justify-between w-full items-center">
                 <h2 className="text-lg font-semibold">{PLAN.name}</h2>
-                <button
-                  onClick={() => onClose()}
-                  className="text-gray-500 hover:text-gray-800 transition p-1 rounded-full hover:bg-gray-100"
-                  aria-label="Close dialog"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-                <button
-                  onClick={() => setIsFlipped(true)}
-                  className="text-gray-500 hover:text-gray-800 transition p-1 rounded-full hover:bg-gray-100"
-                  aria-label="More info"
-                >
-                  <RefreshCw className="w-5 h-5" />
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => onClose()}
+                    className="text-gray-500 hover:text-gray-800 transition p-1 rounded-full hover:bg-gray-100"
+                    aria-label="Close dialog"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={() => setIsFlipped(true)}
+                    className="text-gray-500 hover:text-gray-800 transition p-1 rounded-full hover:bg-gray-100"
+                    aria-label="More info"
+                  >
+                    <RefreshCw className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
 
-              {/* Center minimal info */}
               <div className="flex flex-col items-center justify-center text-center mt-6 space-y-3">
                 <p className="text-5xl font-bold">₹{PLAN.price}</p>
                 <p className="text-sm text-gray-500">per month</p>
@@ -179,7 +205,6 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
                 </div>
               </div>
 
-              {/* Action */}
               <Button
                 className="w-full bg-black text-white mt-6 rounded-xl hover:bg-gray-800"
                 onClick={() => setIsFlipped(true)}
@@ -188,7 +213,6 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
               </Button>
             </motion.div>
           ) : (
-            // ---------------- BACK ----------------
             <motion.div
               key="back"
               initial={{ rotateY: 180 }}
@@ -239,7 +263,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
               </div>
 
               <p className="text-xs text-gray-400 text-center mt-2">
-                You’ll be redirected to Razorpay to complete payment
+                You'll be redirected to Razorpay to complete payment
               </p>
             </motion.div>
           )}

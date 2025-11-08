@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from models.payment import SubscriptionCreate, SubscriptionVerify
 from typing import Optional, Dict, Any
 import logging
-import datetime
+from datetime import datetime
 # Set up logging
 logger = logging.getLogger(__name__)
 
@@ -41,6 +41,7 @@ class PaymentManager:
     async def create_subscription(self, subscription: SubscriptionCreate) -> Dict[str, Any]:
         """Create a subscription with enhanced validation"""
         try:
+               
             # ✅ Validate required fields
             if not subscription.plan_type:
                 raise HTTPException(

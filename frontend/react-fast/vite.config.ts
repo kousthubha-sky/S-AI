@@ -9,7 +9,8 @@ export default defineConfig({
     allowedHosts: [
       'localhost',
       'localhost:8000',
-      'localhost:5173' // Allow all localtunnel subdomains
+      'localhost:5173',
+      'louise-loved-premises-unfortunately.trycloudflare.com' // Allow all localtunnel subdomains
     ],
   },
   define: {

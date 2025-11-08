@@ -6,8 +6,8 @@ from enum import Enum
 
 class SubscriptionCreate(BaseModel):
     plan_type: str  # This will be the Razorpay plan ID
-    user_id: str
-    total_count: Optional[int] = 12  # Default 12 months
+    total_count: Optional[int] = 12
+    user_id: Optional[str] = None
 
 class SubscriptionVerify(BaseModel):
     razorpay_payment_id: str

@@ -1207,7 +1207,7 @@ useEffect(() => {
                           {/* Message Content */}
                           <div
                             className={cn(
-                              "px-4 rounded-2xl leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words overflow-hidden",
+                              "px-4 rounded-2xl leading-relaxed text-sm sm:text-base bg-gray-800 whitespace-pre-wrap break-words overflow-hidden",
                               "text-white relative"
                             )}
                           >
