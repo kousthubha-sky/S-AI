@@ -372,60 +372,140 @@ async def verify_subscription(
     payload: dict = Depends(verify_token)
 ):
     """Verify a subscription payment and activate user's subscription"""
-    user_id = payload.get("sub")
+    user_id = payload.get("sub")  # Auth0 ID
     
-    if await payment_manager.verify_subscription_payment(verification):
-        subscription_details = await payment_manager.get_subscription_details(
-            verification.razorpay_subscription_id
-        )
-        
-        # Calculate subscription end date
-        if subscription_details.get('current_end'):
-            end_date = datetime.fromtimestamp(subscription_details['current_end'])
-        else:
-            end_date = datetime.now() + timedelta(days=30)
-        
-        # Get user from database
-        user = await db.get_user_by_auth0_id(user_id)
-        
-        if user:
-            # Update user subscription in users table
-            await db.update_user(user_id, {
+    print(f"🔍 Verifying subscription for user: {user_id}")
+    
+    try:
+        # Verify payment with Razorpay
+        if await payment_manager.verify_subscription_payment(verification):
+            print(f"✅ Payment verified successfully")
+            
+            # Get subscription details from Razorpay
+            subscription_details = await payment_manager.get_subscription_details(
+                verification.razorpay_subscription_id
+            )
+            
+            print(f"📋 Subscription details: {subscription_details}")
+            
+            # Calculate subscription end date
+            if subscription_details.get('current_end'):
+                end_date = datetime.fromtimestamp(subscription_details['current_end'])
+            else:
+                end_date = datetime.now() + timedelta(days=30)
+            
+            print(f"📅 Subscription end date: {end_date}")
+            
+            # Get user from database
+            user = await db.get_user_by_auth0_id(user_id)
+            
+            if not user:
+                print(f"❌ User not found for auth0_id: {user_id}")
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="User not found"
+                )
+            
+            print(f"👤 Found user: {user['id']} - {user['email']}")
+            
+            # ✅ FIX 1: Update user subscription in users table using auth0_id
+            update_result = await db.update_user(user_id, {
                 'subscription_tier': 'pro',
                 'subscription_end_date': end_date.isoformat(),
-                'is_paid': True
+                'is_paid': True,
+                'updated_at': datetime.now().isoformat()
             })
             
-            # Create subscription record in Supabase
+            print(f"✅ User updated: {update_result}")
+            
+            # ✅ FIX 2: Create/Update subscription record in subscriptions table
             subscription_data = {
-                'user_id': user['id'],
+                'user_id': user['id'],  # Database user ID
                 'razorpay_subscription_id': verification.razorpay_subscription_id,
                 'razorpay_plan_id': subscription_details.get('plan_id'),
-                'status': subscription_details.get('status'),
-                'current_start': datetime.fromtimestamp(subscription_details.get('current_start', 0)).isoformat() if subscription_details.get('current_start') else None,
+                'status': 'active',  # ✅ Ensure status is set to 'active'
+                'current_start': datetime.fromtimestamp(
+                    subscription_details.get('current_start', 0)
+                ).isoformat() if subscription_details.get('current_start') else None,
                 'current_end': end_date.isoformat(),
                 'total_count': subscription_details.get('total_count'),
                 'paid_count': subscription_details.get('paid_count'),
-                'remaining_count': subscription_details.get('remaining_count')
+                'remaining_count': subscription_details.get('remaining_count'),
+                'created_at': datetime.now().isoformat(),
+                'updated_at': datetime.now().isoformat()
             }
             
             await db.create_subscription(subscription_data)
+            print(f"✅ Subscription record created")
             
-            # Record payment transaction in Supabase
+            # ✅ FIX 3: Update user_usage table
+            month_year = datetime.now().strftime("%Y-%m")
+            usage_update = {
+                'is_paid': True,
+                'subscription_tier': 'pro',
+                'subscription_end_date': end_date.isoformat(),
+                'updated_at': datetime.now().isoformat()
+            }
+            
+            # Update usage tracking
+            try:
+                await db.client.table('user_usage').update(usage_update).eq(
+                    'user_id', user['id']
+                ).eq('month_year', month_year).execute()
+                print(f"✅ User usage updated")
+            except Exception as usage_error:
+                print(f"⚠️ Usage update error (non-critical): {usage_error}")
+            
+            # ✅ FIX 4: Record payment transaction
             payment_data = {
                 'user_id': user['id'],
                 'razorpay_payment_id': verification.razorpay_payment_id,
-                'amount': subscription_details.get('charge_at', 0) / 100,  # Convert from paisa to rupees
+                'razorpay_subscription_id': verification.razorpay_subscription_id,
+                'amount': subscription_details.get('charge_at', 0) / 100,
                 'currency': 'INR',
                 'status': 'captured',
-                'payment_method': 'subscription'
+                'payment_method': 'subscription',
+                'created_at': datetime.now().isoformat()
             }
             
             await db.create_payment_transaction(payment_data)
-        
-        return {"status": "success", "message": "Subscription activated successfully"}
-    
-    return {"status": "error", "message": "Subscription verification failed"}
+            print(f"✅ Payment transaction recorded")
+            
+            # ✅ FIX 5: Invalidate any caches (if using Redis)
+            try:
+                from services.redis_cache import RedisCache
+                await RedisCache.invalidate_user_sessions(user_id)
+                print(f"✅ Cache invalidated")
+            except:
+                pass  # Redis might not be available
+            
+            return {
+                "status": "success",
+                "message": "Subscription activated successfully",
+                "subscription": {
+                    "tier": "pro",
+                    "end_date": end_date.isoformat(),
+                    "is_paid": True
+                }
+            }
+        else:
+            print(f"❌ Payment verification failed")
+            return {
+                "status": "error",
+                "message": "Subscription verification failed"
+            }
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Subscription verification error: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Subscription verification failed: {str(e)}"
+        )
+
 @app.get("/api/subscription/details/{subscription_id}", tags=["Subscription"])
 async def get_subscription_details(
     subscription_id: str,
@@ -455,6 +535,8 @@ from models.ai_models import validate_model_access
 # Chat endpoint
 # In main.py - REPLACE the entire /api/chat endpoint (around line 408)
 
+# In main.py - FIX THE CHAT ENDPOINT TIMEZONE COMPARISON
+
 @app.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
 @limiter.limit("30/minute") 
 async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depends(verify_token)):
@@ -483,12 +565,22 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
         usage = await get_user_usage(user_id)
         print(f"✅ User usage: {usage.daily_message_count} messages, Paid: {usage.is_paid}")
         
-        # Check subscription status and expiry
-        if usage.subscription_end_date and usage.subscription_end_date < datetime.now():
-            print(f"⚠️ User subscription expired")
-            usage.is_paid = False
-            usage.subscription_tier = "free"
-            await update_user_subscription(user_id, "free", False, datetime.now())
+        # ✅ FIX: Check subscription status with timezone-aware comparison
+        if usage.subscription_end_date:
+            from datetime import timezone
+            now_aware = datetime.now(timezone.utc)
+            
+            # Make sure subscription_end_date is timezone-aware
+            if usage.subscription_end_date.tzinfo is None:
+                subscription_end_date = usage.subscription_end_date.replace(tzinfo=timezone.utc)
+            else:
+                subscription_end_date = usage.subscription_end_date
+            
+            if subscription_end_date < now_aware:
+                print(f"⚠️ User subscription expired")
+                usage.is_paid = False
+                usage.subscription_tier = "free"
+                await update_user_subscription(user_id, "free", False, datetime.now())
         
         # Validate model access based on user's tier
         tier = usage.subscription_tier or "free"
@@ -511,6 +603,7 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
                 detail="Daily limit reached. Please subscribe to continue."
             )
         
+        # Rest of your chat function remains the same...
         # Check for API key
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
@@ -612,7 +705,7 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Chat processing error: {str(e)}"
         )
-        
+                
 # Document upload endpoint
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_MIME_TYPES = {
@@ -1020,6 +1113,142 @@ async def get_cache_stats(payload: dict = Depends(verify_token)):
     """Get Redis cache statistics"""
     stats = await RedisCache.get_stats()
     return stats
+
+@app.get("/api/debug/subscription-status", tags=["Debug"])
+async def debug_subscription_status(payload: dict = Depends(verify_token)):
+    """
+    Diagnostic endpoint to check subscription status across all tables
+    """
+    user_id = payload.get("sub")
+    
+    try:
+        # Get user from database
+        user = await db.get_user_by_auth0_id(user_id)
+        
+        if not user:
+            return {
+                "error": "User not found",
+                "auth0_id": user_id
+            }
+        
+        # Get subscription from subscriptions table
+        subscription = await db.get_active_subscription(user['id'])
+        
+        # Get usage from user_usage table
+        month_year = datetime.now().strftime("%Y-%m")
+        usage_response = db.client.table('user_usage').select('*').eq(
+            'user_id', user['id']
+        ).eq('month_year', month_year).execute()
+        usage = usage_response.data[0] if usage_response.data else None
+        
+        # Get payment transactions
+        payments_response = db.client.table('payment_transactions').select('*').eq(
+            'user_id', user['id']
+        ).order('created_at', desc=True).limit(5).execute()
+        payments = payments_response.data
+        
+        return {
+            "user": {
+                "id": user['id'],
+                "auth0_id": user['auth0_id'],
+                "email": user['email'],
+                "subscription_tier": user.get('subscription_tier'),
+                "is_paid": user.get('is_paid'),
+                "subscription_end_date": user.get('subscription_end_date'),
+                "created_at": user.get('created_at'),
+                "updated_at": user.get('updated_at')
+            },
+            "subscription": subscription,
+            "usage": usage,
+            "recent_payments": payments,
+            "diagnostic": {
+                "has_active_subscription": bool(subscription and subscription.get('status') == 'active'),
+                "subscription_is_valid": bool(
+                    subscription 
+                    and subscription.get('current_end') 
+                    and datetime.fromisoformat(subscription['current_end']) > datetime.now()
+                ) if subscription else False,
+                "user_marked_as_paid": user.get('is_paid') == True,
+                "user_tier_is_pro": user.get('subscription_tier') == 'pro',
+                "recommendation": (
+                    "✅ Everything looks good!" 
+                    if (user.get('is_paid') and user.get('subscription_tier') == 'pro')
+                    else "⚠️ Subscription status mismatch - run fix endpoint"
+                )
+            }
+        }
+        
+    except Exception as e:
+        return {
+            "error": str(e),
+            "traceback": str(traceback.format_exc())
+        }
+
+
+@app.post("/api/debug/fix-subscription-status", tags=["Debug"])
+async def fix_subscription_status(payload: dict = Depends(verify_token)):
+    """
+    Force-fix subscription status based on active subscription
+    """
+    user_id = payload.get("sub")
+    
+    try:
+        # Get user
+        user = await db.get_user_by_auth0_id(user_id)
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        # Get active subscription
+        subscription = await db.get_active_subscription(user['id'])
+        
+        if not subscription:
+            return {
+                "status": "no_subscription",
+                "message": "No active subscription found"
+            }
+        
+        # Check if subscription is still valid
+        end_date = datetime.fromisoformat(subscription['current_end'])
+        is_valid = end_date > datetime.now()
+        
+        if not is_valid:
+            return {
+                "status": "expired",
+                "message": "Subscription has expired",
+                "expired_on": subscription['current_end']
+            }
+        
+        # Force update user to pro status
+        await db.update_user(user_id, {
+            'subscription_tier': 'pro',
+            'is_paid': True,
+            'subscription_end_date': subscription['current_end'],
+            'updated_at': datetime.now().isoformat()
+        })
+        
+        # Update user_usage table
+        month_year = datetime.now().strftime("%Y-%m")
+        db.client.table('user_usage').update({
+            'is_paid': True,
+            'subscription_tier': 'pro',
+            'subscription_end_date': subscription['current_end']
+        }).eq('user_id', user['id']).eq('month_year', month_year).execute()
+        
+        return {
+            "status": "fixed",
+            "message": "Subscription status updated successfully",
+            "user": {
+                "subscription_tier": "pro",
+                "is_paid": True,
+                "subscription_end_date": subscription['current_end']
+            }
+        }
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fix subscription: {str(e)}"
+        )
 
 if __name__ == "__main__":
     # Start the FastAPI server

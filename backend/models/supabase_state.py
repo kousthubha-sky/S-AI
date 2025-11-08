@@ -8,56 +8,127 @@ from services.supabase_database import db
 
 # models/supabase_state.py - UPDATE THESE FUNCTIONS:
 
+# models/supabase_state.py - FIX THE DATETIME COMPARISON
+
 async def get_user_usage(user_id: str) -> UserUsage:
     """Get or create user usage record with reset logic"""
     try:
+        print(f"🔍 Getting usage for user: {user_id}")
+        
         # Get user from database
         user = await db.get_user_by_auth0_id(user_id)
         
         if not user:
-            # User doesn't exist, return default usage
+            print(f"⚠️ User not found, returning default free tier")
             return UserUsage(
                 user_id=user_id,
                 prompt_count=0,
                 daily_message_count=0,
                 last_reset_date=datetime.now(),
                 is_paid=False,
-                subscription_tier='free',  # Default to free
+                subscription_tier='free',
                 subscription_end_date=None
             )
         
-        # Get usage statistics - NOW USES user_usage TABLE
+        print(f"👤 Found user: {user['id']} - {user['email']}")
+        print(f"📊 User subscription_tier from DB: {user.get('subscription_tier')}")
+        print(f"💳 User is_paid from DB: {user.get('is_paid')}")
+        
+        # Get usage statistics from user_usage table
         usage_data = await db.get_user_usage(user['id'])
+        print(f"📈 Usage data: {usage_data}")
         
-        # Get active subscription
+        # Get active subscription from subscriptions table
         subscription = await db.get_active_subscription(user['id'])
+        print(f"📜 Active subscription: {subscription}")
         
-        # Determine if user is paid
+        # ✅ FIX: Determine subscription status with proper validation
         is_paid = False
         subscription_tier = user.get('subscription_tier', 'free')
-        subscription_end_date = user.get('subscription_end_date')
+        subscription_end_date = None
         
-        if subscription:
-            subscription_end_date = datetime.fromisoformat(subscription['current_end']) if subscription.get('current_end') else None
+        # Check subscription from subscriptions table
+        if subscription and subscription.get('status') == 'active':
+            print(f"✅ Active subscription found")
+            end_date_str = subscription.get('current_end')
             
-            # Check if subscription is still valid
-            if subscription_end_date and subscription_end_date > datetime.now():
-                is_paid = True
-                subscription_tier = user.get('subscription_tier', 'pro')
+            if end_date_str:
+                try:
+                    subscription_end_date = datetime.fromisoformat(end_date_str)
+                    print(f"📅 Subscription end date: {subscription_end_date}")
+                    
+                    # ✅ FIX: Make both datetimes timezone-aware for comparison
+                    from datetime import timezone
+                    now_aware = datetime.now(timezone.utc)
+                    
+                    # If subscription_end_date is naive, make it aware
+                    if subscription_end_date.tzinfo is None:
+                        subscription_end_date = subscription_end_date.replace(tzinfo=timezone.utc)
+                    
+                    # Check if subscription is still valid
+                    if subscription_end_date > now_aware:
+                        is_paid = True
+                        subscription_tier = user.get('subscription_tier', 'pro')
+                        print(f"✅ Subscription is valid and active")
+                    else:
+                        print(f"⚠️ Subscription expired on {subscription_end_date}")
+                        # Subscription expired - update user to free tier
+                        await db.update_user(user['auth0_id'], {
+                            'subscription_tier': 'free',
+                            'is_paid': False,
+                            'subscription_end_date': None
+                        })
+                        subscription_tier = 'free'
+                        is_paid = False
+                except ValueError as e:
+                    print(f"❌ Error parsing date: {e}")
+        else:
+            print(f"ℹ️ No active subscription found")
         
-        return UserUsage(
+        # ✅ Also check user table subscription status (backup check)
+        if not is_paid and user.get('is_paid'):
+            user_end_date_str = user.get('subscription_end_date')
+            if user_end_date_str:
+                try:
+                    user_end_date = datetime.fromisoformat(user_end_date_str)
+                    # Make timezone-aware comparison
+                    now_aware = datetime.now(timezone.utc)
+                    if user_end_date.tzinfo is None:
+                        user_end_date = user_end_date.replace(tzinfo=timezone.utc)
+                    
+                    if user_end_date > now_aware:
+                        is_paid = True
+                        subscription_tier = user.get('subscription_tier', 'pro')
+                        subscription_end_date = user_end_date
+                        print(f"✅ Using subscription status from users table")
+                except ValueError:
+                    pass
+        
+        result = UserUsage(
             user_id=user_id,
             prompt_count=usage_data.get('total_message_count', 0),
             daily_message_count=usage_data.get('daily_message_count', 0),
-            last_reset_date=datetime.fromisoformat(usage_data.get('last_reset_date', datetime.now().isoformat())),
+            last_reset_date=datetime.fromisoformat(
+                usage_data.get('last_reset_date', datetime.now().isoformat())
+            ),
             is_paid=is_paid,
             subscription_tier=subscription_tier,
             subscription_end_date=subscription_end_date
         )
         
+        print(f"📊 Final usage result:")
+        print(f"  - is_paid: {result.is_paid}")
+        print(f"  - subscription_tier: {result.subscription_tier}")
+        print(f"  - subscription_end_date: {result.subscription_end_date}")
+        
+        return result
+        
     except Exception as e:
-        print(f"Error getting user usage: {e}")
-        # Return default usage on error
+        print(f"❌ Error getting user usage: {e}")
+        import traceback
+        traceback.print_exc()
+        
+        # Return default free tier usage on error
         return UserUsage(
             user_id=user_id,
             prompt_count=0,
@@ -67,7 +138,7 @@ async def get_user_usage(user_id: str) -> UserUsage:
             subscription_tier='free',
             subscription_end_date=None
         )
-        
+                        
 async def check_message_limit(user_id: str) -> bool:
     """Check if user has reached their daily message limit"""
     try:
@@ -157,3 +228,54 @@ async def create_user_if_not_exists(auth0_user_data: dict):
     except Exception as e:
         print(f"Error creating user: {e}")
         return None
+    
+# Add this function to your supabase_state.py
+
+# Add this function to your main.py or supabase_state.py
+
+async def sync_all_user_subscriptions():
+    """Sync subscription status for all users - run this once to fix data"""
+    try:
+        # Get all users
+        response = db.client.table('users').select('*').execute()
+        users = response.data
+        
+        for user in users:
+            user_id = user['auth0_id']
+            print(f"🔄 Syncing subscription for user: {user_id}")
+            
+            # Get active subscription
+            subscription = await db.get_active_subscription(user['id'])
+            
+            if subscription and subscription.get('status') == 'active':
+                end_date_str = subscription.get('current_end')
+                if end_date_str:
+                    from datetime import timezone
+                    end_date = datetime.fromisoformat(end_date_str)
+                    now_aware = datetime.now(timezone.utc)
+                    
+                    if end_date.tzinfo is None:
+                        end_date = end_date.replace(tzinfo=timezone.utc)
+                    
+                    if end_date > now_aware:
+                        # Update user table
+                        await db.update_user(user_id, {
+                            'subscription_tier': 'pro',
+                            'is_paid': True,
+                            'subscription_end_date': end_date_str
+                        })
+                        
+                        # Update user_usage table
+                        month_year = datetime.now().strftime("%Y-%m")
+                        db.client.table('user_usage').update({
+                            'is_paid': True,
+                            'subscription_tier': 'pro',
+                            'subscription_end_date': end_date_str
+                        }).eq('user_id', user['id']).eq('month_year', month_year).execute()
+                        
+                        print(f"✅ Updated user {user_id} to pro tier")
+            
+        print("🎉 All user subscriptions synced!")
+        
+    except Exception as e:
+        print(f"❌ Error syncing subscriptions: {e}")

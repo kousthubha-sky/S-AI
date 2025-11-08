@@ -25,3 +25,4 @@ class Document(BaseModel):
     text_length: int
     created_at: str
     metadata: Dict[str, Any]
+    

@@ -120,16 +120,29 @@ function DashboardContent() {
   const { showToast } = useToast();
   const [isLoadingSessions, setIsLoadingSessions] = useState<boolean>(true);
 
-  useEffect(() => {
-    if (auth0User) {
-      
-      initializeUser();
-      checkUserSubscription();
-      
-      const pollInterval = setInterval(checkUserSubscription, 60000);
-      return () => clearInterval(pollInterval);
-    }
-  }, [auth0User]);
+useEffect(() => {
+  if (auth0User) {
+    initializeUser();
+    checkUserSubscription();
+    
+    // Poll for subscription updates every 60 seconds
+    const pollInterval = setInterval(checkUserSubscription, 60000);
+    
+    // ✅ ADD: Listen for payment success events
+    const handlePaymentSuccess = () => {
+      console.log('💳 Payment success event received');
+      // Wait a bit for backend to process, then refresh
+      setTimeout(forceRefreshSubscription, 2000);
+    };
+    
+    window.addEventListener('paymentSuccess', handlePaymentSuccess);
+    
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('paymentSuccess', handlePaymentSuccess);
+    };
+  }
+}, [auth0User]);
 
   useEffect(() => {
     // Add event listener for profile settings from command palette
@@ -231,33 +244,72 @@ const initializeUser = async () => {
     }
 };
 
-  const checkUserSubscription = async () => {
-    try {
-      const usage = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/usage`);
-      
-      let tier: 'free' | 'pro' = 'free';
-      if (usage.is_paid && usage.subscription_tier === 'pro') {
-        tier = 'pro';
-      }
-      
-      setUserTier(tier);
-      
-      if (usage.daily_message_count !== undefined) {
-        setMessageCount(usage.daily_message_count);
-      }
-      if (usage.daily_message_count >= 20 && !usage.is_paid) {
-        showToast('You have 5 messages remaining today', 'warning');
-      }
-      if (usage.last_reset_date) {
-        const resetTime = new Date(usage.last_reset_date);
-        resetTime.setDate(resetTime.getDate() + 1);
-        setNextResetTime(`at ${resetTime.toLocaleTimeString()}`);
-      }
-    } catch (error) {
-      console.error('Failed to check subscription:', error);
-      setUserTier('free');
+const checkUserSubscription = async () => {
+  try {
+    console.log('🔄 Checking user subscription status...');
+    
+    const usage = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/usage`);
+    
+    console.log('📊 Usage response:', {
+      is_paid: usage.is_paid,
+      subscription_tier: usage.subscription_tier,
+      subscription_end_date: usage.subscription_end_date,
+      daily_message_count: usage.daily_message_count
+    });
+    
+    let tier: 'free' | 'pro' = 'free';
+    
+    // ✅ FIX: More robust tier detection
+    if (usage.is_paid === true && usage.subscription_tier === 'pro') {
+      tier = 'pro';
+      console.log('✅ User has active PRO subscription');
+    } else {
+      console.log('ℹ️ User on FREE tier');
     }
-  };
+    
+    // Update state
+    setUserTier(tier);
+    
+    // Update message count
+    if (usage.daily_message_count !== undefined) {
+      setMessageCount(usage.daily_message_count);
+    }
+    
+    // Show warning if approaching limit (only for free users)
+    if (tier === 'free' && usage.daily_message_count >= 20) {
+      const remaining = 25 - usage.daily_message_count;
+      showToast(`You have ${remaining} messages remaining today`, 'warning');
+    }
+    
+    // Set reset time
+    if (usage.last_reset_date) {
+      const resetTime = new Date(usage.last_reset_date);
+      resetTime.setDate(resetTime.getDate() + 1);
+      setNextResetTime(`at ${resetTime.toLocaleTimeString()}`);
+    }
+    
+    console.log(`✅ User tier set to: ${tier}`);
+    
+  } catch (error) {
+    console.error('❌ Failed to check subscription:', error);
+    setUserTier('free');
+  }
+};
+
+const forceRefreshSubscription = async () => {
+  console.log('🔄 Force refreshing subscription status...');
+  await checkUserSubscription();
+  
+  // Also reload user sessions in case limits changed
+  if (user) {
+    try {
+      const userSessions = await ChatService.getUserChatSessions(user.id, fetchWithAuth);
+      setSessions(userSessions);
+    } catch (error) {
+      console.error('Failed to reload sessions:', error);
+    }
+  }
+};
 
   const handleSessionSelect = async (sessionId: string) => {
     setCurrentSessionId(sessionId);

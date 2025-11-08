@@ -49,100 +49,144 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
     };
   }, []);
 
-  const handleSubscription = async () => {
-    try {
-      setIsLoading(true);
-      
-      console.log('🔵 Creating subscription with:', {
-        plan_type: "pro",  // ✅ Send "pro" instead of Razorpay plan ID
-        total_count: 12
-      });
-      
-      const subscriptionResponse = await fetchWithAuth(
-        `${import.meta.env.VITE_API_BASE_URL}/api/subscription/create`,
-        {
-          method: 'POST',
-          body: JSON.stringify({
-            plan_type: "pro",  // ✅ Use "pro" - backend will map to Razorpay plan ID
-            total_count: 12,
-            user_id: ""  // Backend will use authenticated user ID
-          })
-        }
-      );
-
-      console.log('✅ Subscription created:', subscriptionResponse);
-
-      if (!subscriptionResponse.razorpay_subscription_id) {
-        throw new Error('No subscription ID returned from server');
+const handleSubscription = async () => {
+  try {
+    setIsLoading(true);
+    
+    console.log('🔵 Creating subscription with:', {
+      plan_type: "pro",
+      total_count: 12
+    });
+    
+    const subscriptionResponse = await fetchWithAuth(
+      `${import.meta.env.VITE_API_BASE_URL}/api/subscription/create`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          plan_type: "pro",
+          total_count: 12,
+          user_id: ""
+        })
       }
+    );
 
-      const options = {
-        key: import.meta.env.VITE_RAZORPAY_KEY_ID,
-        subscription_id: subscriptionResponse.razorpay_subscription_id,
-        name: 'AI Chat Subscription',
-        description: `${PLAN.name} Plan - Monthly Subscription`,
-        handler: async (response: any) => {
-          try {
-            console.log('💳 Payment successful, verifying:', response);
-            
-            const verifyResponse = await fetchWithAuth(
-              `${import.meta.env.VITE_API_BASE_URL}/api/subscription/verify`,
-              {
-                method: 'POST',
-                body: JSON.stringify({
-                  razorpay_payment_id: response.razorpay_payment_id,
-                  razorpay_subscription_id: response.razorpay_subscription_id,
-                  razorpay_signature: response.razorpay_signature
-                })
-              }
-            );
-            
-            console.log('✅ Verification response:', verifyResponse);
-            
-            if (verifyResponse.status === 'success') {
-              showToast('Payment successful! Subscription activated.', 'success');
-              onSuccess();
-            } else {
-              showToast('Payment verification failed. Contact support.', 'error');
-              console.error('Verification failed:', verifyResponse);
-            }
-          } catch (error: any) {
-            console.error('❌ Verification error:', error);
-            showToast('Verification error. Your payment is being processed.', 'warning');
-          }
-        },
-        theme: { color: '#111111' },
-        modal: {
-          ondismiss: () => {
-            setIsLoading(false);
-            showToast('Payment cancelled', 'info');
-          }
-        }
-      };
+    console.log('✅ Subscription created:', subscriptionResponse);
 
-      const rzp = new window.Razorpay(options);
-      rzp.open();
-
-      rzp.on('payment.failed', (response: any) => {
-        console.error('❌ Payment failed:', response);
-        showToast(`Payment failed: ${response.error.description}`, 'error');
-        setIsLoading(false);
-      });
-    } catch (error: any) {
-      console.error('❌ Subscription creation failed:', error);
-      console.error('Error details:', {
-        status: error.status,
-        data: error.data,
-        message: error.message
-      });
-      
-      // Better error handling
-      const errorMessage = error.data?.detail || error.message || 'Unknown error';
-      showToast(`Failed to create subscription: ${errorMessage}`, 'error');
-      
-      setIsLoading(false);
+    if (!subscriptionResponse.razorpay_subscription_id) {
+      throw new Error('No subscription ID returned from server');
     }
-  };
+
+    const options = {
+      key: import.meta.env.VITE_RAZORPAY_KEY_ID,
+      subscription_id: subscriptionResponse.razorpay_subscription_id,
+      name: 'AI Chat Subscription',
+      description: `${PLAN.name} Plan - Monthly Subscription`,
+      handler: async (response: any) => {
+        try {
+          console.log('💳 Payment successful, verifying:', response);
+          
+          const verifyResponse = await fetchWithAuth(
+            `${import.meta.env.VITE_API_BASE_URL}/api/subscription/verify`,
+            {
+              method: 'POST',
+              body: JSON.stringify({
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_subscription_id: response.razorpay_subscription_id,
+                razorpay_signature: response.razorpay_signature
+              })
+            }
+          );
+          
+          console.log('✅ Verification response:', verifyResponse);
+          
+          if (verifyResponse.status === 'success') {
+            showToast('Payment successful! Subscription activated.', 'success');
+            
+            // ✅ FIX: Force refresh user subscription status
+            console.log('🔄 Refreshing user subscription status...');
+            
+            // Wait a moment for backend to update
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Fetch updated usage
+            try {
+              const updatedUsage = await fetchWithAuth(
+                `${import.meta.env.VITE_API_BASE_URL}/api/usage`
+              );
+              
+              console.log('📊 Updated usage:', updatedUsage);
+              
+              // Verify the update was successful
+              if (updatedUsage.is_paid && updatedUsage.subscription_tier === 'pro') {
+                console.log('✅ Subscription status confirmed in frontend');
+                showToast('Pro features unlocked! 🎉', 'success');
+              } else {
+                console.warn('⚠️ Subscription status not updated yet, retrying...');
+                
+                // Retry once more after another delay
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                const retryUsage = await fetchWithAuth(
+                  `${import.meta.env.VITE_API_BASE_URL}/api/usage`
+                );
+                
+                console.log('📊 Retry usage:', retryUsage);
+                
+                if (!retryUsage.is_paid || retryUsage.subscription_tier !== 'pro') {
+                  showToast('Subscription activated! Please refresh the page.', 'warning');
+                }
+              }
+            } catch (usageError) {
+              console.error('Failed to fetch updated usage:', usageError);
+              showToast('Subscription activated! Please refresh the page.', 'warning');
+            }
+            
+            // Call success callback which will trigger dashboard refresh
+            onSuccess();
+            
+            // Force page reload as backup
+            setTimeout(() => {
+              window.location.reload();
+            }, 2000);
+          } else {
+            showToast('Payment verification failed. Contact support.', 'error');
+            console.error('Verification failed:', verifyResponse);
+          }
+        } catch (error: any) {
+          console.error('❌ Verification error:', error);
+          showToast('Verification error. Your payment is being processed.', 'warning');
+        }
+      },
+      theme: { color: '#111111' },
+      modal: {
+        ondismiss: () => {
+          setIsLoading(false);
+          showToast('Payment cancelled', 'info');
+        }
+      }
+    };
+
+    const rzp = new window.Razorpay(options);
+    rzp.open();
+
+    rzp.on('payment.failed', (response: any) => {
+      console.error('❌ Payment failed:', response);
+      showToast(`Payment failed: ${response.error.description}`, 'error');
+      setIsLoading(false);
+    });
+  } catch (error: any) {
+    console.error('❌ Subscription creation failed:', error);
+    console.error('Error details:', {
+      status: error.status,
+      data: error.data,
+      message: error.message
+    });
+    
+    const errorMessage = error.data?.detail || error.message || 'Unknown error';
+    showToast(`Failed to create subscription: ${errorMessage}`, 'error');
+    
+    setIsLoading(false);
+  }
+};
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md">
