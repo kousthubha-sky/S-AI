@@ -1295,4 +1295,5 @@ async def fix_subscription_status(payload: dict = Depends(verify_token)):
 
 if __name__ == "__main__":
     # Start the FastAPI server
-    uvicorn.run("main:app",host="0.0.0.0", port=16830, reload=True)
+    port = int(os.getenv("PORT", 8000))  # Render uses PORT env var
+    uvicorn.run("main:app", host="0.0.0.0", port=port)

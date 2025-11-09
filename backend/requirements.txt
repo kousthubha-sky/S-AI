@@ -16,3 +16,4 @@ bleach
 redis
 python-jose[cryptography]
 cryptography
+gunicorn 
