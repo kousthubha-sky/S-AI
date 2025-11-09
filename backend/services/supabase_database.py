@@ -15,27 +15,16 @@ class SupabaseService:
             raise ValueError("Supabase credentials not configured")
         
         self.client: Client = create_client(supabase_url, supabase_key)
-        
-    @lru_cache()
-    def get_supabase_client():
-        return create_client(
-            os.getenv("SUPABASE_URL"),
-            os.getenv("SUPABASE_SERVICE_KEY"),
-            options={
-                "pool_config": {
-                    "max_connections": 10,
-                    "max_idle_time": 300
-                }
-            }
-        )    
-        
-    async def get_user_tier(self, user_id: str) -> str:
+    
+    # Remove the @lru_cache() method as it's not needed
+    
+    def get_user_tier(self, user_id: str) -> str:  # REMOVED async
         """Get user's subscription tier and validate it"""
         try:
-            # First get user data
-            user = await self.get_user_by_auth0_id(user_id)
+            # First get user data - REMOVED await
+            user = self.get_user_by_auth0_id(user_id)
             if not user:
-                return 'free'  # Default to free tier if user not found
+                return 'free'
             
             # Get subscription data
             response = self.client.table('subscriptions').select('*').eq('user_id', user['id']).eq('status', 'active').execute()
@@ -49,19 +38,19 @@ class SupabaseService:
             
             # If no active subscription or expired, ensure user is set to free tier
             if user.get('subscription_tier') != 'free':
-                await self.update_user(user_id, {'subscription_tier': 'free', 'is_paid': False})
+                self.update_user(user_id, {'subscription_tier': 'free', 'is_paid': False})  # REMOVED await
             
             return 'free'
             
         except Exception as e:
             print(f"Error getting user tier: {str(e)}")
-            return 'free'  # Default to free tier on error
+            return 'free'
 
-    async def get_user_usage(self, user_id: str) -> Dict:
+    def get_user_usage(self, user_id: str) -> Dict:  # REMOVED async
         """Get user usage data"""
         try:
-            # Get user data first
-            user = await self.get_user_by_auth0_id(user_id)
+            # Get user data first - REMOVED await
+            user = self.get_user_by_auth0_id(user_id)
             if not user:
                 return {
                     'daily_message_count': 0,
@@ -94,7 +83,7 @@ class SupabaseService:
                     subscription_end_date = end_date
                 else:
                     # Update user to free tier if subscription expired
-                    await self.update_user(user['auth0_id'], {
+                    self.update_user(user['auth0_id'], {  # REMOVED await
                         'subscription_tier': 'free',
                         'is_paid': False,
                         'subscription_end_date': None
@@ -117,25 +106,22 @@ class SupabaseService:
             )
 
     # ==================== User Management ====================
-    async def get_user_by_auth0_id(self, auth0_id: str) -> Optional[Dict]:
+    def get_user_by_auth0_id(self, auth0_id: str) -> Optional[Dict]:  # REMOVED async
         """Get user by Auth0 ID"""
         try:
             response = self.client.table('users').select('*').eq('auth0_id', auth0_id).execute()
             return response.data[0] if response.data else None
         except Exception as e:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Database error: {str(e)}"
-            )
+            print(f"Error getting user by auth0_id: {str(e)}")
+            return None
 
-    # In SupabaseService class, update create_user method:
-    async def create_user(self, user_data: Dict) -> Dict:
+    def create_user(self, user_data: Dict) -> Dict:  # REMOVED async
         """Create a new user"""
         try:
-            # Check if user exists
-            existing = await self.get_user_by_auth0_id(user_data['auth0_id'])
+            # Check if user exists - REMOVED await
+            existing = self.get_user_by_auth0_id(user_data['auth0_id'])
             if existing:
-                return existing  # Return existing user instead of raising error
+                return existing
             
             # Map to your Supabase schema
             supabase_user_data = {
@@ -160,21 +146,22 @@ class SupabaseService:
             user = response.data[0]
             
             # Initialize usage tracking for current month
-            await self.initialize_usage_tracking(user['id'])
+            self.initialize_usage_tracking(user['id'])  # REMOVED await
             
             return user
             
         except Exception as e:
             print(f"Error creating user: {str(e)}")
             # If user already exists or other error, try to return existing
-            existing = await self.get_user_by_auth0_id(user_data['auth0_id'])
+            existing = self.get_user_by_auth0_id(user_data['auth0_id'])  # REMOVED await
             if existing:
                 return existing
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Database error: {str(e)}"
             )
-    async def update_user(self, auth0_id: str, update_data: Dict) -> Dict:
+
+    def update_user(self, auth0_id: str, update_data: Dict) -> Dict:  # REMOVED async
         """Update user data"""
         try:
             response = self.client.table('users').update(update_data).eq('auth0_id', auth0_id).execute()
@@ -196,9 +183,7 @@ class SupabaseService:
             )
 
     # ==================== Usage Tracking ====================
-    # services/supabase_database.py - UPDATE THESE METHODS:
-
-    async def initialize_usage_tracking(self, user_id: str):
+    def initialize_usage_tracking(self, user_id: str):  # REMOVED async
         """Initialize usage tracking for a user"""
         try:
             month_year = datetime.now().strftime("%Y-%m")
@@ -211,27 +196,26 @@ class SupabaseService:
                 'daily_token_count': 0,
                 'total_token_count': 0,
                 'last_reset_date': datetime.now().isoformat(),
-                'is_paid': False,  # NEW COLUMN
-                'subscription_tier': 'free',  # NEW COLUMN
-                'subscription_end_date': None  # NEW COLUMN
+                'is_paid': False,
+                'subscription_tier': 'free',
+                'subscription_end_date': None
             }
             
-            self.client.table('user_usage').upsert(usage_data).execute()  # CHANGED TABLE NAME
+            self.client.table('user_usage').upsert(usage_data).execute()
             
         except Exception as e:
             print(f"Failed to initialize usage tracking: {e}")
 
-    async def get_user_usage(self, user_id: str) -> Dict:
+    def get_user_usage(self, user_id: str) -> Dict:  # REMOVED async
         """Get user usage statistics"""
         try:
             month_year = datetime.now().strftime("%Y-%m")
             
-            # CHANGED TABLE NAME from usage_tracking to user_usage
             response = self.client.table('user_usage').select('*').eq('user_id', user_id).eq('month_year', month_year).execute()
             
             if not response.data:
                 # Initialize if doesn't exist
-                await self.initialize_usage_tracking(user_id)
+                self.initialize_usage_tracking(user_id)  # REMOVED await
                 response = self.client.table('user_usage').select('*').eq('user_id', user_id).eq('month_year', month_year).execute()
             
             usage = response.data[0] if response.data else {}
@@ -258,13 +242,13 @@ class SupabaseService:
                 detail=f"Failed to get usage: {str(e)}"
             )
 
-    async def increment_usage(self, user_id: str, message_count: int = 1, token_count: int = 0):
+    def increment_usage(self, user_id: str, message_count: int = 1, token_count: int = 0):  # REMOVED async
         """Increment usage counters"""
         try:
             month_year = datetime.now().strftime("%Y-%m")
             
-            # Get current usage
-            usage = await self.get_user_usage(user_id)
+            # Get current usage - REMOVED await
+            usage = self.get_user_usage(user_id)
             
             # Increment counts
             update_data = {
@@ -274,14 +258,13 @@ class SupabaseService:
                 'total_token_count': usage['total_token_count'] + token_count
             }
             
-            # CHANGED TABLE NAME
             self.client.table('user_usage').update(update_data).eq('user_id', user_id).eq('month_year', month_year).execute()
             
         except Exception as e:
             print(f"Failed to increment usage: {e}")
 
     # ==================== Subscription Management ====================
-    async def create_subscription(self, subscription_data: Dict) -> Dict:
+    def create_subscription(self, subscription_data: Dict) -> Dict:  # REMOVED async
         """Create a new subscription record"""
         try:
             response = self.client.table('subscriptions').insert(subscription_data).execute()
@@ -300,7 +283,7 @@ class SupabaseService:
                 detail=f"Subscription error: {str(e)}"
             )
 
-    async def update_subscription(self, razorpay_subscription_id: str, update_data: Dict) -> Dict:
+    def update_subscription(self, razorpay_subscription_id: str, update_data: Dict) -> Dict:  # REMOVED async
         """Update subscription status"""
         try:
             response = self.client.table('subscriptions').update(update_data).eq('razorpay_subscription_id', razorpay_subscription_id).execute()
@@ -319,7 +302,7 @@ class SupabaseService:
                 detail=f"Subscription error: {str(e)}"
             )
 
-    async def get_active_subscription(self, user_id: str) -> Optional[Dict]:
+    def get_active_subscription(self, user_id: str) -> Optional[Dict]:  # REMOVED async
         """Get user's active subscription"""
         try:
             response = self.client.table('subscriptions').select('*').eq('user_id', user_id).eq('status', 'active').execute()
@@ -333,7 +316,7 @@ class SupabaseService:
             )
 
     # ==================== Chat Management ====================
-    async def create_chat_session(self, session_data: Dict) -> Dict:
+    def create_chat_session(self, session_data: Dict) -> Dict:  # REMOVED async
         """Create a new chat session"""
         try:
             response = self.client.table('chat_sessions').insert(session_data).execute()
@@ -352,7 +335,7 @@ class SupabaseService:
                 detail=f"Chat error: {str(e)}"
             )
 
-    async def get_chat_sessions(self, user_id: str, limit: int = 50) -> List[Dict]:
+    def get_chat_sessions(self, user_id: str, limit: int = 50) -> List[Dict]:  # REMOVED async
         """Get user's chat sessions"""
         try:
             response = self.client.table('chat_sessions').select('*').eq('user_id', user_id).order('updated_at', desc=True).limit(limit).execute()
@@ -365,7 +348,7 @@ class SupabaseService:
                 detail=f"Failed to get chat sessions: {str(e)}"
             )
 
-    async def update_chat_session(self, session_id: str, update_data: Dict):
+    def update_chat_session(self, session_id: str, update_data: Dict):  # REMOVED async
         """Update chat session"""
         try:
             self.client.table('chat_sessions').update(update_data).eq('id', session_id).execute()
@@ -376,7 +359,7 @@ class SupabaseService:
                 detail=f"Failed to update session: {str(e)}"
             )
 
-    async def delete_chat_session(self, session_id: str):
+    def delete_chat_session(self, session_id: str):  # REMOVED async
         """Delete a chat session and its messages"""
         try:
             # Messages will be cascade deleted
@@ -388,7 +371,7 @@ class SupabaseService:
                 detail=f"Failed to delete session: {str(e)}"
             )
 
-    async def create_chat_message(self, message_data: Dict) -> Dict:
+    def create_chat_message(self, message_data: Dict) -> Dict:  # REMOVED async
         """Create a new chat message"""
         try:
             response = self.client.table('chat_messages').insert(message_data).execute()
@@ -410,7 +393,7 @@ class SupabaseService:
                 detail=f"Failed to create message: {str(e)}"
             )
 
-    async def get_chat_messages(self, session_id: str) -> List[Dict]:
+    def get_chat_messages(self, session_id: str) -> List[Dict]:  # REMOVED async
         """Get messages for a chat session"""
         try:
             response = self.client.table('chat_messages').select('*').eq('session_id', session_id).order('created_at', desc=False).execute()
@@ -424,7 +407,7 @@ class SupabaseService:
             )
 
     # ==================== Payment Transactions ====================
-    async def create_payment_transaction(self, transaction_data: Dict) -> Dict:
+    def create_payment_transaction(self, transaction_data: Dict) -> Dict:  # REMOVED async
         """Record a payment transaction"""
         try:
             response = self.client.table('payment_transactions').insert(transaction_data).execute()
@@ -443,7 +426,7 @@ class SupabaseService:
                 detail=f"Transaction error: {str(e)}"
             )
 
-    async def get_payment_transactions(self, user_id: str) -> List[Dict]:
+    def get_payment_transactions(self, user_id: str) -> List[Dict]:  # REMOVED async
         """Get user's payment history"""
         try:
             response = self.client.table('payment_transactions').select('*').eq('user_id', user_id).order('created_at', desc=True).execute()
@@ -456,7 +439,7 @@ class SupabaseService:
                 detail=f"Failed to get transactions: {str(e)}"
             )
             
-    async def create_security_event(self, event_data: Dict) -> Dict:
+    def create_security_event(self, event_data: Dict) -> Dict:  # REMOVED async
         """Log a security event"""
         try:
             response = self.client.table('security_events').insert(event_data).execute()
@@ -475,7 +458,7 @@ class SupabaseService:
                 detail=f"Security event error: {str(e)}"
             )
 
-    async def get_user_security_events(self, user_id: str, limit: int = 50) -> List[Dict]:
+    def get_user_security_events(self, user_id: str, limit: int = 50) -> List[Dict]:  # REMOVED async
         """Get user's security events"""
         try:
             response = self.client.table('security_events')\
@@ -493,14 +476,13 @@ class SupabaseService:
                 detail=f"Failed to get security events: {str(e)}"
             )
 
-    async def check_email_exists(self, email: str) -> bool:
+    def check_email_exists(self, email: str) -> bool:  # REMOVED async
         """Check if email exists"""
         try:
             response = self.client.table('users').select('id').eq('email', email).execute()
             return len(response.data) > 0
         except:
             return False
-
 
 # Create singleton instance
 db = SupabaseService()

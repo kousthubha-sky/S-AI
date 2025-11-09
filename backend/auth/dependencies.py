@@ -1,3 +1,4 @@
+# auth/dependencies.py
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional
@@ -106,7 +107,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
         # Ensure user exists in Supabase database
         user_id = payload.get("sub")
         if user_id:
-            ensure_user_in_database(payload)
+            await ensure_user_in_database(payload)  # FIX: Added await
         
         return payload
         
@@ -131,9 +132,8 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
             detail=f"Token verification failed: {str(e)}"
         )
 
-# In auth/dependencies.py - UPDATE ensure_user_in_database:
-
-async def ensure_user_in_database(payload: dict):
+# FIX: Make this function synchronous since db calls are synchronous
+def ensure_user_in_database(payload: dict):  # REMOVED async
     """
     Ensure user exists in Supabase database, create if not exists
     """
@@ -184,7 +184,7 @@ def has_permissions(required_permissions: List[str]):
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail=f"Permission '{permission}' required"
                     )
-            return func(*args, payload=payload, **kwargs)
+            return await func(*args, payload=payload, **kwargs)  # FIX: Added await
         return wrapper
     return decorator
 
@@ -200,7 +200,7 @@ async def get_user_id(payload: dict = Depends(verify_token)) -> str:
         )
     
     # Ensure user exists in database
-    ensure_user_in_database(payload)
+    ensure_user_in_database(payload)  # FIX: Removed await since function is now sync
     
     return user_id
 
@@ -225,7 +225,7 @@ async def get_current_user(payload: dict = Depends(verify_token)) -> dict:
         user_data = db.get_user_by_auth0_id(user_id)
         if not user_data:
             # Create user if doesn't exist
-            user_data = ensure_user_in_database(payload)
+            user_data = ensure_user_in_database(payload)  # FIX: Removed await
         
         return user_data
         
@@ -273,6 +273,6 @@ def require_subscription(tier: str = "pro"):
                     detail=f"{tier.capitalize()} subscription required"
                 )
             
-            return func(*args, payload=payload, **kwargs)
+            return await func(*args, payload=payload, **kwargs)  # FIX: Added await
         return wrapper
     return decorator
