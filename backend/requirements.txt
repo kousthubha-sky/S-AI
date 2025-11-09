@@ -13,7 +13,7 @@ passlib[bcrypt]
 websockets>=10.0
 slowapi==0.1.9
 bleach
-redis
+redis[async]
 python-jose[cryptography]
 cryptography
 gunicorn 

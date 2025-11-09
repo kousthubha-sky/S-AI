@@ -19,7 +19,7 @@ async def get_user_usage(user_id: str) -> UserUsage:
         print(f"🔍 Getting usage for user: {user_id}")
         
         # Get user from database
-        user = await db.get_user_by_auth0_id(user_id)
+        user =  db.get_user_by_auth0_id(user_id)
         
         if not user:
             print(f"⚠️ User not found, returning default free tier")
@@ -36,11 +36,11 @@ async def get_user_usage(user_id: str) -> UserUsage:
        
         
         # Get usage statistics from user_usage table
-        usage_data = await db.get_user_usage(user['id'])
+        usage_data =  db.get_user_usage(user['id'])
        
         
         # Get active subscription from subscriptions table
-        subscription = await db.get_active_subscription(user['id'])
+        subscription =  db.get_active_subscription(user['id'])
         
         
         # ✅ FIX: Determine subscription status with proper validation
@@ -74,7 +74,7 @@ async def get_user_usage(user_id: str) -> UserUsage:
                     else:
                         print(f"⚠️ Subscription expired on {subscription_end_date}")
                         # Subscription expired - update user to free tier
-                        await db.update_user(user['auth0_id'], {
+                        db.update_user(user['auth0_id'], {
                             'subscription_tier': 'free',
                             'is_paid': False,
                             'subscription_end_date': None
@@ -139,7 +139,7 @@ async def get_user_usage(user_id: str) -> UserUsage:
 async def check_message_limit(user_id: str) -> bool:
     """Check if user has reached their daily message limit"""
     try:
-        usage = await get_user_usage(user_id)
+        usage =  get_user_usage(user_id)
         
         # Pro users have unlimited messages
         if usage.subscription_tier in ['pro', 'basic']:
@@ -157,10 +157,10 @@ async def increment_message_count(user_id: str, token_count: int = 0):
     """Increment user's message count"""
     try:
         # Get user
-        user = await db.get_user_by_auth0_id(user_id)
+        user =  db.get_user_by_auth0_id(user_id)
         
         if user:
-            await db.increment_usage(user['id'], message_count=1, token_count=token_count)
+             db.increment_usage(user['id'], message_count=1, token_count=token_count)
         
     except Exception as e:
         print(f"Error incrementing message count: {e}")
@@ -168,7 +168,7 @@ async def increment_message_count(user_id: str, token_count: int = 0):
 async def get_next_reset_time(user_id: str) -> datetime:
     """Get the next reset time for user's daily limit"""
     try:
-        usage = await get_user_usage(user_id)
+        usage =  get_user_usage(user_id)
         
         if usage.last_reset_date:
             next_reset = usage.last_reset_date + timedelta(days=1)
@@ -185,11 +185,11 @@ async def update_user_subscription(user_id: str, tier: str, is_paid: bool, end_d
     """Update user subscription information"""
     try:
         # Get user
-        user = await db.get_user_by_auth0_id(user_id)
+        user =  db.get_user_by_auth0_id(user_id)
         
         if user:
             # Update user subscription status
-            await db.update_user(user_id, {
+             db.update_user(user_id, {
                 'subscription_tier': tier,
                 'subscription_end_date': end_date.isoformat() if end_date else None
             })
@@ -200,7 +200,7 @@ async def update_user_subscription(user_id: str, tier: str, is_paid: bool, end_d
 async def get_user_by_id(user_id: str):
     """Get user by auth0 ID"""
     try:
-        return await db.get_user_by_auth0_id(user_id)
+        return  db.get_user_by_auth0_id(user_id)
     except Exception as e:
         print(f"Error getting user: {e}")
         return None
@@ -208,7 +208,7 @@ async def get_user_by_id(user_id: str):
 async def create_user_if_not_exists(auth0_user_data: dict):
     """Create user if they don't exist"""
     try:
-        user = await db.get_user_by_auth0_id(auth0_user_data['sub'])
+        user =  db.get_user_by_auth0_id(auth0_user_data['sub'])
         
         if not user:
             user_data = {
@@ -218,7 +218,7 @@ async def create_user_if_not_exists(auth0_user_data: dict):
                 'picture': auth0_user_data.get('picture'),
                 'subscription_tier': 'free'
             }
-            user = await db.create_user(user_data)
+            user =  db.create_user(user_data)
         
         return user
         
@@ -242,7 +242,7 @@ async def sync_all_user_subscriptions():
             
             
             # Get active subscription
-            subscription = await db.get_active_subscription(user['id'])
+            subscription =  db.get_active_subscription(user['id'])
             
             if subscription and subscription.get('status') == 'active':
                 end_date_str = subscription.get('current_end')
@@ -256,7 +256,7 @@ async def sync_all_user_subscriptions():
                     
                     if end_date > now_aware:
                         # Update user table
-                        await db.update_user(user_id, {
+                        db.update_user(user_id, {
                             'subscription_tier': 'pro',
                             'is_paid': True,
                             'subscription_end_date': end_date_str

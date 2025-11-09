@@ -191,13 +191,13 @@ async def http_exception_handler(request: Request, exc: HTTPException):
         content={"detail": exc.detail, "status_code": exc.status_code}
     )
 
-# Health check endpoint
+# main.py - health check endpoint
 @app.get("/health", tags=["System"])
 async def health_check():
     """Check if the API is running and database is connected"""
     try:
-        # Test Supabase connection
-        await db.client.table('users').select('id').limit(1).execute()
+        # Test Supabase connection - REMOVE AWAIT
+        db.client.table('users').select('id').limit(1).execute()
         db_status = "connected"
     except Exception as e:
         print(f"Database connection error: {e}")

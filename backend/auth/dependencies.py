@@ -106,7 +106,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
         # Ensure user exists in Supabase database
         user_id = payload.get("sub")
         if user_id:
-            await ensure_user_in_database(payload)
+            ensure_user_in_database(payload)
         
         return payload
         
@@ -146,7 +146,7 @@ async def ensure_user_in_database(payload: dict):
             return
         
         # Check if user exists in database
-        existing_user = await db.get_user_by_auth0_id(user_id)
+        existing_user = db.get_user_by_auth0_id(user_id)
         if existing_user:
             return existing_user
         
@@ -162,7 +162,7 @@ async def ensure_user_in_database(payload: dict):
             "updated_at": datetime.now().isoformat()
         }
         
-        new_user = await db.create_user(user_data)
+        new_user = db.create_user(user_data)
         return new_user
         
     except Exception as e:
@@ -184,7 +184,7 @@ def has_permissions(required_permissions: List[str]):
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail=f"Permission '{permission}' required"
                     )
-            return await func(*args, payload=payload, **kwargs)
+            return func(*args, payload=payload, **kwargs)
         return wrapper
     return decorator
 
@@ -200,7 +200,7 @@ async def get_user_id(payload: dict = Depends(verify_token)) -> str:
         )
     
     # Ensure user exists in database
-    await ensure_user_in_database(payload)
+    ensure_user_in_database(payload)
     
     return user_id
 
@@ -222,10 +222,10 @@ async def get_current_user(payload: dict = Depends(verify_token)) -> dict:
                 detail="User ID not found in token"
             )
         
-        user_data = await db.get_user_by_auth0_id(user_id)
+        user_data = db.get_user_by_auth0_id(user_id)
         if not user_data:
             # Create user if doesn't exist
-            user_data = await ensure_user_in_database(payload)
+            user_data = ensure_user_in_database(payload)
         
         return user_data
         
@@ -245,7 +245,7 @@ def require_subscription(tier: str = "pro"):
             user_id = payload.get("sub")
             
             # Get user from database to check subscription
-            user_data = await db.get_user_by_auth0_id(user_id)
+            user_data = db.get_user_by_auth0_id(user_id)
             if not user_data:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -273,6 +273,6 @@ def require_subscription(tier: str = "pro"):
                     detail=f"{tier.capitalize()} subscription required"
                 )
             
-            return await func(*args, payload=payload, **kwargs)
+            return func(*args, payload=payload, **kwargs)
         return wrapper
     return decorator
