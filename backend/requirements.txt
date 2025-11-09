@@ -6,7 +6,7 @@ supabase
 razorpay
 redis[async]
 python-dotenv
-PyJWT[crypto]
+python-jose[cryptography]==3.3.0
 python-multipart
 httpx
 passlib[bcrypt]

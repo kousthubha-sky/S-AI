@@ -3,13 +3,13 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from typing import List, Optional
 from functools import wraps
-import jwt
-from jwt import PyJWTError
 import httpx
 from functools import lru_cache
 import os
 from datetime import datetime
-from jose import jwt, JWTError
+
+# USE ONLY JOSE - remove pyjwt imports
+from jose import jwt, JWTError, ExpiredSignatureError
 
 # Import Supabase database service
 from services.supabase_database import db
@@ -41,7 +41,7 @@ def get_rsa_key(token: str):
     try:
         jwks = get_jwks()
         unverified_header = jwt.get_unverified_header(token)
-    except PyJWTError:
+    except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token header"
@@ -92,13 +92,10 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
         
         rsa_key = get_rsa_key(token)
         
-        # Convert RSA key to PEM format for PyJWT
-        from jwt.algorithms import RSAAlgorithm
-        public_key = RSAAlgorithm.from_jwk(rsa_key)
-        
+        # Use jose.jwt.decode with the RSA key directly
         payload = jwt.decode(
             token,
-            public_key,
+            rsa_key,  # jose can use the key directly
             algorithms=["RS256"],
             audience=auth0_audience,
             issuer=f"https://{auth0_domain}/"
@@ -107,24 +104,19 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
         # Ensure user exists in Supabase database
         user_id = payload.get("sub")
         if user_id:
-            await ensure_user_in_database(payload)  # FIX: Added await
+            ensure_user_in_database(payload)
         
         return payload
         
-    except jwt.ExpiredSignatureError:
+    except ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Token has expired"
         )
-    except jwt.InvalidTokenError as e:
+    except JWTError as e:  # FIXED: Use JWTError from jose
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Invalid token: {str(e)}"
-        )
-    except PyJWTError as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=f"JWT error: {str(e)}"
         )
     except Exception as e:
         raise HTTPException(
@@ -132,8 +124,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
             detail=f"Token verification failed: {str(e)}"
         )
 
-# FIX: Make this function synchronous since db calls are synchronous
-def ensure_user_in_database(payload: dict):  # REMOVED async
+def ensure_user_in_database(payload: dict):
     """
     Ensure user exists in Supabase database, create if not exists
     """
@@ -184,7 +175,7 @@ def has_permissions(required_permissions: List[str]):
                         status_code=status.HTTP_403_FORBIDDEN,
                         detail=f"Permission '{permission}' required"
                     )
-            return await func(*args, payload=payload, **kwargs)  # FIX: Added await
+            return await func(*args, payload=payload, **kwargs)
         return wrapper
     return decorator
 
@@ -200,7 +191,7 @@ async def get_user_id(payload: dict = Depends(verify_token)) -> str:
         )
     
     # Ensure user exists in database
-    ensure_user_in_database(payload)  # FIX: Removed await since function is now sync
+    ensure_user_in_database(payload)
     
     return user_id
 
@@ -225,7 +216,7 @@ async def get_current_user(payload: dict = Depends(verify_token)) -> dict:
         user_data = db.get_user_by_auth0_id(user_id)
         if not user_data:
             # Create user if doesn't exist
-            user_data = ensure_user_in_database(payload)  # FIX: Removed await
+            user_data = ensure_user_in_database(payload)
         
         return user_data
         
@@ -273,6 +264,6 @@ def require_subscription(tier: str = "pro"):
                     detail=f"{tier.capitalize()} subscription required"
                 )
             
-            return await func(*args, payload=payload, **kwargs)  # FIX: Added await
+            return await func(*args, payload=payload, **kwargs)
         return wrapper
     return decorator
