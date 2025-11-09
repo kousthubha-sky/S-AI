@@ -965,156 +965,193 @@ app.include_router(chat_router)
 app.include_router(auth_actions_router)
 
 # Chat history endpoints
-@app.get("/api/chat/sessions", tags=["Chat History"])
-async def get_chat_sessions(payload: dict = Depends(verify_token)):
-    """Get user's chat sessions - WITH REDIS CACHING"""
-    user_id = payload.get("sub")
-    
-    try:
-        # ✅ Try to get from cache first
-        cached_sessions = await redis_cache.get_user_sessions(user_id)
-        await redis_cache.cache_user_sessions(user_id, sessions, ttl=1800)
-        if cached_sessions:
-            
-            return cached_sessions
-        
-        print(f"⚠️ Cache MISS: Fetching from database for {user_id[:8]}...")
-        
-        # Get user from database
-        user = await db.get_user_by_auth0_id(user_id)
-        if user:
-            # Get chat sessions from database
-            sessions = await db.get_chat_sessions(user['id'])
-            
-            # ✅ Cache the results for 30 minutes
-            await redis_cache.cache_user_sessions(user_id, sessions, ttl=1800)
-            
-            return sessions
-        return []
-        
-    except Exception as e:
-        print(f"Error fetching chat sessions: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch chat sessions: {str(e)}"
-        )
-        
-@app.get("/api/chat/sessions/{session_id}/messages", tags=["Chat History"])
-async def get_chat_messages(session_id: str, payload: dict = Depends(verify_token)):
-    """Get messages for a specific chat session - WITH REDIS CACHING"""
-    user_id = payload.get("sub")
-    
-    try:
-        # ✅ Try to get from cache first
-        cached_messages = await redis_cache.get_messages(session_id)
-        await redis_cache.cache_messages(session_id, messages, ttl=3600)
-        
-        if cached_messages:
-            print(f"✅ Cache HIT: Messages for session {session_id[:8]}...")
-            return cached_messages
-        
-        
-        # Get chat messages from database
-        messages = await db.get_chat_messages(session_id)
-        
-        # ✅ Cache the messages for 1 hour
-        await redis_cache.cache_messages(session_id, messages, ttl=3600)
-        
-        return messages
-        
-    except Exception as e:
-        print(f"Error fetching chat messages: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to fetch chat messages: {str(e)}"
-        )
+# web/chat.py - FIXED VERSION (remove all await from db calls)
+from fastapi import APIRouter, Depends, HTTPException, status
+from auth.dependencies import verify_token
+from services.supabase_database import db
+from datetime import datetime
+from typing import Dict, Optional
 
-# ADD new endpoint to save messages with cache
-@app.post("/api/chat/sessions/{session_id}/messages", tags=["Chat History"])
-async def save_message(
-    session_id: str,
-    message_data: dict,
-    payload: dict = Depends(verify_token)
-):
-    """Save a message to a session - UPDATES CACHE"""
-    user_id = payload.get("sub")
-    
-    try:
-        # Save to database first
-        saved_message = await db.save_chat_message(
-            session_id=session_id,
-            role=message_data.get("role"),
-            content=message_data.get("content"),
-            model=message_data.get("model"),
-            tokens=message_data.get("tokens")
-        )
-        
-        # ✅ Update cache immediately
-        await redis_cache.append_message(session_id, saved_message)
-        
-        # ✅ Invalidate user sessions cache (since it might need updating)
-        await redis_cache.invalidate_user_sessions(user_id)
-        
-        return saved_message
-        
-    except Exception as e:
-        print(f"Error saving message: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save message: {str(e)}"
-        )
+router = APIRouter()
 
-# ADD new endpoint to create session with cache
-@app.post("/api/chat/sessions", tags=["Chat History"])
+@router.post("/api/chat/sessions")
 async def create_chat_session(
-    session_data: dict,
+    session_data: Dict,
     payload: dict = Depends(verify_token)
 ):
-    """Create a new chat session - UPDATES CACHE"""
-    user_id = payload.get("sub")
-    
+    """Create a new chat session"""
     try:
-        user = await db.get_user_by_auth0_id(user_id)
+        user_id = payload.get("sub")
+        
+        # ✅ NO AWAIT - db methods are synchronous
+        user = db.get_user_by_auth0_id(user_id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
         
-        # Create session in database
-        new_session = await db.create_chat_session(
-            user_id=user['id'],
-            title=session_data.get("title", "New Chat")
-        )
+        new_session = {
+            'user_id': user['id'],
+            'title': session_data.get('title', 'New Chat'),
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }
         
-        # ✅ Invalidate user sessions cache to force refresh
-        await redis_cache.invalidate_user_sessions(user_id)
+        print(f"Creating chat session: {new_session}")
         
-        return new_session
+        # ✅ NO AWAIT
+        session = db.create_chat_session(new_session)
         
+        print(f"Chat session created: {session}")
+        
+        return session
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error creating session: {e}")
+        print(f"Error creating chat session: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create session: {str(e)}"
+            detail=f"Failed to create chat session: {str(e)}"
         )
 
-# ADD new endpoint to delete session with cache
-@app.delete("/api/chat/sessions/{session_id}", tags=["Chat History"])
+@router.get("/api/chat/sessions")
+async def get_chat_sessions(payload: dict = Depends(verify_token)):
+    """Get user's chat sessions"""
+    try:
+        user_id = payload.get("sub")
+        
+        # ✅ NO AWAIT
+        user = db.get_user_by_auth0_id(user_id)
+        if not user:
+            return []
+        
+        print(f"Fetching chat sessions for user: {user['id']}")
+        
+        # ✅ NO AWAIT
+        sessions = db.get_chat_sessions(user['id'])
+        
+        print(f"Found {len(sessions)} chat sessions")
+        
+        return sessions
+        
+    except Exception as e:
+        print(f"Error fetching chat sessions: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch chat sessions: {str(e)}"
+        )
+
+@router.get("/api/chat/sessions/{session_id}/messages")
+async def get_chat_messages(
+    session_id: str,
+    payload: dict = Depends(verify_token)
+):
+    """Get messages for a specific chat session"""
+    try:
+        print(f"Fetching messages for session: {session_id}")
+        
+        # ✅ NO AWAIT
+        messages = db.get_chat_messages(session_id)
+        
+        print(f"Found {len(messages)} messages")
+        
+        return messages
+        
+    except Exception as e:
+        print(f"Error fetching chat messages: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch chat messages: {str(e)}"
+        )
+
+@router.post("/api/chat/sessions/{session_id}/messages")
+async def create_chat_message(
+    session_id: str,
+    message_data: Dict,
+    payload: dict = Depends(verify_token)
+):
+    """Create a new chat message with optional images"""
+    try:
+        print(f"Creating message for session {session_id}: {message_data}")
+        
+        # Extract and validate images
+        images = message_data.get('images', [])
+        if images and not isinstance(images, list):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Images must be an array"
+            )
+        
+        for img in images:
+            if not isinstance(img, dict) or 'url' not in img or 'type' not in img:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Each image must have 'url' and 'type' fields"
+                )
+        
+        new_message = {
+            'session_id': session_id,
+            'role': message_data.get('role'),
+            'content': message_data.get('content'),
+            'model_used': message_data.get('model_used'),
+            'tokens_used': message_data.get('tokens_used'),
+            'created_at': datetime.now().isoformat(),
+            'images': images
+        }
+        
+        # ✅ NO AWAIT
+        message = db.create_chat_message(new_message)
+        
+        print(f"Message created: {message['id']} with {len(images)} images")
+        
+        return message
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating chat message: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create message: {str(e)}"
+        )
+
+@router.patch("/api/chat/sessions/{session_id}")
+async def update_chat_session(
+    session_id: str,
+    update_data: Dict,
+    payload: dict = Depends(verify_token)
+):
+    """Update a chat session (e.g., title)"""
+    try:
+        print(f"Updating session {session_id}: {update_data}")
+        
+        update_data['updated_at'] = datetime.now().isoformat()
+        
+        # ✅ NO AWAIT
+        db.update_chat_session(session_id, update_data)
+        
+        return {"status": "success", "message": "Session updated"}
+        
+    except Exception as e:
+        print(f"Error updating chat session: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update session: {str(e)}"
+        )
+
+@router.delete("/api/chat/sessions/{session_id}")
 async def delete_chat_session(
     session_id: str,
     payload: dict = Depends(verify_token)
 ):
-    """Delete a chat session - INVALIDATES CACHE"""
-    user_id = payload.get("sub")
-    
+    """Delete a chat session"""
     try:
-        # Delete from database
-        await db.delete_chat_session(session_id)
+        print(f"Deleting session {session_id}")
         
-        # ✅ FIXED: Use the singleton instance instead of static methods
-        await redis_cache.invalidate_session(session_id)
-        await redis_cache.invalidate_user_sessions(user_id)
+        # ✅ NO AWAIT
+        db.delete_chat_session(session_id)
         
         return {"status": "success", "message": "Session deleted"}
         
@@ -1123,36 +1160,6 @@ async def delete_chat_session(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to delete session: {str(e)}"
-        )
-
-# ADD new endpoint to update session title with cache
-@app.patch("/api/chat/sessions/{session_id}", tags=["Chat History"])
-async def update_session_title(
-    session_id: str,
-    update_data: dict,
-    payload: dict = Depends(verify_token)
-):
-    """Update session title - UPDATES CACHE"""
-    user_id = payload.get("sub")
-    
-    try:
-        # Update in database
-        updated_session = await db.update_chat_session(
-            session_id=session_id,
-            title=update_data.get("title")
-        )
-        
-        # ✅ Update cache
-        await redis_cache.cache_session(session_id, updated_session)
-        await redis_cache.invalidate_user_sessions(user_id)
-        
-        return updated_session
-        
-    except Exception as e:
-        print(f"Error updating session: {e}")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update session: {str(e)}"
         )
 
 # ADD cache stats endpoint for monitoring

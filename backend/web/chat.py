@@ -1,4 +1,4 @@
-# web/chat.py
+# web/chat.py - FIXED VERSION (remove all await from db calls)
 from fastapi import APIRouter, Depends, HTTPException, status
 from auth.dependencies import verify_token
 from services.supabase_database import db
@@ -16,17 +16,16 @@ async def create_chat_session(
     try:
         user_id = payload.get("sub")
         
-        # Get user from database
-        user = await db.get_user_by_auth0_id(user_id)
+        # ✅ NO AWAIT - db methods are synchronous
+        user = db.get_user_by_auth0_id(user_id)
         if not user:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
         
-        # Create session with proper data
         new_session = {
-            'user_id': user['id'],  # Use database user ID, not auth0_id
+            'user_id': user['id'],
             'title': session_data.get('title', 'New Chat'),
             'created_at': datetime.now().isoformat(),
             'updated_at': datetime.now().isoformat()
@@ -34,7 +33,8 @@ async def create_chat_session(
         
         print(f"Creating chat session: {new_session}")
         
-        session = await db.create_chat_session(new_session)
+        # ✅ NO AWAIT
+        session = db.create_chat_session(new_session)
         
         print(f"Chat session created: {session}")
         
@@ -55,15 +55,15 @@ async def get_chat_sessions(payload: dict = Depends(verify_token)):
     try:
         user_id = payload.get("sub")
         
-        # Get user from database
-        user = await db.get_user_by_auth0_id(user_id)
+        # ✅ NO AWAIT
+        user = db.get_user_by_auth0_id(user_id)
         if not user:
-            # Return empty array if user doesn't exist yet
             return []
         
         print(f"Fetching chat sessions for user: {user['id']}")
         
-        sessions = await db.get_chat_sessions(user['id'])
+        # ✅ NO AWAIT
+        sessions = db.get_chat_sessions(user['id'])
         
         print(f"Found {len(sessions)} chat sessions")
         
@@ -85,7 +85,8 @@ async def get_chat_messages(
     try:
         print(f"Fetching messages for session: {session_id}")
         
-        messages = await db.get_chat_messages(session_id)
+        # ✅ NO AWAIT
+        messages = db.get_chat_messages(session_id)
         
         print(f"Found {len(messages)} messages")
         
@@ -104,9 +105,24 @@ async def create_chat_message(
     message_data: Dict,
     payload: dict = Depends(verify_token)
 ):
-    """Create a new chat message"""
+    """Create a new chat message with optional images"""
     try:
         print(f"Creating message for session {session_id}: {message_data}")
+        
+        # Extract and validate images
+        images = message_data.get('images', [])
+        if images and not isinstance(images, list):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Images must be an array"
+            )
+        
+        for img in images:
+            if not isinstance(img, dict) or 'url' not in img or 'type' not in img:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Each image must have 'url' and 'type' fields"
+                )
         
         new_message = {
             'session_id': session_id,
@@ -114,15 +130,19 @@ async def create_chat_message(
             'content': message_data.get('content'),
             'model_used': message_data.get('model_used'),
             'tokens_used': message_data.get('tokens_used'),
-            'created_at': datetime.now().isoformat()
+            'created_at': datetime.now().isoformat(),
+            'images': images
         }
         
-        message = await db.create_chat_message(new_message)
+        # ✅ NO AWAIT
+        message = db.create_chat_message(new_message)
         
-        print(f"Message created: {message['id']}")
+        print(f"Message created: {message['id']} with {len(images)} images")
         
         return message
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error creating chat message: {str(e)}")
         raise HTTPException(
@@ -140,10 +160,10 @@ async def update_chat_session(
     try:
         print(f"Updating session {session_id}: {update_data}")
         
-        # Add updated_at timestamp
         update_data['updated_at'] = datetime.now().isoformat()
         
-        await db.update_chat_session(session_id, update_data)
+        # ✅ NO AWAIT
+        db.update_chat_session(session_id, update_data)
         
         return {"status": "success", "message": "Session updated"}
         
@@ -154,53 +174,23 @@ async def update_chat_session(
             detail=f"Failed to update session: {str(e)}"
         )
 
-@router.post("/api/chat/sessions/{session_id}/messages")
-async def create_chat_message(
+@router.delete("/api/chat/sessions/{session_id}")
+async def delete_chat_session(
     session_id: str,
-    message_data: Dict,
     payload: dict = Depends(verify_token)
 ):
-    """Create a new chat message with optional images"""
+    """Delete a chat session"""
     try:
-        print(f"Creating message for session {session_id}: {message_data}")
+        print(f"Deleting session {session_id}")
         
-        # ✅ NEW: Extract and validate images
-        images = message_data.get('images', [])
-        if images and not isinstance(images, list):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Images must be an array"
-            )
+        # ✅ NO AWAIT
+        db.delete_chat_session(session_id)
         
-        # Validate image structure
-        for img in images:
-            if not isinstance(img, dict) or 'url' not in img or 'type' not in img:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Each image must have 'url' and 'type' fields"
-                )
+        return {"status": "success", "message": "Session deleted"}
         
-        new_message = {
-            'session_id': session_id,
-            'role': message_data.get('role'),
-            'content': message_data.get('content'),
-            'model_used': message_data.get('model_used'),
-            'tokens_used': message_data.get('tokens_used'),
-            'created_at': datetime.now().isoformat(),
-            'images': images  # ✅ Include images
-        }
-        
-        message = await db.create_chat_message(new_message)
-        
-        print(f"Message created: {message['id']} with {len(images)} images")
-        
-        return message
-        
-    except HTTPException:
-        raise
     except Exception as e:
-        print(f"Error creating chat message: {str(e)}")
+        print(f"Error deleting session: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create message: {str(e)}"
+            detail=f"Failed to delete session: {str(e)}"
         )
