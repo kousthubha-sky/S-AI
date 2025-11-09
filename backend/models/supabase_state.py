@@ -1,25 +1,17 @@
-# models/supabase_state.py
-from datetime import datetime, timedelta
+# models/supabase_state.py - FIXED VERSION
+from datetime import datetime, timedelta, timezone
 from models.payment import UserUsage
-from typing import Optional
+from typing import Optional, Dict
 from fastapi import HTTPException, status
-from typing import Dict,  List
-import json
-
-# Import the Supabase database service
 from services.supabase_database import db
-
-# models/supabase_state.py - UPDATE THESE FUNCTIONS:
-
-# models/supabase_state.py - FIX THE DATETIME COMPARISON
 
 async def get_user_usage(user_id: str) -> UserUsage:
     """Get or create user usage record with reset logic"""
     try:
         print(f"🔍 Getting usage for user: {user_id}")
         
-        # Get user from database
-        user =  db.get_user_by_auth0_id(user_id)
+        # Get user from database (NO await)
+        user = db.get_user_by_auth0_id(user_id)
         
         if not user:
             print(f"⚠️ User not found, returning default free tier")
@@ -33,47 +25,34 @@ async def get_user_usage(user_id: str) -> UserUsage:
                 subscription_end_date=None
             )
         
-       
+        # Get usage statistics (NO await)
+        usage_data = db.get_user_usage(user['id'])
         
-        # Get usage statistics from user_usage table
-        usage_data =  db.get_user_usage(user['id'])
-       
+        # Get active subscription (NO await)
+        subscription = db.get_active_subscription(user['id'])
         
-        # Get active subscription from subscriptions table
-        subscription =  db.get_active_subscription(user['id'])
-        
-        
-        # ✅ FIX: Determine subscription status with proper validation
+        # Determine subscription status
         is_paid = False
         subscription_tier = user.get('subscription_tier', 'free')
         subscription_end_date = None
         
-        # Check subscription from subscriptions table
         if subscription and subscription.get('status') == 'active':
-            
             end_date_str = subscription.get('current_end')
             
             if end_date_str:
                 try:
                     subscription_end_date = datetime.fromisoformat(end_date_str)
-                    print(f"📅 Subscription end date: {subscription_end_date}")
-                    
-                    # ✅ FIX: Make both datetimes timezone-aware for comparison
-                    from datetime import timezone
                     now_aware = datetime.now(timezone.utc)
                     
-                    # If subscription_end_date is naive, make it aware
                     if subscription_end_date.tzinfo is None:
                         subscription_end_date = subscription_end_date.replace(tzinfo=timezone.utc)
                     
-                    # Check if subscription is still valid
                     if subscription_end_date > now_aware:
                         is_paid = True
                         subscription_tier = user.get('subscription_tier', 'pro')
                         print(f"✅ Subscription is valid and active")
                     else:
-                        print(f"⚠️ Subscription expired on {subscription_end_date}")
-                        # Subscription expired - update user to free tier
+                        print(f"⚠️ Subscription expired")
                         db.update_user(user['auth0_id'], {
                             'subscription_tier': 'free',
                             'is_paid': False,
@@ -83,17 +62,15 @@ async def get_user_usage(user_id: str) -> UserUsage:
                         is_paid = False
                 except ValueError as e:
                     print(f"❌ Error parsing date: {e}")
-        else:
-            print(f"ℹ️ No active subscription found")
         
-        # ✅ Also check user table subscription status (backup check)
+        # Backup check from user table
         if not is_paid and user.get('is_paid'):
             user_end_date_str = user.get('subscription_end_date')
             if user_end_date_str:
                 try:
                     user_end_date = datetime.fromisoformat(user_end_date_str)
-                    # Make timezone-aware comparison
                     now_aware = datetime.now(timezone.utc)
+                    
                     if user_end_date.tzinfo is None:
                         user_end_date = user_end_date.replace(tzinfo=timezone.utc)
                     
@@ -101,7 +78,6 @@ async def get_user_usage(user_id: str) -> UserUsage:
                         is_paid = True
                         subscription_tier = user.get('subscription_tier', 'pro')
                         subscription_end_date = user_end_date
-                        print(f"✅ Using subscription status from users table")
                 except ValueError:
                     pass
         
@@ -117,7 +93,6 @@ async def get_user_usage(user_id: str) -> UserUsage:
             subscription_end_date=subscription_end_date
         )
         
-        
         return result
         
     except Exception as e:
@@ -125,7 +100,6 @@ async def get_user_usage(user_id: str) -> UserUsage:
         import traceback
         traceback.print_exc()
         
-        # Return default free tier usage on error
         return UserUsage(
             user_id=user_id,
             prompt_count=0,
@@ -135,17 +109,15 @@ async def get_user_usage(user_id: str) -> UserUsage:
             subscription_tier='free',
             subscription_end_date=None
         )
-                        
+
 async def check_message_limit(user_id: str) -> bool:
     """Check if user has reached their daily message limit"""
     try:
-        usage =  get_user_usage(user_id)
+        usage = await get_user_usage(user_id)
         
-        # Pro users have unlimited messages
         if usage.subscription_tier in ['pro', 'basic']:
             return True
         
-        # Free users have a daily limit
         FREE_TIER_DAILY_LIMIT = 25
         return usage.daily_message_count < FREE_TIER_DAILY_LIMIT
         
@@ -156,11 +128,12 @@ async def check_message_limit(user_id: str) -> bool:
 async def increment_message_count(user_id: str, token_count: int = 0):
     """Increment user's message count"""
     try:
-        # Get user
-        user =  db.get_user_by_auth0_id(user_id)
+        # Get user (NO await)
+        user = db.get_user_by_auth0_id(user_id)
         
         if user:
-             db.increment_usage(user['id'], message_count=1, token_count=token_count)
+            # Increment usage (NO await)
+            db.increment_usage(user['id'], message_count=1, token_count=token_count)
         
     except Exception as e:
         print(f"Error incrementing message count: {e}")
@@ -168,7 +141,7 @@ async def increment_message_count(user_id: str, token_count: int = 0):
 async def get_next_reset_time(user_id: str) -> datetime:
     """Get the next reset time for user's daily limit"""
     try:
-        usage =  get_user_usage(user_id)
+        usage = await get_user_usage(user_id)
         
         if usage.last_reset_date:
             next_reset = usage.last_reset_date + timedelta(days=1)
@@ -184,13 +157,14 @@ async def get_next_reset_time(user_id: str) -> datetime:
 async def update_user_subscription(user_id: str, tier: str, is_paid: bool, end_date: datetime):
     """Update user subscription information"""
     try:
-        # Get user
-        user =  db.get_user_by_auth0_id(user_id)
+        # Get user (NO await)
+        user = db.get_user_by_auth0_id(user_id)
         
         if user:
-            # Update user subscription status
-             db.update_user(user_id, {
+            # Update user (NO await)
+            db.update_user(user_id, {
                 'subscription_tier': tier,
+                'is_paid': is_paid,
                 'subscription_end_date': end_date.isoformat() if end_date else None
             })
         
@@ -200,7 +174,8 @@ async def update_user_subscription(user_id: str, tier: str, is_paid: bool, end_d
 async def get_user_by_id(user_id: str):
     """Get user by auth0 ID"""
     try:
-        return  db.get_user_by_auth0_id(user_id)
+        # NO await
+        return db.get_user_by_auth0_id(user_id)
     except Exception as e:
         print(f"Error getting user: {e}")
         return None
@@ -208,134 +183,24 @@ async def get_user_by_id(user_id: str):
 async def create_user_if_not_exists(auth0_user_data: dict):
     """Create user if they don't exist"""
     try:
-        user =  db.get_user_by_auth0_id(auth0_user_data['sub'])
+        # NO await
+        user = db.get_user_by_auth0_id(auth0_user_data['sub'])
         
         if not user:
             user_data = {
                 'auth0_id': auth0_user_data['sub'],
                 'email': auth0_user_data.get('email', ''),
-                'name': auth0_user_data.get('name'),
+                'name': auth0_user_data.get('name', 'User'),
                 'picture': auth0_user_data.get('picture'),
                 'subscription_tier': 'free'
             }
-            user =  db.create_user(user_data)
+            # NO await
+            user = db.create_user(user_data)
         
         return user
         
     except Exception as e:
         print(f"Error creating user: {e}")
+        import traceback
+        traceback.print_exc()
         return None
-    
-# Add this function to your supabase_state.py
-
-# Add this function to your main.py or supabase_state.py
-
-async def sync_all_user_subscriptions():
-    """Sync subscription status for all users - run this once to fix data"""
-    try:
-        # Get all users
-        response = db.client.table('users').select('*').execute()
-        users = response.data
-        
-        for user in users:
-            user_id = user['auth0_id']
-            
-            
-            # Get active subscription
-            subscription =  db.get_active_subscription(user['id'])
-            
-            if subscription and subscription.get('status') == 'active':
-                end_date_str = subscription.get('current_end')
-                if end_date_str:
-                    from datetime import timezone
-                    end_date = datetime.fromisoformat(end_date_str)
-                    now_aware = datetime.now(timezone.utc)
-                    
-                    if end_date.tzinfo is None:
-                        end_date = end_date.replace(tzinfo=timezone.utc)
-                    
-                    if end_date > now_aware:
-                        # Update user table
-                        db.update_user(user_id, {
-                            'subscription_tier': 'pro',
-                            'is_paid': True,
-                            'subscription_end_date': end_date_str
-                        })
-                        
-                        # Update user_usage table
-                        month_year = datetime.now().strftime("%Y-%m")
-                        db.client.table('user_usage').update({
-                            'is_paid': True,
-                            'subscription_tier': 'pro',
-                            'subscription_end_date': end_date_str
-                        }).eq('user_id', user['id']).eq('month_year', month_year).execute()
-                        
-                        print(f"✅ Updated user {user_id} to pro tier")
-            
-        
-        
-    except Exception as e:
-        print(f"❌ Error syncing subscriptions: {e}")
-# backend/services/supabase_database.py
-# UPDATE the create_chat_message method to handle images
-
-async def create_chat_message(self, message_data: Dict) -> Dict:
-    """Create a new chat message with optional images"""
-    try:
-        # ✅ NEW: Handle images field
-        if 'images' in message_data and message_data['images']:
-            # Ensure images is a valid JSON array
-            if isinstance(message_data['images'], list):
-                message_data['images'] = json.dumps(message_data['images'])
-        else:
-            message_data['images'] = '[]'  # Empty array by default
-        
-        response = self.client.table('chat_messages').insert(message_data).execute()
-        
-        if not response.data:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create message"
-            )
-        
-        # Update session's updated_at
-        self.client.table('chat_sessions').update(
-            {'updated_at': datetime.now().isoformat()}
-        ).eq('id', message_data['session_id']).execute()
-        
-        return response.data[0]
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create message: {str(e)}"
-        )
-
-async def get_chat_messages(self, session_id: str) -> List[Dict]:
-    """Get messages for a chat session with images"""
-    try:
-        response = self.client.table('chat_messages')\
-            .select('*')\
-            .eq('session_id', session_id)\
-            .order('created_at', desc=False)\
-            .execute()
-        
-        # ✅ Parse images from JSON string to array
-        messages = response.data or []
-        for msg in messages:
-            if msg.get('images'):
-                try:
-                    if isinstance(msg['images'], str):
-                        msg['images'] = json.loads(msg['images'])
-                except:
-                    msg['images'] = []
-            else:
-                msg['images'] = []
-        
-        return messages
-        
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get messages: {str(e)}"
-        )

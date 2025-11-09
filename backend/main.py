@@ -293,32 +293,43 @@ async def get_usage(payload: dict = Depends(verify_token)):
     usage = await get_user_usage(user_id)  # This now uses Supabase
     return usage
 
-# Update create_user endpoint:
 @app.post("/api/users", tags=["User"])
 async def create_user(user_data: dict, payload: dict = Depends(verify_token)):
+    """Create a new user"""
     try:
         user_id = payload.get("sub")
         
         # ✅ Validate inputs
-        email = InputValidator.validate_email(user_data.get("email"))
-        name = InputValidator.sanitize_string(user_data.get("name", ""), max_length=100)
+        email = InputValidator.validate_email(user_data.get("email", ""))
+        name = InputValidator.sanitize_string(user_data.get("name", "User"), max_length=100)
         
         new_user = {
             "auth0_id": user_id,
             "email": email,
             "name": name,
-            "subscription_tier": "free"
+            "subscription_tier": "free",
+            "is_paid": False
         }
         
-        result = await db.create_user(new_user)
+        print(f"Creating user: {new_user}")
+        
+        # ✅ NO AWAIT - db methods are synchronous
+        result = db.create_user(new_user)
+        
+        print(f"✅ User created: {result}")
+        
         return result
         
     except HTTPException:
         raise
     except Exception as e:
+        print(f"❌ Error creating user: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to create user"  # ✅ Don't expose error details
+            detail="Failed to create user"
         )
 
 @app.get("/api/users/me", tags=["User"])
@@ -326,7 +337,9 @@ async def get_current_user(payload: dict = Depends(verify_token)):
     """Get current user data"""
     try:
         user_id = payload.get("sub")
-        user_data = await db.get_user_by_auth0_id(user_id)
+        
+        # ✅ NO AWAIT
+        user_data = db.get_user_by_auth0_id(user_id)
             
         if not user_data:
             # Create user if doesn't exist
@@ -335,6 +348,7 @@ async def get_current_user(payload: dict = Depends(verify_token)):
         return user_data
         
     except Exception as e:
+        print(f"Error getting user: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get user: {str(e)}"
@@ -365,27 +379,24 @@ async def create_subscription(
 
 # In main.py - UPDATE THE SUBSCRIPTION VERIFICATION ENDPOINT:
 
+# Also update the verify subscription endpoint
 @app.post("/api/subscription/verify", tags=["Subscription"])
 async def verify_subscription(
     verification: SubscriptionVerify, 
     payload: dict = Depends(verify_token)
 ):
     """Verify a subscription payment and activate user's subscription"""
-    user_id = payload.get("sub")  # Auth0 ID
-    
-    
+    user_id = payload.get("sub")
     
     try:
         # Verify payment with Razorpay
         if await payment_manager.verify_subscription_payment(verification):
             print(f"✅ Payment verified successfully")
             
-            # Get subscription details from Razorpay
+            # Get subscription details
             subscription_details = await payment_manager.get_subscription_details(
                 verification.razorpay_subscription_id
             )
-            
-            
             
             # Calculate subscription end date
             if subscription_details.get('current_end'):
@@ -393,35 +404,29 @@ async def verify_subscription(
             else:
                 end_date = datetime.now() + timedelta(days=30)
             
-            
-            
-            # Get user from database
-            user = await db.get_user_by_auth0_id(user_id)
+            # ✅ NO AWAIT - get user
+            user = db.get_user_by_auth0_id(user_id)
             
             if not user:
-                
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="User not found"
                 )
             
-            
-            
-            # ✅ FIX 1: Update user subscription in users table using auth0_id
-            update_result = await db.update_user(user_id, {
+            # ✅ NO AWAIT - update user
+            db.update_user(user_id, {
                 'subscription_tier': 'pro',
                 'subscription_end_date': end_date.isoformat(),
                 'is_paid': True,
                 'updated_at': datetime.now().isoformat()
             })
             
-            
-            # ✅ FIX 2: Create/Update subscription record in subscriptions table
+            # ✅ NO AWAIT - create subscription record
             subscription_data = {
-                'user_id': user['id'],  # Database user ID
+                'user_id': user['id'],
                 'razorpay_subscription_id': verification.razorpay_subscription_id,
                 'razorpay_plan_id': subscription_details.get('plan_id'),
-                'status': 'active',  # ✅ Ensure status is set to 'active'
+                'status': 'active',
                 'current_start': datetime.fromtimestamp(
                     subscription_details.get('current_start', 0)
                 ).isoformat() if subscription_details.get('current_start') else None,
@@ -433,10 +438,10 @@ async def verify_subscription(
                 'updated_at': datetime.now().isoformat()
             }
             
-            await db.create_subscription(subscription_data)
+            db.create_subscription(subscription_data)
             print(f"✅ Subscription record created")
             
-            # ✅ FIX 3: Update user_usage table
+            # Update user_usage table
             month_year = datetime.now().strftime("%Y-%m")
             usage_update = {
                 'is_paid': True,
@@ -445,16 +450,15 @@ async def verify_subscription(
                 'updated_at': datetime.now().isoformat()
             }
             
-            # Update usage tracking
             try:
-                await db.client.table('user_usage').update(usage_update).eq(
+                db.client.table('user_usage').update(usage_update).eq(
                     'user_id', user['id']
                 ).eq('month_year', month_year).execute()
                 print(f"✅ User usage updated")
             except Exception as usage_error:
-                print(f"⚠️ Usage update error (non-critical): {usage_error}")
+                print(f"⚠️ Usage update error: {usage_error}")
             
-            # ✅ FIX 4: Record payment transaction
+            # Record payment transaction
             payment_data = {
                 'user_id': user['id'],
                 'razorpay_payment_id': verification.razorpay_payment_id,
@@ -466,16 +470,16 @@ async def verify_subscription(
                 'created_at': datetime.now().isoformat()
             }
             
-            await db.create_payment_transaction(payment_data)
+            db.create_payment_transaction(payment_data)
             print(f"✅ Payment transaction recorded")
             
-            # ✅ FIX 5: Invalidate any caches (if using Redis)
+            # Invalidate caches
             try:
                 from services.redis_cache import redis_cache
                 await redis_cache.invalidate_user_sessions(user_id)
                 print(f"✅ Cache invalidated")
             except:
-                pass  # Redis might not be available
+                pass
             
             return {
                 "status": "success",
@@ -496,14 +500,15 @@ async def verify_subscription(
     except HTTPException:
         raise
     except Exception as e:
-        
+        print(f"❌ Subscription error: {str(e)}")
         import traceback
         traceback.print_exc()
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Subscription verification failed: {str(e)}"
         )
-
+        
 @app.get("/api/subscription/details/{subscription_id}", tags=["Subscription"])
 async def get_subscription_details(
     subscription_id: str,
