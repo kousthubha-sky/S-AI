@@ -4,19 +4,14 @@ import {
   Field,
   FieldDescription,
   FieldGroup,
-  FieldLabel,
   FieldSeparator,
 } from "~/components/ui/field"
-import { Input } from "~/components/ui/input"
 import { Link, Navigate } from "react-router"
-import routes from "~/routes"
 import { useAuth0 } from "@auth0/auth0-react"
+import { motion } from "framer-motion"
 import Orb from "./ui/background-orb"
 
-export function LoginForm({
-  className,
-  ...props
-}: React.ComponentProps<"div">) {
+export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const { loginWithRedirect, isAuthenticated } = useAuth0();
 
   if (isAuthenticated) {
@@ -28,64 +23,81 @@ export function LoginForm({
       await loginWithRedirect({
         authorizationParams: {
           redirect_uri: `${window.location.origin}/callback`,
-          prompt: 'login',
-          connection: 'Username-Password-Authentication' // Specify the database connection
+          prompt: "login",
+          connection: "Username-Password-Authentication",
         },
         appState: {
-          returnTo: '/dashboard',
-          type: 'login'
-        }
+          returnTo: "/dashboard",
+          type: "login",
+        },
       });
     } catch (error) {
-      console.error('Login error:', error);
+      console.error("Login error:", error);
     }
   };
 
-const handleGoogleLogin = async () => {
-  try {
-    await loginWithRedirect({
-      authorizationParams: {
-        connection: 'google-oauth2',
-        redirect_uri: `${window.location.origin}/callback`,
-        prompt: 'login'
-      },
-      appState: {
-        returnTo: '/dashboard',
-        type: 'login',
-        provider: 'google'
-      }
-    });
-  } catch (error) {
-    console.error('Google login error:', error);
-  }
-};
+  const handleGoogleLogin = async () => {
+    try {
+      await loginWithRedirect({
+        authorizationParams: {
+          connection: "google-oauth2",
+          redirect_uri: `${window.location.origin}/callback`,
+          prompt: "login",
+        },
+        appState: {
+          returnTo: "/dashboard",
+          type: "login",
+          provider: "google",
+        },
+      });
+    } catch (error) {
+      console.error("Google login error:", error);
+    }
+  };
 
+  const itemVariants = {
+    hidden: { opacity: 0, y: 20 },
+    visible: { opacity: 1, y: 0 },
+  };
+  
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      
+    <div className={cn("flex flex-col gap-6 relative", className)} {...props}>
+      <div className="absolute inset-0 -z-10 opacity-40">
+        <Orb />
+      </div>
+
       <FieldGroup>
-        <div className="flex flex-col items-center gap-1 text-center">
-          <h1 className="text-2xl text-white font-bold">Login to your account</h1>
-          <p className="text-muted-foreground text-sm text-balance">
+        <motion.div
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6 }}
+          className="flex flex-col items-center gap-1 text-center"
+        >
+          <h1 className="text-3xl font-bold text-white tracking-wide">
+            Login to Your Account
+          </h1>
+          <p className="text-sm text-gray-300">
             Choose your preferred login method
           </p>
-        </div>
-        
+        </motion.div>
+
         <Field>
-          <Button 
-            onClick={handleAuth0Login} 
-            className="w-full"
+          <Button
+            onClick={handleAuth0Login}
+            className="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white font-medium rounded-xl shadow-lg shadow-indigo-500/30 hover:scale-[1.02] transition-all duration-300"
           >
             Continue with Credentials
           </Button>
         </Field>
+
         <FieldSeparator>Or</FieldSeparator>
+
         <Field>
           <Button
             variant="outline"
             type="button"
-            className="flex w-full items-center gap-2   hover:bg-gray-100 text-white "
-            onClick={handleGoogleLogin} // Use the new function
+            onClick={handleGoogleLogin}
+            className="flex w-full items-center gap-2 justify-center bg-white/10 border border-white/20 text-white rounded-xl hover:bg-white/20 transition-all duration-300"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -111,14 +123,24 @@ const handleGoogleLogin = async () => {
             </svg>
             Login with Google
           </Button>
-          <FieldDescription className="text-center">
-            Don&apos;t have an account?{" "}
-            <Link to="/signup" className="underline underline-offset-4">
+
+          <FieldDescription className="text-center text-sm text-gray-300 mt-2">
+            Don’t have an account?{" "}
+            <Link to="/signup" className="text-indigo-400 hover:text-purple-400 underline underline-offset-4 transition-colors">
               Sign up
             </Link>
+            <motion.div
+            variants={itemVariants}
+            className="flex items-center justify-center gap-2 text-xs text-gray-400 mt-4"
+          >
+            <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
+              <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
+            </svg>
+            <span>Secured by Auth0</span>
+          </motion.div>
           </FieldDescription>
         </Field>
       </FieldGroup>
     </div>
-  )
+  );
 }
