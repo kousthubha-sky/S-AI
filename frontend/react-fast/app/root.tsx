@@ -27,6 +27,7 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
+// root.tsx - Updated Layout component
 export function Layout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
@@ -55,11 +56,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
         </div>
         
         {/* Content layer */}
-         <ToastProvider>
-          <div style={{ position: 'relative', zIndex: 1 }}>
-            {children}
-          </div>
-        </ToastProvider>
+        <div style={{ position: 'relative', zIndex: 1 }}>
+          {children}
+        </div>
         
         <ScrollRestoration />
         <Scripts />
@@ -68,8 +67,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-
-
+// Updated App component
 export default function App() {
   return (
     <AuthProvider>
