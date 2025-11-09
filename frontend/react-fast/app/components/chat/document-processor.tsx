@@ -16,7 +16,6 @@ export function DocumentProcessor({ onDocumentProcessed }: DocumentProcessorProp
   const [subject, setSubject] = useState("")
   const [chapter, setChapter] = useState("")
 
-  const API_BASE = "http://localhost:8000"
 
   const getAuthToken = () => {
     return localStorage.getItem('auth_token') || ''
@@ -49,7 +48,7 @@ export function DocumentProcessor({ onDocumentProcessed }: DocumentProcessorProp
     if (chapter) formData.append('chapter', chapter)
 
     try {
-      const response = await fetch(`${API_BASE}/api/documents/upload`, {
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/documents/upload`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`

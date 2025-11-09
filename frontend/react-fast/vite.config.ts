@@ -7,10 +7,8 @@ export default defineConfig({
   plugins: [tailwindcss(), reactRouter(), tsconfigPaths()],
   server: {
     allowedHosts: [
-      'localhost',
-      'localhost:8000',
-      'localhost:5173',
-      'louise-loved-premises-unfortunately.trycloudflare.com' // Allow all localtunnel subdomains
+      's-ai-main-2fb69eb.kuberns.cloud',
+       // Allow all localtunnel subdomains
     ],
   },
   define: {

@@ -117,8 +117,6 @@ if frontend_url:
 if os.getenv("ENVIRONMENT", "development") == "development":
     ALLOWED_ORIGINS.extend([
         "http://localhost:5173",
-        "http://localhost:3000",
-        "https://louise-loved-premises-unfortunately.trycloudflare.com"
     ])
 
 if not ALLOWED_ORIGINS:
