@@ -3,13 +3,14 @@ import uvicorn
 import os
 import re
 import mimetypes
+import traceback  # Ensure traceback is imported at the top
 from fastapi import FastAPI, Depends, HTTPException, Request, status, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
 from pathlib import Path
-from services.redis_cache import RedisCache
+from services.redis_cache import redis_cache
 import uuid
 
 # Import slowapi for rate limiting
@@ -374,7 +375,7 @@ async def verify_subscription(
     """Verify a subscription payment and activate user's subscription"""
     user_id = payload.get("sub")  # Auth0 ID
     
-    print(f"🔍 Verifying subscription for user: {user_id}")
+    
     
     try:
         # Verify payment with Razorpay
@@ -386,7 +387,7 @@ async def verify_subscription(
                 verification.razorpay_subscription_id
             )
             
-            print(f"📋 Subscription details: {subscription_details}")
+            
             
             # Calculate subscription end date
             if subscription_details.get('current_end'):
@@ -394,19 +395,19 @@ async def verify_subscription(
             else:
                 end_date = datetime.now() + timedelta(days=30)
             
-            print(f"📅 Subscription end date: {end_date}")
+            
             
             # Get user from database
             user = await db.get_user_by_auth0_id(user_id)
             
             if not user:
-                print(f"❌ User not found for auth0_id: {user_id}")
+                
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
                     detail="User not found"
                 )
             
-            print(f"👤 Found user: {user['id']} - {user['email']}")
+            
             
             # ✅ FIX 1: Update user subscription in users table using auth0_id
             update_result = await db.update_user(user_id, {
@@ -416,7 +417,6 @@ async def verify_subscription(
                 'updated_at': datetime.now().isoformat()
             })
             
-            print(f"✅ User updated: {update_result}")
             
             # ✅ FIX 2: Create/Update subscription record in subscriptions table
             subscription_data = {
@@ -473,8 +473,8 @@ async def verify_subscription(
             
             # ✅ FIX 5: Invalidate any caches (if using Redis)
             try:
-                from services.redis_cache import RedisCache
-                await RedisCache.invalidate_user_sessions(user_id)
+                from services.redis_cache import redis_cache
+                await redis_cache.invalidate_user_sessions(user_id)
                 print(f"✅ Cache invalidated")
             except:
                 pass  # Redis might not be available
@@ -498,7 +498,7 @@ async def verify_subscription(
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Subscription verification error: {str(e)}")
+        
         import traceback
         traceback.print_exc()
         raise HTTPException(
@@ -540,19 +540,13 @@ from models.ai_models import validate_model_access
 @app.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
 @limiter.limit("30/minute") 
 async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depends(verify_token)):
-    """Process chat messages through OpenRouter"""
+    """Process chat messages through OpenRouter with image generation support"""
     user_id = payload.get("sub")
     
-    # ✅ Add detailed logging
-    print(f"\n{'='*50}")
-    print(f"🔍 Chat Request Debug")
-    print(f"{'='*50}")
-    print(f"User ID: {user_id}")
-    print(f"Model requested: {chat_request.model}")
-    print(f"Message count: {len(chat_request.messages)}")
+
     
     try:
-        # ✅ Sanitize chat messages INSIDE the function
+        # Sanitize chat messages
         sanitized_messages = []
         for msg in chat_request.messages:
             sanitized_messages.append({
@@ -563,14 +557,12 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
         
         # Get user usage
         usage = await get_user_usage(user_id)
-        print(f"✅ User usage: {usage.daily_message_count} messages, Paid: {usage.is_paid}")
-        
-        # ✅ FIX: Check subscription status with timezone-aware comparison
+       
+        # Check subscription status
         if usage.subscription_end_date:
             from datetime import timezone
             now_aware = datetime.now(timezone.utc)
             
-            # Make sure subscription_end_date is timezone-aware
             if usage.subscription_end_date.tzinfo is None:
                 subscription_end_date = usage.subscription_end_date.replace(tzinfo=timezone.utc)
             else:
@@ -582,20 +574,19 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
                 usage.subscription_tier = "free"
                 await update_user_subscription(user_id, "free", False, datetime.now())
         
-        # Validate model access based on user's tier
+        # Validate model access
         tier = usage.subscription_tier or "free"
         has_access = validate_model_access(chat_request.model, tier == "pro")
         if not has_access:
-            print(f"❌ Model access denied for tier: {tier}")
+            
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="This model is only available to Pro users. Please upgrade your subscription."
             )
         print(f"✅ Model access granted")
         
-        # Check if user has exceeded free limit and hasn't paid
+        # Check daily limit for free users
         FREE_TIER_DAILY_LIMIT = 25
-        
         if usage.daily_message_count >= FREE_TIER_DAILY_LIMIT and not usage.is_paid:
             print(f"❌ Daily limit reached")
             raise HTTPException(
@@ -603,7 +594,6 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
                 detail="Daily limit reached. Please subscribe to continue."
             )
         
-        # Rest of your chat function remains the same...
         # Check for API key
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
@@ -612,7 +602,7 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="OpenRouter API key not configured"
             )
-        print(f"✅ API key present: {api_key[:15]}...")
+        print(f"✅ API key present")
         
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -621,10 +611,9 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
             "Content-Type": "application/json"
         }
         
-        # ✅ Use sanitized messages
         messages = sanitized_messages
         
-        # Add system message for better responses
+        # Add system message if provided
         if chat_request.system_prompt:
             messages.insert(0, {"role": "system", "content": chat_request.system_prompt})
         
@@ -633,11 +622,11 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
             "model": chat_request.model or "anthropic/claude-3.5-sonnet",
             "messages": messages,
             "max_tokens": chat_request.max_tokens or 1000,
-            "temperature": chat_request.temperature or 0.7
+            "temperature": chat_request.temperature or 0.7,
+            "modalities": ["text", "image"]
         }
         
-        print(f"📤 Sending request to OpenRouter...")
-        print(f"Model: {request_body['model']}")
+        
         
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -646,7 +635,7 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
                 json=request_body
             )
             
-            print(f"📥 OpenRouter response status: {response.status_code}")
+          
             
             if response.status_code != 200:
                 error_detail = f"OpenRouter API error: {response.status_code}"
@@ -666,27 +655,83 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
             
             # Check if we got a valid response
             if not data.get("choices") or len(data["choices"]) == 0:
-                print(f"❌ No choices in response: {data}")
+               
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                     detail="No response from AI model"
                 )
             
-            # Extract message content
-            message_content = data["choices"][0]["message"]["content"]
-            print(f"✅ Message content length: {len(message_content)} chars")
+            # ✅ ENHANCED: Extract text, images, and handle different response formats
+            choice = data["choices"][0]
+            message_content = choice["message"]["content"]
+            images = []
+
+            # Handle different response formats for image-generation models
+            if isinstance(message_content, list):
+                # Gemini returns content as array with text and image parts
+                text_parts = []
+                for part in message_content:
+                    if isinstance(part, dict):
+                        if part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                        elif part.get("type") == "image_url":
+                            image_url = part.get("image_url", {}).get("url", "")
+                            if image_url:
+                                images.append({
+                                    "url": image_url,
+                                    "type": "generated",
+                                    "alt_text": "AI generated image"
+                                })
+                message_content = "\n".join(text_parts)
+            elif isinstance(message_content, str):
+                # Check if response contains image references or base64 data
+                # Some models might return image data in different formats
+                import re
+                image_patterns = [
+                    r'!\[.*?\]\((.*?)\)',  # Markdown image syntax
+                    r'<img.*?src="(.*?)".*?>',  # HTML img tag
+                ]
+                
+                for pattern in image_patterns:
+                    found_images = re.findall(pattern, message_content)
+                    for img_url in found_images:
+                        if img_url.startswith('http'):
+                            images.append({
+                                "url": img_url,
+                                "type": "generated", 
+                                "alt_text": "AI generated image"
+                            })
+
+            # ✅ Also check for images in other parts of the response
+            if not images and data.get("images"):
+                # Some APIs might put images in a separate field
+                for img_data in data.get("images", []):
+                    if isinstance(img_data, dict) and img_data.get("url"):
+                        images.append({
+                            "url": img_data.get("url"),
+                            "type": "generated",
+                            "alt_text": img_data.get("alt_text", "AI generated image")
+                        })
+
+            print(f"🖼️ Found {len(images)} images in response")
             
-            # Increment usage counter in Supabase
+            print(f"✅ Message content length: {len(message_content)} chars")
+            if images:
+                print(f"🖼️ Found {len(images)} generated images")
+            
+            # Increment usage counter
             tokens_used = data.get("usage", {}).get("total_tokens", 0)
             await increment_message_count(user_id, token_count=tokens_used)
-            print(f"✅ Usage incremented by {tokens_used} tokens")
+            
             
             print(f"{'='*50}\n")
             
+            # ✅ Return with images if present
             return ChatResponse(
                 message=message_content,
                 usage=data.get("usage", {}),
-                model=data.get("model", "unknown")
+                model=data.get("model", "unknown"),
+                images=images if images else None  # Add images field
             )
             
     except HTTPException:
@@ -705,7 +750,7 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Chat processing error: {str(e)}"
         )
-                
+                        
 # Document upload endpoint
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_MIME_TYPES = {
@@ -924,10 +969,10 @@ async def get_chat_sessions(payload: dict = Depends(verify_token)):
     
     try:
         # ✅ Try to get from cache first
-        cached_sessions = await RedisCache.get_user_sessions(user_id)
-        
+        cached_sessions = await redis_cache.get_user_sessions(user_id)
+        await redis_cache.cache_user_sessions(user_id, sessions, ttl=1800)
         if cached_sessions:
-            print(f"✅ Cache HIT: User sessions for {user_id[:8]}...")
+            
             return cached_sessions
         
         print(f"⚠️ Cache MISS: Fetching from database for {user_id[:8]}...")
@@ -939,7 +984,7 @@ async def get_chat_sessions(payload: dict = Depends(verify_token)):
             sessions = await db.get_chat_sessions(user['id'])
             
             # ✅ Cache the results for 30 minutes
-            await RedisCache.cache_user_sessions(user_id, sessions, ttl=1800)
+            await redis_cache.cache_user_sessions(user_id, sessions, ttl=1800)
             
             return sessions
         return []
@@ -958,19 +1003,19 @@ async def get_chat_messages(session_id: str, payload: dict = Depends(verify_toke
     
     try:
         # ✅ Try to get from cache first
-        cached_messages = await RedisCache.get_messages(session_id)
+        cached_messages = await redis_cache.get_messages(session_id)
+        await redis_cache.cache_messages(session_id, messages, ttl=3600)
         
         if cached_messages:
             print(f"✅ Cache HIT: Messages for session {session_id[:8]}...")
             return cached_messages
         
-        print(f"⚠️ Cache MISS: Fetching messages from database for session {session_id[:8]}...")
         
         # Get chat messages from database
         messages = await db.get_chat_messages(session_id)
         
         # ✅ Cache the messages for 1 hour
-        await RedisCache.cache_messages(session_id, messages, ttl=3600)
+        await redis_cache.cache_messages(session_id, messages, ttl=3600)
         
         return messages
         
@@ -1002,10 +1047,10 @@ async def save_message(
         )
         
         # ✅ Update cache immediately
-        await RedisCache.append_message(session_id, saved_message)
+        await redis_cache.append_message(session_id, saved_message)
         
         # ✅ Invalidate user sessions cache (since it might need updating)
-        await RedisCache.invalidate_user_sessions(user_id)
+        await redis_cache.invalidate_user_sessions(user_id)
         
         return saved_message
         
@@ -1040,7 +1085,7 @@ async def create_chat_session(
         )
         
         # ✅ Invalidate user sessions cache to force refresh
-        await RedisCache.invalidate_user_sessions(user_id)
+        await redis_cache.invalidate_user_sessions(user_id)
         
         return new_session
         
@@ -1064,9 +1109,9 @@ async def delete_chat_session(
         # Delete from database
         await db.delete_chat_session(session_id)
         
-        # ✅ Invalidate caches
-        await RedisCache.invalidate_session(session_id)
-        await RedisCache.invalidate_user_sessions(user_id)
+        # ✅ FIXED: Use the singleton instance instead of static methods
+        await redis_cache.invalidate_session(session_id)
+        await redis_cache.invalidate_user_sessions(user_id)
         
         return {"status": "success", "message": "Session deleted"}
         
@@ -1095,8 +1140,8 @@ async def update_session_title(
         )
         
         # ✅ Update cache
-        await RedisCache.cache_session(session_id, updated_session)
-        await RedisCache.invalidate_user_sessions(user_id)
+        await redis_cache.cache_session(session_id, updated_session)
+        await redis_cache.invalidate_user_sessions(user_id)
         
         return updated_session
         
@@ -1111,7 +1156,7 @@ async def update_session_title(
 @app.get("/api/cache/stats", tags=["System"])
 async def get_cache_stats(payload: dict = Depends(verify_token)):
     """Get Redis cache statistics"""
-    stats = await RedisCache.get_stats()
+    stats = await redis_cache.get_stats()
     return stats
 
 @app.get("/api/debug/subscription-status", tags=["Debug"])
@@ -1181,7 +1226,7 @@ async def debug_subscription_status(payload: dict = Depends(verify_token)):
     except Exception as e:
         return {
             "error": str(e),
-            "traceback": str(traceback.format_exc())
+            "traceback": str(traceback.format_exc())  # Now traceback will be available
         }
 
 

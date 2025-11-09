@@ -2,6 +2,9 @@
 from datetime import datetime, timedelta
 from models.payment import UserUsage
 from typing import Optional
+from fastapi import HTTPException, status
+from typing import Dict,  List
+import json
 
 # Import the Supabase database service
 from services.supabase_database import db
@@ -30,17 +33,15 @@ async def get_user_usage(user_id: str) -> UserUsage:
                 subscription_end_date=None
             )
         
-        print(f"👤 Found user: {user['id']} - {user['email']}")
-        print(f"📊 User subscription_tier from DB: {user.get('subscription_tier')}")
-        print(f"💳 User is_paid from DB: {user.get('is_paid')}")
+       
         
         # Get usage statistics from user_usage table
         usage_data = await db.get_user_usage(user['id'])
-        print(f"📈 Usage data: {usage_data}")
+       
         
         # Get active subscription from subscriptions table
         subscription = await db.get_active_subscription(user['id'])
-        print(f"📜 Active subscription: {subscription}")
+        
         
         # ✅ FIX: Determine subscription status with proper validation
         is_paid = False
@@ -49,7 +50,7 @@ async def get_user_usage(user_id: str) -> UserUsage:
         
         # Check subscription from subscriptions table
         if subscription and subscription.get('status') == 'active':
-            print(f"✅ Active subscription found")
+            
             end_date_str = subscription.get('current_end')
             
             if end_date_str:
@@ -116,10 +117,6 @@ async def get_user_usage(user_id: str) -> UserUsage:
             subscription_end_date=subscription_end_date
         )
         
-        print(f"📊 Final usage result:")
-        print(f"  - is_paid: {result.is_paid}")
-        print(f"  - subscription_tier: {result.subscription_tier}")
-        print(f"  - subscription_end_date: {result.subscription_end_date}")
         
         return result
         
@@ -242,7 +239,7 @@ async def sync_all_user_subscriptions():
         
         for user in users:
             user_id = user['auth0_id']
-            print(f"🔄 Syncing subscription for user: {user_id}")
+            
             
             # Get active subscription
             subscription = await db.get_active_subscription(user['id'])
@@ -275,7 +272,70 @@ async def sync_all_user_subscriptions():
                         
                         print(f"✅ Updated user {user_id} to pro tier")
             
-        print("🎉 All user subscriptions synced!")
+        
         
     except Exception as e:
         print(f"❌ Error syncing subscriptions: {e}")
+# backend/services/supabase_database.py
+# UPDATE the create_chat_message method to handle images
+
+async def create_chat_message(self, message_data: Dict) -> Dict:
+    """Create a new chat message with optional images"""
+    try:
+        # ✅ NEW: Handle images field
+        if 'images' in message_data and message_data['images']:
+            # Ensure images is a valid JSON array
+            if isinstance(message_data['images'], list):
+                message_data['images'] = json.dumps(message_data['images'])
+        else:
+            message_data['images'] = '[]'  # Empty array by default
+        
+        response = self.client.table('chat_messages').insert(message_data).execute()
+        
+        if not response.data:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to create message"
+            )
+        
+        # Update session's updated_at
+        self.client.table('chat_sessions').update(
+            {'updated_at': datetime.now().isoformat()}
+        ).eq('id', message_data['session_id']).execute()
+        
+        return response.data[0]
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create message: {str(e)}"
+        )
+
+async def get_chat_messages(self, session_id: str) -> List[Dict]:
+    """Get messages for a chat session with images"""
+    try:
+        response = self.client.table('chat_messages')\
+            .select('*')\
+            .eq('session_id', session_id)\
+            .order('created_at', desc=False)\
+            .execute()
+        
+        # ✅ Parse images from JSON string to array
+        messages = response.data or []
+        for msg in messages:
+            if msg.get('images'):
+                try:
+                    if isinstance(msg['images'], str):
+                        msg['images'] = json.loads(msg['images'])
+                except:
+                    msg['images'] = []
+            else:
+                msg['images'] = []
+        
+        return messages
+        
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get messages: {str(e)}"
+        )

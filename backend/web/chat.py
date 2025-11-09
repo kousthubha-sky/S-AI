@@ -154,22 +154,53 @@ async def update_chat_session(
             detail=f"Failed to update session: {str(e)}"
         )
 
-@router.delete("/api/chat/sessions/{session_id}")
-async def delete_chat_session(
+@router.post("/api/chat/sessions/{session_id}/messages")
+async def create_chat_message(
     session_id: str,
+    message_data: Dict,
     payload: dict = Depends(verify_token)
 ):
-    """Delete a chat session"""
+    """Create a new chat message with optional images"""
     try:
-        print(f"Deleting session: {session_id}")
+        print(f"Creating message for session {session_id}: {message_data}")
         
-        await db.delete_chat_session(session_id)
+        # ✅ NEW: Extract and validate images
+        images = message_data.get('images', [])
+        if images and not isinstance(images, list):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Images must be an array"
+            )
         
-        return {"status": "success", "message": "Session deleted"}
+        # Validate image structure
+        for img in images:
+            if not isinstance(img, dict) or 'url' not in img or 'type' not in img:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Each image must have 'url' and 'type' fields"
+                )
         
+        new_message = {
+            'session_id': session_id,
+            'role': message_data.get('role'),
+            'content': message_data.get('content'),
+            'model_used': message_data.get('model_used'),
+            'tokens_used': message_data.get('tokens_used'),
+            'created_at': datetime.now().isoformat(),
+            'images': images  # ✅ Include images
+        }
+        
+        message = await db.create_chat_message(new_message)
+        
+        print(f"Message created: {message['id']} with {len(images)} images")
+        
+        return message
+        
+    except HTTPException:
+        raise
     except Exception as e:
-        print(f"Error deleting chat session: {str(e)}")
+        print(f"Error creating chat message: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete session: {str(e)}"
+            detail=f"Failed to create message: {str(e)}"
         )

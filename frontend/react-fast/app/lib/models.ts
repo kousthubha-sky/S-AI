@@ -9,7 +9,9 @@ export interface AIModel {
 
 export const AI_MODELS: AIModel[] = [
   // Free Models
+  
   {
+
     id: 'tngtech/deepseek-r1t2-chimera:free',
     name: 'DeepSeek Chimera',
     description: 'High-quality base model optimized for general chat',
@@ -57,6 +59,7 @@ export const AI_MODELS: AIModel[] = [
     contextWindow: 4096,
     provider: 'Qwen'
   },
+
 
   // Pro Models
   {

@@ -1,3 +1,5 @@
+# backend/models/chat.py - UPDATE with image support
+
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 
@@ -12,11 +14,20 @@ class ChatRequest(BaseModel):
     temperature: Optional[float] = 0.7
     system_prompt: Optional[str] = None
 
+class ImageData(BaseModel):
+    """Represents a generated image"""
+    url: str
+    type: str = "generated"  # Can be "generated", "uploaded", etc.
+    width: Optional[int] = None
+    height: Optional[int] = None
+    alt_text: Optional[str] = None
+
 class ChatResponse(BaseModel):
     message: str
     usage: Optional[Dict[str, Any]] = None
     model: Optional[str] = None
     error: Optional[str] = None
+    images: Optional[List[ImageData]] = None  # ✅ NEW: Support for images
 
 class Document(BaseModel):
     id: str
@@ -25,4 +36,3 @@ class Document(BaseModel):
     text_length: int
     created_at: str
     metadata: Dict[str, Any]
-    

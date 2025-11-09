@@ -30,6 +30,14 @@ interface Attachment {
   file?: File;
 }
 
+interface ImageData {
+  url: string;
+  type: string;
+  width?: number;
+  height?: number;
+  alt_text?: string;
+}
+
 interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -37,6 +45,7 @@ interface Message {
   timestamp: Date
   attachments?: Attachment[]
   isLoading?: boolean
+  images?: ImageData[]  // ✅ NEW: Add images field
 }
 
 interface ChatInterfaceProps {
@@ -63,6 +72,97 @@ const PROMPT_CATEGORIES = {
   claudes: ["Creative brainstorming", "Philosophical discussions", "Book recommendations", "Career guidance", "Personal growth tips"]
 }
 
+const GeneratedImages = ({ images }: { images: ImageData[] }) => {
+  const [loadingImages, setLoadingImages] = useState<Record<string, boolean>>({});
+  const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
+
+  const handleImageLoad = (url: string) => {
+    setLoadingImages(prev => ({ ...prev, [url]: false }));
+  };
+
+  const handleImageError = (url: string) => {
+    setLoadingImages(prev => ({ ...prev, [url]: false }));
+    setImageErrors(prev => ({ ...prev, [url]: true }));
+  };
+
+  useEffect(() => {
+    // Set all images as loading initially
+    const loading: Record<string, boolean> = {};
+    images.forEach(img => {
+      loading[img.url] = true;
+    });
+    setLoadingImages(loading);
+  }, [images]);
+
+  return (
+    <div className="flex flex-col gap-3 mt-3">
+      {images.map((image, index) => (
+        <div 
+          key={index} 
+          className="relative rounded-xl overflow-hidden border border-white/10 bg-white/5 max-w-full"
+        >
+          {loadingImages[image.url] && !imageErrors[image.url] && (
+            <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-2">
+                <div className="w-8 h-8 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span className="text-xs text-white/60">Loading image...</span>
+              </div>
+            </div>
+          )}
+          
+          {imageErrors[image.url] ? (
+            <div className="flex items-center justify-center p-8 text-red-400">
+              <AlertCircle className="w-5 h-5 mr-2" />
+              <span className="text-sm">Failed to load image</span>
+            </div>
+          ) : (
+            <img
+              src={image.url}
+              alt={image.alt_text || `Generated image ${index + 1}`}
+              onLoad={() => handleImageLoad(image.url)}
+              onError={() => handleImageError(image.url)}
+              className={cn(
+                "w-full h-auto object-contain max-h-[500px] transition-opacity duration-300",
+                loadingImages[image.url] ? "opacity-0" : "opacity-100"
+              )}
+              style={{
+                display: loadingImages[image.url] ? 'none' : 'block'
+              }}
+            />
+          )}
+          
+          {!loadingImages[image.url] && !imageErrors[image.url] && (
+            <div className="absolute bottom-2 right-2 flex gap-2">
+              <button
+                onClick={() => {
+                  const link = document.createElement('a');
+                  link.href = image.url;
+                  link.download = `generated-image-${Date.now()}.png`;
+                  link.click();
+                }}
+                className="p-2 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-lg transition-colors"
+                title="Download image"
+              >
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+              </button>
+              <button
+                onClick={() => window.open(image.url, '_blank')}
+                className="p-2 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-lg transition-colors"
+                title="Open in new tab"
+              >
+                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                </svg>
+              </button>
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 // Improved CodeBlock with mobile responsiveness and better colors
 const CodeBlock = ({ code, language = 'text' }: { code: string; language?: string }) => {
@@ -183,7 +283,7 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
 };
 
 // Improved FormattedMessage with mobile-optimized code blocks
-const FormattedMessage = ({ content }: { content: string }) => {
+const FormattedMessage = ({ content, images }: { content: string; images?: ImageData[] }) => {
   const formatContent = (text: string) => {
     const lines = text.split('\n');
     const elements: JSX.Element[] = [];
@@ -294,7 +394,15 @@ const FormattedMessage = ({ content }: { content: string }) => {
     return elements;
   };
 
-  return <div className="space-y-1 break-words">{formatContent(content)}</div>;
+  return (
+    <div className="space-y-1 break-words">
+      {formatContent(content)}
+      {/* ✅ NEW: Render images if present */}
+      {images && images.length > 0 && (
+        <GeneratedImages images={images} />
+      )}
+    </div>
+  );
 };
 
 export function ChatInterface({ 
@@ -729,17 +837,20 @@ useEffect(() => {
     localStorage.setItem(`draft_${currentSessionId}`, newMessage);
   }
 }, [newMessage, currentSessionId]);
-  const loadSession = async (sessionId: string) => {
+
+const loadSession = async (sessionId: string) => {
   try {
     setIsInitializing(true);
-    // ✅ Add fetchWithAuth as second parameter
     const sessionMessages = await ChatService.getChatMessages(sessionId, fetchWithAuth);
+    
     const formattedMessages: Message[] = sessionMessages.map(msg => ({
       id: msg.id,
       role: msg.role as 'user' | 'assistant',
       content: msg.content,
-      timestamp: new Date(msg.created_at)
+      timestamp: new Date(msg.created_at),
+      images: msg.images || undefined  // ✅ Include images from database
     }));
+    
     setMessages(formattedMessages);
     setHasStartedChat(formattedMessages.length > 0);
     setError(null);
@@ -847,63 +958,99 @@ useEffect(() => {
     // ====== END OPTIMIZED SESSION CREATION ======
 
     try {
-      const apiMessages = [...messages, userMessage]
-        .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
-        .map(msg => ({ role: msg.role, content: msg.content }))
+  const apiMessages = [...messages, userMessage]
+    .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
+    .map(msg => ({ role: msg.role, content: msg.content }))
 
-      if (pendingAttachments.length > 0) {
-        apiMessages[apiMessages.length - 1].content += '\n' + pendingAttachments.map(a => `[Attachment: ${a.name}]`).join('\n')
+  if (pendingAttachments.length > 0) {
+    apiMessages[apiMessages.length - 1].content += '\n' + 
+      pendingAttachments.map(a => `[Attachment: ${a.name}]`).join('\n')
+  }
+
+  const response = await fetchWithAuth(
+    `${import.meta.env.VITE_API_BASE_URL}/api/chat`, 
+    {
+      method: 'POST',
+      body: JSON.stringify({ 
+        messages: apiMessages, 
+        model: modelToUse, 
+        temperature: 0.7, 
+        max_tokens: 1000 
+      }),
+      signal: abortControllerRef.current.signal
+    }
+  )
+
+  const messageContent = response.message || response.data?.message || 
+                         response.content || response.choices?.[0]?.message?.content || 
+                         response.result;
+  
+  if (!messageContent) {
+    throw new Error('No message content received from API');
+  }
+
+  // ✅ Extract images from response
+  const responseImages = response.images || [];
+
+  // Update UI with AI response including images
+  setMessages(prev => prev.map(msg => 
+    msg.id === tempAssistantMessage.id 
+      ? { 
+          ...msg, 
+          content: messageContent, 
+          isLoading: false, 
+          images: responseImages 
+        } 
+      : msg
+  ))
+
+  setDynamicModelSelection({ isAutoSelected: false });
+
+  // Wait for session creation to complete (if it's still running)
+  await sessionCreationPromise;
+
+  // ✅ UPDATED: Save messages with images (in background)
+  if (sessionIdToUse && user) {
+    setTimeout(async () => {
+      try {
+        // Save user message (no images for user messages typically)
+        await ChatService.saveMessage(
+          sessionIdToUse!, 
+          'user', 
+          newMessage, 
+          modelToUse, 
+          undefined,
+          undefined,  // No images for user message
+          fetchWithAuth
+        )
+        
+        // Update session title if it's the first message
+        if (messages.length === 0) {
+          const title = newMessage.slice(0, 50) + (newMessage.length > 50 ? '...' : '')
+          await ChatService.updateSessionTitle(sessionIdToUse!, title, fetchWithAuth)
+          
+          onSessionUpdate(sessions.map(s => 
+            s.id === sessionIdToUse ? { ...s, title } : s
+          ))
+        }
+        
+        // ✅ Save assistant message WITH images
+        await ChatService.saveMessage(
+          sessionIdToUse!, 
+          'assistant', 
+          messageContent, 
+          modelToUse, 
+          response.usage?.total_tokens,
+          responseImages,  // ✅ Include images
+          fetchWithAuth
+        )
+        
+        console.log('✅ Messages saved with', responseImages.length, 'images')
+      } catch (error) {
+        console.error('Failed to save messages:', error)
       }
-
-      // Start API call immediately without waiting for session creation
-      const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/chat`, {
-        method: 'POST',
-        body: JSON.stringify({ messages: apiMessages, model: modelToUse, temperature: 0.7, max_tokens: 1000 }),
-        signal: abortControllerRef.current.signal
-      })
-
-      const messageContent = response.message || response.data?.message || response.content || response.choices?.[0]?.message?.content || response.result;
-      
-      if (!messageContent) {
-        throw new Error('No message content received from API');
-      }
-
-      // Update UI immediately with AI response
-      setMessages(prev => prev.map(msg => 
-        msg.id === tempAssistantMessage.id ? { ...msg, content: messageContent, isLoading: false } : msg
-      ))
-
-      setDynamicModelSelection({ isAutoSelected: false });
-
-      // Wait for session creation to complete (if it's still running)
-      await sessionCreationPromise;
-
-      // Now save messages with the final session ID (in background)
-      if (sessionIdToUse && user) {
-        // Use setTimeout to defer saving so it doesn't block UI
-        setTimeout(async () => {
-          try {
-            // Save user message
-            await ChatService.saveMessage(sessionIdToUse!, 'user', newMessage, modelToUse, undefined, fetchWithAuth)
-            
-            // Update session title if it's the first message
-            if (messages.length === 0) {
-              const title = newMessage.slice(0, 50) + (newMessage.length > 50 ? '...' : '')
-              await ChatService.updateSessionTitle(sessionIdToUse!, title, fetchWithAuth)
-              
-              onSessionUpdate(sessions.map(s => 
-                s.id === sessionIdToUse ? { ...s, title } : s
-              ))
-            }
-            
-            // Save assistant message
-            await ChatService.saveMessage(sessionIdToUse!, 'assistant', messageContent, modelToUse, response.usage?.total_tokens, fetchWithAuth)
-          } catch (error) {
-            console.error('Failed to save messages:', error)
-            // User won't notice if saving fails in background
-          }
-        }, 0);
-      }
+    }, 0);
+  }
 
     } catch (error: any) {
       if (error.name === 'AbortError') {
@@ -915,7 +1062,7 @@ useEffect(() => {
         if (sessionIdToUse && user) {
           setTimeout(async () => {
             try {
-              await ChatService.saveMessage(sessionIdToUse!, 'user', newMessage, modelToUse, undefined, fetchWithAuth)
+              await ChatService.saveMessage(sessionIdToUse!, 'user', newMessage, modelToUse, undefined, undefined, fetchWithAuth)
             } catch (e) {
               console.error('Failed to save aborted message:', e)
             }
@@ -1186,7 +1333,7 @@ useEffect(() => {
                                   title="Edit message"
                                 >
                                   <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 003-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                   </svg>
                                 </button>
                                 <button
@@ -1265,7 +1412,7 @@ useEffect(() => {
                                 }}
                               />
                             ) : (
-                              <FormattedMessage content={msg.content} />
+                              <FormattedMessage content={msg.content} images={msg.images} />
                             )}
                           </div>
                         </div>
@@ -1289,7 +1436,7 @@ useEffect(() => {
                               </div>
                             </div>
                           ) : (
-                            <FormattedMessage content={msg.content} />
+                             <FormattedMessage content={msg.content} images={msg.images} />
                           )}
                         </div>
                       )}
