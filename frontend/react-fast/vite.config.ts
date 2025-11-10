@@ -8,6 +8,9 @@ export default defineConfig({
   server: {
     allowedHosts: [
       's-ai-main-2fb69eb.kuberns.cloud',
+      'localhost', 
+      'localhost:5173',
+      'localhost:8000',
        // Allow all localtunnel subdomains
     ],
   },

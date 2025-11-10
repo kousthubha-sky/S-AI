@@ -1,11 +1,30 @@
-# models/payment.py
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
-from datetime import datetime
-from enum import Enum
+# backend/models/payment.py - UPDATED MODELS
 
+from pydantic import BaseModel
+from typing import Optional
+from datetime import datetime
+
+# ==================== ORDER MODELS ====================
+class OrderCreate(BaseModel):
+    plan_type: str  # "basic_monthly" or "pro_monthly"
+    user_id: Optional[str] = None
+
+class OrderResponse(BaseModel):
+    order_id: str
+    amount: int
+    currency: str
+    key_id: str
+    plan_type: str
+    plan_name: str
+
+class OrderVerify(BaseModel):
+    razorpay_payment_id: str
+    razorpay_order_id: str
+    razorpay_signature: str
+
+# ==================== SUBSCRIPTION MODELS (For future use) ====================
 class SubscriptionCreate(BaseModel):
-    plan_type: str  # This will be the Razorpay plan ID
+    plan_type: str
     total_count: Optional[int] = 12
     user_id: Optional[str] = None
 
@@ -21,13 +40,7 @@ class SubscriptionResponse(BaseModel):
     razorpay_subscription_id: str
     short_url: Optional[str] = None
 
-# Update existing models
-class PaymentVerify(BaseModel):
-    razorpay_payment_id: str
-    razorpay_order_id: Optional[str] = None
-    razorpay_subscription_id: Optional[str] = None
-    razorpay_signature: str
-
+# ==================== USAGE MODELS ====================
 class UserUsage(BaseModel):
     user_id: str
     prompt_count: int
@@ -37,3 +50,15 @@ class UserUsage(BaseModel):
     is_paid: bool = False
     subscription_tier: Optional[str] = None
     subscription_end_date: Optional[datetime] = None
+
+# ==================== PAYMENT MODELS ====================
+class PaymentVerify(BaseModel):
+    razorpay_payment_id: str
+    razorpay_order_id: Optional[str] = None
+    razorpay_subscription_id: Optional[str] = None
+    razorpay_signature: str
+
+class RefundCreate(BaseModel):
+    payment_id: str
+    amount: Optional[int] = None  # If None, full refund
+    reason: Optional[str] = None

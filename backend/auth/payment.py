@@ -1,15 +1,16 @@
-# ✅ ENHANCED payment.py with security improvements
+# backend/auth/payment.py - FIXED VERSION WITH SHORT RECEIPT
 
 import os
 import razorpay
 import hmac
 import hashlib
+import uuid
 from fastapi import HTTPException, status
-from models.payment import SubscriptionCreate, SubscriptionVerify
+from models.payment import OrderCreate, OrderVerify, SubscriptionCreate, SubscriptionVerify
 from typing import Optional, Dict, Any
 import logging
 from datetime import datetime
-# Set up logging
+
 logger = logging.getLogger(__name__)
 
 class PaymentManager:
@@ -17,104 +18,81 @@ class PaymentManager:
         key_id = os.getenv("RAZORPAY_KEY_ID")
         key_secret = os.getenv("RAZORPAY_KEY_SECRET")
         
-        # ✅ Validate credentials
         if not key_id or not key_secret:
             raise ValueError("Razorpay credentials not configured")
         
-        # ✅ Validate format
         if len(key_id) < 10 or len(key_secret) < 10:
             raise ValueError("Invalid Razorpay credentials format")
         
         self.client = razorpay.Client(auth=(key_id, key_secret))
-        self.key_secret = key_secret  # Store for webhook verification
+        self.key_secret = key_secret
         
-        self.SUBSCRIPTION_PLANS = {
-            "basic": os.getenv("RAZORPAY_BASIC_PLAN_ID"),
-            "pro": os.getenv("RAZORPAY_PREMIUM_PLAN_ID")
+        # Plan IDs (one-time payments)
+        self.PLANS = {
+            "pro_monthly": {
+                "amount": 24900,  # ₹249 in paise
+                "currency": "INR", 
+                "name": "Pro Monthly"
+            }
         }
-        
-        # ✅ Validate plan IDs
-        for plan_type, plan_id in self.SUBSCRIPTION_PLANS.items():
-            if not plan_id:
-                logger.warning(f"Plan ID not configured for {plan_type}")
 
-    async def create_subscription(self, subscription: SubscriptionCreate) -> Dict[str, Any]:
-        """Create a subscription with enhanced validation"""
+    async def create_order(self, plan_type: str, user_id: str) -> Dict[str, Any]:
+        """
+        Create a Razorpay Order (required before payment)
+        """
         try:
-               
-            # ✅ Validate required fields
-            if not subscription.plan_type:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Plan type is required"
-                )
-            
-            if not subscription.user_id:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="User ID is required"
-                )
-            
-            # ✅ Validate plan exists
-            if subscription.plan_type not in self.SUBSCRIPTION_PLANS:
+            if plan_type not in self.PLANS:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Invalid plan type"
                 )
             
-            plan_id = self.SUBSCRIPTION_PLANS[subscription.plan_type]
-            if not plan_id:
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Plan not configured"
-                )
+            plan = self.PLANS[plan_type]
             
-            # ✅ Validate total_count
-            if subscription.total_count and (subscription.total_count < 1 or subscription.total_count > 100):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid subscription duration"
-                )
+            # ✅ FIXED: Create very short receipt (max 40 chars)
+            short_uuid = str(uuid.uuid4())[:8]  # Just 8 chars
+            receipt = f"ord_{short_uuid}"  # Total: ord_12345678 = 12 chars
             
-            # Create subscription with proper parameters
-            subscription_data = {
-                'plan_id': plan_id,
-                'total_count': subscription.total_count or 12,
-                'quantity': 1,
-                'customer_notify': 1,
-                'notes': {
-                    'user_id': subscription.user_id,
-                    'plan_type': subscription.plan_type,
-                    'created_at': str(datetime.now())
+            # Create order data
+            order_data = {
+                "amount": plan["amount"],
+                "currency": plan["currency"],
+                "receipt": receipt,  # ✅ Now guaranteed under 40 chars
+                "notes": {
+                    "user_id": user_id,
+                    "plan_type": plan_type,
+                    "plan_name": plan["name"]
                 }
             }
             
-            # ✅ Log subscription creation (without sensitive data)
-            logger.info(f"Creating subscription for user {subscription.user_id[:8]}... plan: {subscription.plan_type}")
+            logger.info(f"Creating order for user {user_id[:8]}... plan: {plan_type}")
+            logger.info(f"Receipt: {receipt} (length: {len(receipt)})")
             
-            # Create subscription
-            razorpay_subscription = self.client.subscription.create(subscription_data)
+            # Create order via Razorpay
+            order = self.client.order.create(data=order_data)
             
-            # ✅ Validate response
-            if not razorpay_subscription or not razorpay_subscription.get('id'):
+            if not order or not order.get('id'):
                 raise HTTPException(
                     status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="Failed to create subscription"
+                    detail="Failed to create order"
                 )
             
+            logger.info(f"✅ Order created: {order['id']}")
+            
             return {
-                "subscription_id": razorpay_subscription['id'],
-                "status": razorpay_subscription['status'],
-                "plan_type": subscription.plan_type,
-                "razorpay_subscription_id": razorpay_subscription['id'],
-                "short_url": razorpay_subscription.get('short_url')
+                "order_id": order['id'],
+                "amount": order['amount'],
+                "currency": order['currency'],
+                "key_id": os.getenv("RAZORPAY_KEY_ID"),
+                "plan_type": plan_type,
+                "plan_name": plan["name"]
             }
             
         except razorpay.errors.BadRequestError as e:
             logger.error(f"Razorpay bad request: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid subscription parameters"
+                detail=f"Invalid order parameters: {str(e)}"
             )
         except razorpay.errors.GatewayError as e:
             logger.error(f"Razorpay gateway error: {str(e)}")
@@ -125,19 +103,18 @@ class PaymentManager:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Subscription creation error: {str(e)}")
+            logger.error(f"Order creation error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create subscription"
+                detail=f"Failed to create order: {str(e)}"
             )
 
-    async def verify_subscription_payment(self, verification: SubscriptionVerify) -> bool:
-        """Verify payment with enhanced security"""
+    async def verify_payment(self, verification: OrderVerify) -> bool:
+        """Verify payment signature after successful payment"""
         try:
-            # ✅ Validate input
             if not all([
                 verification.razorpay_payment_id,
-                verification.razorpay_subscription_id,
+                verification.razorpay_order_id,
                 verification.razorpay_signature
             ]):
                 raise HTTPException(
@@ -145,8 +122,8 @@ class PaymentManager:
                     detail="Missing required verification parameters"
                 )
             
-            # ✅ Verify signature manually for extra security
-            message = f"{verification.razorpay_payment_id}|{verification.razorpay_subscription_id}"
+            # Verify signature
+            message = f"{verification.razorpay_order_id}|{verification.razorpay_payment_id}"
             expected_signature = hmac.new(
                 self.key_secret.encode('utf-8'),
                 message.encode('utf-8'),
@@ -160,29 +137,20 @@ class PaymentManager:
                     detail="Invalid payment signature"
                 )
             
-            # ✅ Also use Razorpay's verification
-            params_dict = {
-                'razorpay_payment_id': verification.razorpay_payment_id,
-                'razorpay_subscription_id': verification.razorpay_subscription_id,
-                'razorpay_signature': verification.razorpay_signature
-            }
-            
-            self.client.utility.verify_subscription_payment_signature(params_dict)
-            
-            # ✅ Verify payment status
+            # Verify payment status
             payment = self.client.payment.fetch(verification.razorpay_payment_id)
             
             if payment['status'] != 'captured':
                 logger.warning(f"Payment {verification.razorpay_payment_id[:8]}... not captured: {payment['status']}")
                 return False
             
-            # ✅ Verify subscription is active
-            subscription = self.client.subscription.fetch(verification.razorpay_subscription_id)
-            if subscription['status'] not in ['active', 'authenticated']:
-                logger.warning(f"Subscription {verification.razorpay_subscription_id[:8]}... not active: {subscription['status']}")
+            # Verify order exists
+            order = self.client.order.fetch(verification.razorpay_order_id)
+            if order['status'] != 'paid':
+                logger.warning(f"Order {verification.razorpay_order_id[:8]}... not paid: {order['status']}")
                 return False
             
-            logger.info(f"Payment verified successfully for {verification.razorpay_payment_id[:8]}...")
+            logger.info(f"✅ Payment verified successfully: {verification.razorpay_payment_id[:8]}...")
             return True
             
         except razorpay.errors.SignatureVerificationError as e:
@@ -200,75 +168,55 @@ class PaymentManager:
                 detail="Payment verification failed"
             )
 
-    async def get_subscription_details(self, subscription_id: str) -> Dict[str, Any]:
-        """Get subscription details with validation"""
+    async def get_payment_details(self, payment_id: str) -> Dict[str, Any]:
+        """Get payment details"""
         try:
-            # ✅ Validate subscription ID format
-            if not subscription_id or len(subscription_id) < 10:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid subscription ID"
-                )
+            payment = self.client.payment.fetch(payment_id)
             
-            subscription = self.client.subscription.fetch(subscription_id)
-            
-            # ✅ Return only necessary fields
             return {
-                'id': subscription['id'],
-                'status': subscription['status'],
-                'plan_id': subscription['plan_id'],
-                'current_start': subscription.get('current_start'),
-                'current_end': subscription.get('current_end'),
-                'charge_at': subscription.get('charge_at'),
-                'total_count': subscription.get('total_count'),
-                'paid_count': subscription.get('paid_count'),
-                'remaining_count': subscription.get('remaining_count')
+                'id': payment['id'],
+                'status': payment['status'],
+                'amount': payment['amount'],
+                'currency': payment['currency'],
+                'method': payment.get('method'),
+                'email': payment.get('email'),
+                'contact': payment.get('contact'),
+                'created_at': payment.get('created_at')
             }
             
         except razorpay.errors.BadRequestError:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Subscription not found"
+                detail="Payment not found"
             )
         except Exception as e:
-            logger.error(f"Error fetching subscription: {str(e)}")
+            logger.error(f"Error fetching payment: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to fetch subscription details"
+                detail="Failed to fetch payment details"
             )
 
-    async def cancel_subscription(self, subscription_id: str) -> bool:
-        """Cancel subscription with validation"""
+    async def create_refund(self, payment_id: str, amount: Optional[int] = None) -> Dict[str, Any]:
+        """Create a refund for a payment"""
         try:
-            # ✅ Validate subscription ID
-            if not subscription_id or len(subscription_id) < 10:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid subscription ID"
-                )
+            refund_data = {"payment_id": payment_id}
+            if amount:
+                refund_data["amount"] = amount
             
-            # ✅ Verify subscription exists and is cancellable
-            subscription = self.client.subscription.fetch(subscription_id)
-            if subscription['status'] in ['cancelled', 'completed', 'expired']:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Cannot cancel subscription with status: {subscription['status']}"
-                )
+            refund = self.client.payment.refund(payment_id, refund_data)
             
-            self.client.subscription.cancel(subscription_id)
-            logger.info(f"Subscription {subscription_id[:8]}... cancelled successfully")
-            return True
+            logger.info(f"✅ Refund created: {refund['id']}")
             
-        except razorpay.errors.BadRequestError:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Subscription not found"
-            )
-        except HTTPException:
-            raise
+            return {
+                'id': refund['id'],
+                'status': refund['status'],
+                'amount': refund['amount'],
+                'payment_id': refund['payment_id']
+            }
+            
         except Exception as e:
-            logger.error(f"Error cancelling subscription: {str(e)}")
+            logger.error(f"Refund error: {str(e)}")
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to cancel subscription"
+                detail="Failed to create refund"
             )

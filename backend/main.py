@@ -31,6 +31,7 @@ def get_rate_limit_key(request: Request):
 
 limiter = Limiter(key_func=get_rate_limit_key)
 
+
 load_dotenv()
 
 # Import Supabase database service
@@ -40,7 +41,16 @@ import httpx
 from typing import List, Optional
 from models.chat import ChatRequest, ChatResponse
 from models.auth import UserProfile, ErrorResponse
-from models.payment import UserUsage, SubscriptionCreate, SubscriptionVerify, SubscriptionResponse
+from models.payment import (
+    OrderCreate,          # ← NEW
+    OrderVerify,          # ← NEW
+    OrderResponse,        # ← NEW (optional)
+    UserUsage,
+    SubscriptionCreate,   # ← Keep for now (legacy)
+    SubscriptionVerify,
+    RefundCreate# ← Keep for now (legacy)
+)
+import logging
 from auth.dependencies import verify_token, has_permissions, get_user_id, get_user_permissions
 from auth.payment import PaymentManager
 from web.webhook import router as webhook_router
@@ -55,7 +65,7 @@ from models.supabase_state import (
     get_next_reset_time,
     create_user_if_not_exists
 )
-
+logger = logging.getLogger(__name__)
 # Import validation utilities
 from utils.validators import InputValidator
 
@@ -354,184 +364,241 @@ async def get_current_user(payload: dict = Depends(verify_token)):
             detail=f"Failed to get user: {str(e)}"
         )
 
-@app.post("/api/subscription/create", response_model=SubscriptionResponse, tags=["Subscription"])
-async def create_subscription(
-    subscription: SubscriptionCreate, 
+#payment endpoints
+# backend/main.py - REPLACE PAYMENT ENDPOINTS SECTION
+
+# ==================== PAYMENT ENDPOINTS ====================
+
+# 1. CREATE ORDER (First step)
+# In main.py - UPDATE THE CREATE ORDER ENDPOINT
+@app.post("/api/payment/create-order", response_model=OrderResponse, tags=["Payment"])
+async def create_payment_order(
+    order: OrderCreate, 
     payload: dict = Depends(verify_token)
 ):
-    """Create a new subscription"""
-    # Extract user ID from auth token
+    """
+    Step 1: Create a Razorpay order before payment
+    """
     user_id = payload.get("sub")
+    print(f"🔧 DEBUG: Received order creation request")
+    print(f"🔧 DEBUG: User ID: {user_id}")
+    print(f"🔧 DEBUG: Plan type: {order.plan_type}")
+    print(f"🔧 DEBUG: Available plans: {list(payment_manager.PLANS.keys())}")
+    
     if not user_id:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User ID not found in token"
         )
     
-    # Create a new subscription model with the authenticated user ID
-    subscription_data = SubscriptionCreate(
-        plan_type=subscription.plan_type,
-        total_count=subscription.total_count or 12,
-        user_id=user_id
-    )
-    
-    return await payment_manager.create_subscription(subscription_data)
+    try:
+        # Validate plan_type
+        if not order.plan_type:
+            print("❌ DEBUG: No plan_type provided")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Plan type is required"
+            )
+        
+        if order.plan_type not in payment_manager.PLANS:
+            print(f"❌ DEBUG: Invalid plan_type: {order.plan_type}")
+            print(f"❌ DEBUG: Available plans: {list(payment_manager.PLANS.keys())}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid plan type: {order.plan_type}. Available: {list(payment_manager.PLANS.keys())}"
+            )
+        
+        print(f"✅ DEBUG: Plan type validated: {order.plan_type}")
+        
+        # Create order with authenticated user ID
+        order_response = await payment_manager.create_order(
+            order.plan_type,
+            user_id
+        )
+        
+        print(f"✅ DEBUG: Order created successfully: {order_response}")
+        
+        return OrderResponse(**order_response)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Order creation failed: {str(e)}")
+        import traceback
+        print(f"❌ DEBUG: Unexpected error: {traceback.format_exc()}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create order: {str(e)}"
+        )
 
-# In main.py - UPDATE THE SUBSCRIPTION VERIFICATION ENDPOINT:
-
-# Also update the verify subscription endpoint
-@app.post("/api/subscription/verify", tags=["Subscription"])
-async def verify_subscription(
-    verification: SubscriptionVerify, 
+# 2. VERIFY PAYMENT (After successful payment)
+@app.post("/api/payment/verify", tags=["Payment"])
+async def verify_payment(
+    verification: OrderVerify, 
     payload: dict = Depends(verify_token)
 ):
-    """Verify a subscription payment and activate user's subscription"""
+    """
+    Step 2: Verify payment signature after user completes payment
+    """
     user_id = payload.get("sub")
     
     try:
         # Verify payment with Razorpay
-        if await payment_manager.verify_subscription_payment(verification):
-            print(f"✅ Payment verified successfully")
-            
-            # Get subscription details
-            subscription_details = await payment_manager.get_subscription_details(
-                verification.razorpay_subscription_id
+        is_valid = await payment_manager.verify_payment(verification)
+        
+        if not is_valid:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Payment verification failed"
             )
-            
-            # Calculate subscription end date
-            if subscription_details.get('current_end'):
-                end_date = datetime.fromtimestamp(subscription_details['current_end'])
-            else:
-                end_date = datetime.now() + timedelta(days=30)
-            
-            # ✅ NO AWAIT - get user
-            user = db.get_user_by_auth0_id(user_id)
-            
-            if not user:
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail="User not found"
-                )
-            
-            # ✅ NO AWAIT - update user
-            db.update_user(user_id, {
-                'subscription_tier': 'pro',
-                'subscription_end_date': end_date.isoformat(),
-                'is_paid': True,
-                'updated_at': datetime.now().isoformat()
-            })
-            
-            # ✅ NO AWAIT - create subscription record
-            subscription_data = {
-                'user_id': user['id'],
-                'razorpay_subscription_id': verification.razorpay_subscription_id,
-                'razorpay_plan_id': subscription_details.get('plan_id'),
-                'status': 'active',
-                'current_start': datetime.fromtimestamp(
-                    subscription_details.get('current_start', 0)
-                ).isoformat() if subscription_details.get('current_start') else None,
-                'current_end': end_date.isoformat(),
-                'total_count': subscription_details.get('total_count'),
-                'paid_count': subscription_details.get('paid_count'),
-                'remaining_count': subscription_details.get('remaining_count'),
-                'created_at': datetime.now().isoformat(),
-                'updated_at': datetime.now().isoformat()
+        
+        print(f"✅ Payment verified for user {user_id}")
+        
+        # Get payment details
+        payment_details = await payment_manager.get_payment_details(
+            verification.razorpay_payment_id
+        )
+        
+        # Get order to extract plan info
+        order = payment_manager.client.order.fetch(verification.razorpay_order_id)
+        plan_type = order.get('notes', {}).get('plan_type', 'basic_monthly')
+        
+        # Determine subscription tier based on plan
+        tier = 'pro' if 'pro' in plan_type else 'basic'
+        
+        # Calculate subscription end date (30 days)
+        end_date = datetime.now() + timedelta(days=30)
+        
+        # Get user from database
+        user = db.get_user_by_auth0_id(user_id)
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        # Update user subscription
+        db.update_user(user_id, {
+            'subscription_tier': tier,
+            'subscription_end_date': end_date.isoformat(),
+            'is_paid': True,
+            'updated_at': datetime.now().isoformat()
+        })
+        
+        # Record payment transaction
+        payment_data = {
+            'user_id': user['id'],
+            'razorpay_payment_id': verification.razorpay_payment_id,
+            'razorpay_order_id': verification.razorpay_order_id,
+            'amount': payment_details['amount'] / 100,  # Convert paise to rupees
+            'currency': payment_details['currency'],
+            'status': 'captured',
+            'payment_method': payment_details.get('method', 'card'),
+            'created_at': datetime.now().isoformat()
+        }
+        
+        db.create_payment_transaction(payment_data)
+        print(f"✅ Payment transaction recorded")
+        
+        # Update user_usage table
+        month_year = datetime.now().strftime("%Y-%m")
+        usage_update = {
+            'is_paid': True,
+            'subscription_tier': tier,
+            'subscription_end_date': end_date.isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        try:
+            db.client.table('user_usage').update(usage_update).eq(
+                'user_id', user['id']
+            ).eq('month_year', month_year).execute()
+            print(f"✅ User usage updated")
+        except Exception as usage_error:
+            print(f"⚠️ Usage update error: {usage_error}")
+        
+        # Invalidate caches
+        try:
+            from services.redis_cache import redis_cache
+            await redis_cache.invalidate_user_sessions(user_id)
+            print(f"✅ Cache invalidated")
+        except:
+            pass
+        
+        return {
+            "status": "success",
+            "message": "Payment verified and subscription activated",
+            "subscription": {
+                "tier": tier,
+                "end_date": end_date.isoformat(),
+                "is_paid": True
+            },
+            "payment": {
+                "id": verification.razorpay_payment_id,
+                "amount": payment_details['amount'] / 100,
+                "currency": payment_details['currency']
             }
-            
-            db.create_subscription(subscription_data)
-            print(f"✅ Subscription record created")
-            
-            # Update user_usage table
-            month_year = datetime.now().strftime("%Y-%m")
-            usage_update = {
-                'is_paid': True,
-                'subscription_tier': 'pro',
-                'subscription_end_date': end_date.isoformat(),
-                'updated_at': datetime.now().isoformat()
-            }
-            
-            try:
-                db.client.table('user_usage').update(usage_update).eq(
-                    'user_id', user['id']
-                ).eq('month_year', month_year).execute()
-                print(f"✅ User usage updated")
-            except Exception as usage_error:
-                print(f"⚠️ Usage update error: {usage_error}")
-            
-            # Record payment transaction
-            payment_data = {
-                'user_id': user['id'],
-                'razorpay_payment_id': verification.razorpay_payment_id,
-                'razorpay_subscription_id': verification.razorpay_subscription_id,
-                'amount': subscription_details.get('charge_at', 0) / 100,
-                'currency': 'INR',
-                'status': 'captured',
-                'payment_method': 'subscription',
-                'created_at': datetime.now().isoformat()
-            }
-            
-            db.create_payment_transaction(payment_data)
-            print(f"✅ Payment transaction recorded")
-            
-            # Invalidate caches
-            try:
-                from services.redis_cache import redis_cache
-                await redis_cache.invalidate_user_sessions(user_id)
-                print(f"✅ Cache invalidated")
-            except:
-                pass
-            
-            return {
-                "status": "success",
-                "message": "Subscription activated successfully",
-                "subscription": {
-                    "tier": "pro",
-                    "end_date": end_date.isoformat(),
-                    "is_paid": True
-                }
-            }
-        else:
-            print(f"❌ Payment verification failed")
-            return {
-                "status": "error",
-                "message": "Subscription verification failed"
-            }
-            
+        }
+        
     except HTTPException:
         raise
     except Exception as e:
-        print(f"❌ Subscription error: {str(e)}")
+        print(f"❌ Payment verification error: {str(e)}")
         import traceback
         traceback.print_exc()
         
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Subscription verification failed: {str(e)}"
+            detail=f"Payment verification failed: {str(e)}"
+        )
+
+
+# 3. GET PAYMENT STATUS
+@app.get("/api/payment/{payment_id}", tags=["Payment"])
+async def get_payment_status(
+    payment_id: str,
+    payload: dict = Depends(verify_token)
+):
+    """Get payment details"""
+    try:
+        payment_details = await payment_manager.get_payment_details(payment_id)
+        return payment_details
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get payment status: {str(e)}"
+        )
+
+
+# 4. CREATE REFUND (Optional - for customer service)
+@app.post("/api/payment/refund", tags=["Payment"])
+@has_permissions(["admin:access"])  # Admin only
+async def create_refund(
+    refund: RefundCreate,
+    payload: dict = Depends(verify_token)
+):
+    """Create a refund (Admin only)"""
+    try:
+        refund_response = await payment_manager.create_refund(
+            refund.payment_id,
+            refund.amount
         )
         
-@app.get("/api/subscription/details/{subscription_id}", tags=["Subscription"])
-async def get_subscription_details(
-    subscription_id: str,
-    payload: dict = Depends(verify_token)
-):
-    """Get subscription details"""
-    return await payment_manager.get_subscription_details(subscription_id)
-
-@app.post("/api/subscription/cancel/{subscription_id}", tags=["Subscription"])
-async def cancel_subscription(
-    subscription_id: str,
-    payload: dict = Depends(verify_token)
-):
-    """Cancel a subscription"""
-    if await payment_manager.cancel_subscription(subscription_id):
-        # Update user subscription status in Supabase
-        user_id = payload.get("sub")
-        await update_user_subscription(user_id, "free", False, datetime.now())
+        return {
+            "status": "success",
+            "refund": refund_response
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Refund failed: {str(e)}"
+        )
         
-        return {"status": "success", "message": "Subscription cancelled successfully"}
-    
-    return {"status": "error", "message": "Failed to cancel subscription"}
-
 # Import AI models validation
 from models.ai_models import validate_model_access
 
