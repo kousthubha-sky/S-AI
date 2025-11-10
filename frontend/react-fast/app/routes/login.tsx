@@ -1,6 +1,7 @@
 import { GalleryVerticalEnd } from "lucide-react"
 
 import { LoginForm } from "~/components/login-form"
+import Footer from "~/components/layout/footer"
 
 export default function LoginPage() {
   return (
@@ -21,7 +22,7 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
-      
+    <Footer/>  
     </div>
   )
 }

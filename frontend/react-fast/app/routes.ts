@@ -8,5 +8,7 @@ export default [
     route("login", "routes/login.tsx"),
     route("dashboard", "routes/dashboard.tsx"),
     route("callback", "routes/callback.tsx"),
-    
+    route("terms", "routes/terms.tsx"),
+    route("privacy", "routes/privacy.tsx"),
+    route("refund", "routes/refund.tsx"),
 ] satisfies RouteConfig;

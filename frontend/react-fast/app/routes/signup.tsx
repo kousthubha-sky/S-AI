@@ -1,4 +1,5 @@
 import { GalleryVerticalEnd } from "lucide-react"
+import Footer from "~/components/layout/footer"
 
 import { SignupForm } from "~/components/signup-form"
 
@@ -20,7 +21,7 @@ export default function SignupPage() {
           </div>
         </div>
       </div>
-      
+    <Footer/>  
     </div>
   )
 }

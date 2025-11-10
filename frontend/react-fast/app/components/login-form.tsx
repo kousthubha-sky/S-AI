@@ -10,6 +10,7 @@ import { Link, Navigate } from "react-router"
 import { useAuth0 } from "@auth0/auth0-react"
 import { motion } from "framer-motion"
 import Orb from "./ui/background-orb"
+import { PaintbrushVerticalIcon, RefreshCcwDot, RefreshCcwIcon, RefreshCwOff, Scroll, Shield, ShieldClose, ShieldEllipsis, ShieldPlus, ShieldPlusIcon, ShieldUser, ShieldXIcon, SquareChevronUp } from "lucide-react"
 
 export function LoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const { loginWithRedirect, isAuthenticated } = useAuth0();
@@ -137,6 +138,23 @@ export function LoginForm({ className, ...props }: React.ComponentProps<"div">) 
               <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
             </svg>
             <span>Secured by Auth0</span>
+          </motion.div>
+          <motion.div
+            variants={itemVariants}
+            className="flex items-center justify-center text-xs text-gray-400 mt-4"
+          >
+           <Scroll className="h-4 w-4"/>
+            <Link to="/terms" className="underline underline-offset-4 hover:text-green-600 transition-colors">
+              <span>Terms of Service</span>
+            </Link>
+           <ShieldUser className="h-4 w-4 ml-3"/>
+            <Link to="/privacy" className="underline underline-offset-4 hover:text-green-600 transition-colors">
+              <span>Privacy Policy</span>
+            </Link>
+            <RefreshCcwIcon className="h-4 w-4 ml-3"/>
+            <Link to="/refund" className="underline underline-offset-4 hover:text-green-600 transition-colors">
+              <span>Refund Policy</span>
+            </Link>
           </motion.div>
           </FieldDescription>
         </Field>
