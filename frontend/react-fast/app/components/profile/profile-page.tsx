@@ -19,7 +19,8 @@ import {
   Phone,
   Chrome,
   Globe,
-  LogOut
+  LogOut,
+  LogOutIcon
 } from "lucide-react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { getPlatformKey } from "../../hooks/useKeyboardShortcuts";
@@ -283,8 +284,8 @@ export default function ProfileSettingsPage({
                     onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
                     className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-white/70 hover:bg-white/5 hover:text-white transition"
                   >
-                    <LogOut className="h-4.5 w-4.5 min-w-[18px]" />
-                    <span className="truncate text-sm">Logout</span>
+                    <LogOutIcon className="h-4.5 w-4.5 min-w-[18px]" />
+                    
                   </button>
                 </div>
               )}
@@ -386,9 +387,17 @@ export default function ProfileSettingsPage({
                       <DetailRow label="Account Type" value="Free" />
                       <DetailRow label="Member Since" value="Recently" />
                       <DetailRow label="Status" value="Active" />
+                      
                     </div>
+                    
                   </div>
-
+                  <button
+                    onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+                    className=" flex items-center gap-3 px-3 py-2 rounded-lg text-white/70 hover:bg-white/5 hover:text-white transition"
+                  >
+                    <LogOut className="h-4.5 w-4.5 min-w-[18px]" />
+                    <span className="truncate text-sm">Logout</span>
+                  </button>
                   {/* Security Settings */}
                   <div className="mt-6 rounded-2xl border border-white/10 bg-[#0F0F0F] overflow-hidden">
                     <div className="px-5 py-4 border-b border-white/10">
