@@ -32,20 +32,6 @@ const PLANS = {
       'Document analysis',
       'Email support'
     ]
-  },
-  pro: {
-    id: 'pro_monthly',
-    name: 'Pro',
-    price: 499,
-    description: 'Full AI power for professionals',
-    features: [
-      'Unlimited messages per month',
-      'All AI models (Grok, Gemini, Llama)',
-      'Priority support 24/7',
-      'Advanced document analysis',
-      'Image generation',
-      'Custom prompts & analytics'
-    ]
   }
 };
 
@@ -71,7 +57,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
     try {
       setIsLoading(true);
       
-      const plan = PLANS[selectedPlan];
+      const plan = PLANS.basic;
       
       console.log('🔵 Creating order for:', plan.id);
       
@@ -203,7 +189,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
     }
   };
 
-  const currentPlan = PLANS[selectedPlan];
+  const currentPlan = PLANS;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md">
@@ -248,13 +234,13 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
                   >
                     <div className="flex items-center justify-between">
                       <div className="text-left">
-                        <p className="font-semibold">{PLANS[plan].name}</p>
+                        <p className="font-semibold">{PLANS.basic.name}</p>
                         <p className={`text-sm ${selectedPlan === plan ? 'text-white/80' : 'text-gray-600'}`}>
-                          {PLANS[plan].description}
+                          {PLANS.basic.description}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="text-2xl font-bold">₹{PLANS[plan].price}</p>
+                        <p className="text-2xl font-bold">₹{PLANS.basic.price}</p>
                         <p className={`text-xs ${selectedPlan === plan ? 'text-white/60' : 'text-gray-500'}`}>per month</p>
                       </div>
                     </div>
@@ -295,7 +281,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
               style={{ backfaceVisibility: 'hidden' }}
             >
               <div className="flex justify-between items-center mb-4">
-                <h2 className="font-semibold text-lg">{currentPlan.name}</h2>
+                <h2 className="font-semibold text-lg">{currentPlan.basic.name}</h2>
                 <button
                   onClick={() => setIsFlipped(false)}
                   className="text-gray-500 hover:text-gray-800 transition"
@@ -305,11 +291,11 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
               </div>
 
               <div className="flex-1 overflow-y-auto text-sm text-gray-600 space-y-3">
-                <p className="text-2xl font-bold text-black">₹{currentPlan.price}/month</p>
-                <p className="text-gray-500">{currentPlan.description}</p>
+                <p className="text-2xl font-bold text-black">₹{currentPlan.basic.price}/month</p>
+                <p className="text-gray-500">{currentPlan.basic.description}</p>
                 
                 <ul className="space-y-2">
-                  {currentPlan.features.map((feature, i) => (
+                  {currentPlan.basic.features.map((feature, i) => (
                     <li key={i} className="flex items-center gap-2">
                       <CheckCircle2 className="w-4 h-4 text-gray-800/70" /> {feature}
                     </li>
@@ -329,7 +315,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
                   onClick={handlePayment}
                   disabled={isLoading}
                 >
-                  {isLoading ? 'Processing...' : `Pay ₹${currentPlan.price}`}
+                  {isLoading ? 'Processing...' : `Pay ₹${currentPlan.basic.price}`}
                 </Button>
                 <Button variant="ghost" className="text-gray-600 w-full" onClick={onClose}>
                   Cancel

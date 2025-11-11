@@ -28,12 +28,12 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
-                <a href="/#features" className="text-gray-400 hover:text-white transition text-sm">
+                <a href="/features" className="text-gray-400 hover:text-white transition text-sm">
                   Features
                 </a>
               </li>
               <li>
-                <a href="/#pricing" className="text-gray-400 hover:text-white transition text-sm">
+                <a href="/pricing" className="text-gray-400 hover:text-white transition text-sm">
                   Pricing
                 </a>
               </li>
@@ -75,6 +75,9 @@ export default function Footer() {
             </Link>
             <Link to="/refund" className="text-gray-500 hover:text-white text-sm transition">
               Refund
+            </Link>
+            <Link to="/about" className="text-gray-500 hover:text-white text-sm transition">
+              About
             </Link>
           </div>
         </div>
