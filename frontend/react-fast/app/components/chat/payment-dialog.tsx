@@ -21,7 +21,7 @@ interface PaymentDialogProps {
 
 const PLANS = {
   basic: {
-    id: 'basic_monthly',
+    id: 'pro_monthly',
     name: 'Student Starter',
     price: 249,
     description: 'Perfect for students and learners',
