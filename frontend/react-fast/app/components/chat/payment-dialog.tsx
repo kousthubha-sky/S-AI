@@ -1,4 +1,4 @@
-// frontend/react-fast/app/components/chat/payment-dialog.tsx - COMPLETE REWRITE
+// frontend/react-fast/app/components/chat/payment-dialog.tsx - FIXED VERSION
 
 declare global {
   interface Window {
@@ -9,7 +9,7 @@ declare global {
 import { useState, useEffect } from 'react';
 import { Button } from '~/components/ui/button';
 import { useAuthApi } from '~/hooks/useAuthApi';
-import { RefreshCw, CheckCircle2, Sparkles, Shield, Brain, Zap, X } from 'lucide-react';
+import { RefreshCw, CheckCircle2, Sparkles, Shield, Brain, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useToast } from "~/components/ui/toast";
 
@@ -21,16 +21,17 @@ interface PaymentDialogProps {
 
 const PLANS = {
   basic: {
-    id: 'pro_monthly',
+    id: 'pro_monthly',  // Changed to match backend
     name: 'Student Starter',
     price: 249,
     description: 'Perfect for students and learners',
     features: [
       '1000 messages per month',
-      'Access to basic AI models',
-      'Priority support',
-      'Document analysis',
-      'Email support'
+      'All AI models (Grok, Gemini, Llama)',
+      'Priority support 24/7',
+      'Advanced document analysis',
+      'Image generation',
+      'Custom prompts & analytics'
     ]
   }
 };
@@ -38,7 +39,6 @@ const PLANS = {
 export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: PaymentDialogProps) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState<'basic' | 'pro'>('pro');
   const { fetchWithAuth } = useAuthApi();
   const { showToast } = useToast();
 
@@ -220,32 +220,22 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
                 </div>
               </div>
 
-              {/* Plan Selector */}
-              <div className="w-full space-y-3">
-                {(['basic', 'pro'] as const).map((plan) => (
-                  <button
-                    key={plan}
-                    onClick={() => setSelectedPlan(plan)}
-                    className={`w-full p-4 rounded-xl border-2 transition-all ${
-                      selectedPlan === plan
-                        ? 'border-black bg-black text-white'
-                        : 'border-gray-200 hover:border-gray-300'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="text-left">
-                        <p className="font-semibold">{PLANS.basic.name}</p>
-                        <p className={`text-sm ${selectedPlan === plan ? 'text-white/80' : 'text-gray-600'}`}>
-                          {PLANS.basic.description}
-                        </p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-2xl font-bold">₹{PLANS.basic.price}</p>
-                        <p className={`text-xs ${selectedPlan === plan ? 'text-white/60' : 'text-gray-500'}`}>per month</p>
-                      </div>
+              {/* Single Plan Card */}
+              <div className="w-full">
+                <div className="w-full p-4 rounded-xl border-2 border-black bg-black text-white">
+                  <div className="flex items-center justify-between">
+                    <div className="text-left">
+                      <p className="font-semibold">{PLANS.basic.name}</p>
+                      <p className="text-sm text-white/80">
+                        {PLANS.basic.description}
+                      </p>
                     </div>
-                  </button>
-                ))}
+                    <div className="text-right">
+                      <p className="text-2xl font-bold">₹{PLANS.basic.price}</p>
+                      <p className="text-xs text-white/60">per month</p>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="flex justify-center gap-6 mt-2">
