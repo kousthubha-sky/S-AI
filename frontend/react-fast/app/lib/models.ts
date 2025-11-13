@@ -9,12 +9,28 @@ export interface AIModel {
 
 export const AI_MODELS: AIModel[] = [
   // Free Models
+    {
+    id: 'meta-llama/llama-4-maverick:free',
+    name: 'Llama 4 Maverick',
+    description: 'Next-gen open source model with improved reasoning',
+    tier: 'free',
+    contextWindow: 128000,
+    provider: 'Meta'
+  },
+  {
+    id: 'openai/gpt-oss-20b:free',
+    name: 'GPT-OSS',
+    description: 'High-quality base model optimized for general chat',
+    tier: 'free',
+    contextWindow: 131072,
+    provider: 'TNGTech'
+  },
   
   {
 
     id: 'tngtech/deepseek-r1t2-chimera:free',
     name: 'DeepSeek Chimera',
-    description: 'High-quality base model optimized for general chat',
+    description: 'Balanced open source model for diverse tasks',
     tier: 'free',
     contextWindow: 8192,
     provider: 'TNGTech'
@@ -35,14 +51,7 @@ export const AI_MODELS: AIModel[] = [
     contextWindow: 131072,
     provider: 'Meta'
   },
-  {
-    id: 'meta-llama/llama-4-maverick:free',
-    name: 'Llama 4 Maverick',
-    description: 'Next-gen open source model with improved reasoning',
-    tier: 'free',
-    contextWindow: 128000,
-    provider: 'Meta'
-  },
+
   {
     id: 'qwen/qwen3-30b-a3b:free',
     name: 'Qwen 3',

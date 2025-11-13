@@ -647,12 +647,30 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
         
         # Validate model access
         tier = usage.subscription_tier or "free"
-        has_access = validate_model_access(chat_request.model, tier == "pro")
+        
+        # Ensure tier is a valid value
+        if tier not in ["free", "pro", "basic"]:
+            print(f"⚠️ Invalid tier value '{tier}', defaulting to 'free'")
+            tier = "free"
+        
+        is_pro = tier == "pro"
+        
+        # Debug logging
+        print(f"🔍 Model validation debug:")
+        print(f"   - Model ID: {chat_request.model}")
+        print(f"   - User tier (raw): {usage.subscription_tier}")
+        print(f"   - User tier (sanitized): {tier}")
+        print(f"   - Is Pro: {is_pro}")
+        print(f"   - Usage.is_paid: {usage.is_paid}")
+        
+        has_access = validate_model_access(chat_request.model, is_pro)
+        print(f"   - Has access: {has_access}")
+        
         if not has_access:
-            
+            print(f"❌ Model access denied for {chat_request.model}")
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="This model is only available to Pro users. Please upgrade your subscription."
+                detail=f"This model is only available to Pro users. Please upgrade your subscription. (Model: {chat_request.model}, Tier: {tier})"
             )
         print(f"✅ Model access granted")
         

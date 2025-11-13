@@ -131,64 +131,7 @@ async def generic_exception_handler(request: Request, exc: Exception):
         )
     )
 
-# ✅ UPDATE existing endpoints to use secure error handling
-messages = [{"role": msg.role, "content": msg.content} for msg in Request.messages]
 
-@app.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
-async def chat(request: ChatRequest, payload: dict = Depends(verify_token)):
-    """Process chat messages - SECURED"""
-    user_id = payload.get("sub")
-    error_id = str(uuid.uuid4())
-    
-    try:
-        usage = await get_user_usage(user_id)
-        
-        # ... existing validation code ...
-        
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json={
-                    "model": request.model or "tngtech/deepseek-r1t2-chimera:free",
-                    "messages": messages,
-                    "max_tokens": request.max_tokens or 1000,
-                    "temperature": request.temperature or 0.7
-                }
-            )
-            
-            if response.status_code != 200:
-                # ✅ Log detailed error but return generic message
-                logger.error(f"OpenRouter error {error_id}: {response.status_code} - {response.text}")
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="AI service temporarily unavailable. Please try again."
-                )
-                
-            data = response.json()
-            await increment_message_count(user_id, token_count=data.get("usage", {}).get("total_tokens", 0))
-            
-            return ChatResponse(
-                message=data["choices"][0]["message"]["content"],
-                usage=data.get("usage", {}),
-                model=data.get("model", "unknown")
-            )
-            
-    except httpx.TimeoutException:
-        logger.error(f"OpenRouter timeout {error_id} for user {user_id}")
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Request timed out. Please try again."
-        )
-    except HTTPException:
-        raise
-    except Exception as e:
-        # ✅ Log error with ID but don't expose details
-        SecureErrorHandler.log_error(error_id, e, request, user_id)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Chat processing failed. Error ID: {error_id}"
-        )
 
 # ✅ Environment-based configuration
 class Config:
