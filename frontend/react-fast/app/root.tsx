@@ -78,8 +78,8 @@ export const meta: Route.MetaFunction = () => {
     { name: "theme-color", content: "#0f0f0f" },
     
     // Schema.org for Google+ (JSON-LD will be added separately)
-    { itemprop: "name", content: "SkyGPT - Free AI Chat Platform" },
-    { itemprop: "description", content: "Access multiple AI models in one platform" },
+    { itemProp: "name", content: "SkyGPT - Free AI Chat Platform" },
+    { itemProp: "description", content: "Access multiple AI models in one platform" },
     
     // Canonical URL
     { tagName: "link", rel: "canonical", href: "https://s-ai-blush.verce.app" },

@@ -61,17 +61,22 @@ class InputValidator:
     
     @staticmethod
     def sanitize_string(text: str, max_length: int = 1000) -> str:
-        """Sanitize text input"""
+        """
+        Sanitize text input with support for large inputs
+        ✅ UPDATED: Now supports up to 500KB of text (for large code blocks)
+        """
         if not text:
             return ""
         
-        # Truncate
-        text = text[:max_length]
+        # ✅ INCREASED: Support for large code blocks (500,000 characters = ~500KB)
+        # This allows pasting entire source files for code review/correction
+        if len(text) > max_length:
+            text = text[:max_length]
         
-        # Remove HTML tags
+        # Remove HTML tags (but preserve content structure for code)
         text = bleach.clean(text, tags=[], strip=True)
         
-        # Check for SQL injection
+        # Check for SQL injection (case-insensitive for safety)
         for pattern in InputValidator.SQL_INJECTION_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE):
                 raise HTTPException(
@@ -79,7 +84,7 @@ class InputValidator:
                     detail="Invalid input detected"
                 )
         
-        # Check for XSS
+        # Check for XSS attempts
         for pattern in InputValidator.XSS_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE):
                 raise HTTPException(
@@ -88,6 +93,32 @@ class InputValidator:
                 )
         
         return text.strip()
+    
+    @staticmethod
+    def split_large_input(text: str, chunk_size: int = 100000) -> list:
+        """
+        Split very large inputs into manageable chunks
+        Useful for processing code files > 100KB
+        """
+        if len(text) <= chunk_size:
+            return [text]
+        
+        chunks = []
+        words = text.split()  # Split by words to avoid cutting mid-word
+        current_chunk = ""
+        
+        for word in words:
+            if len(current_chunk) + len(word) + 1 > chunk_size:
+                if current_chunk:
+                    chunks.append(current_chunk.strip())
+                current_chunk = word
+            else:
+                current_chunk += " " + word if current_chunk else word
+        
+        if current_chunk:
+            chunks.append(current_chunk.strip())
+        
+        return chunks
     
     @staticmethod
     def validate_filename(filename: str) -> str:

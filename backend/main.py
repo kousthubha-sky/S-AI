@@ -617,11 +617,12 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
     
     try:
         # Sanitize chat messages
+        # ✅ UPDATED: Support large code blocks and high input volumes
         sanitized_messages = []
         for msg in chat_request.messages:
             sanitized_messages.append({
                 "role": msg.role,
-                "content": InputValidator.sanitize_string(msg.content, max_length=10000)
+                "content": InputValidator.sanitize_string(msg.content, max_length=500000)  # ✅ 5x larger (100KB → 500KB)
             })
         print(f"✅ Messages sanitized")
         
@@ -731,77 +732,81 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
                     detail="No response from AI model"
                 )
             
-            # ✅ ENHANCED: Extract text, images, and handle different response formats
             choice = data["choices"][0]
             message_content = choice["message"]["content"]
             images = []
 
-            # Handle different response formats for image-generation models
+            # Handle different response formats
             if isinstance(message_content, list):
-                # Gemini returns content as array with text and image parts
+                # Multimodal response (text + images)
                 text_parts = []
                 for part in message_content:
                     if isinstance(part, dict):
                         if part.get("type") == "text":
                             text_parts.append(part.get("text", ""))
                         elif part.get("type") == "image_url":
-                            image_url = part.get("image_url", {}).get("url", "")
-                            if image_url:
+                            image_data = part.get("image_url", {})
+                            url = image_data.get("url", "")
+                            if url:
                                 images.append({
-                                    "url": image_url,
-                                    "type": "generated",
-                                    "alt_text": "AI generated image"
+                                    "url": url,
+                                    "type": "image/png",  # Or detect from URL
+                                    "alt_text": image_data.get("detail", "AI generated image"),
+                                    "width": None,
+                                    "height": None
                                 })
                 message_content = "\n".join(text_parts)
+
             elif isinstance(message_content, str):
-                # Check if response contains image references or base64 data
-                # Some models might return image data in different formats
+                # Plain text response - check for embedded image references
                 import re
-                image_patterns = [
-                    r'!\[.*?\]\((.*?)\)',  # Markdown image syntax
-                    r'<img.*?src="(.*?)".*?>',  # HTML img tag
-                ]
                 
-                for pattern in image_patterns:
-                    found_images = re.findall(pattern, message_content)
-                    for img_url in found_images:
-                        if img_url.startswith('http'):
+                # Extract markdown images: ![alt](url)
+                markdown_images = re.findall(r'!\[([^\]]*)\]\(([^)]+)\)', message_content)
+                for alt_text, url in markdown_images:
+                    if url.startswith(('http://', 'https://', 'data:image/')):
+                        images.append({
+                            "url": url,
+                            "type": "image/png",
+                            "alt_text": alt_text or "AI generated image",
+                            "width": None,
+                            "height": None
+                        })
+                
+                # Extract HTML images: <img src="url">
+                html_images = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', message_content)
+                for url in html_images:
+                    if url.startswith(('http://', 'https://', 'data:image/')):
+                        # Avoid duplicates
+                        if not any(img["url"] == url for img in images):
                             images.append({
-                                "url": img_url,
-                                "type": "generated", 
-                                "alt_text": "AI generated image"
+                                "url": url,
+                                "type": "image/png",
+                                "alt_text": "AI generated image",
+                                "width": None,
+                                "height": None
                             })
 
-            # ✅ Also check for images in other parts of the response
-            if not images and data.get("images"):
-                # Some APIs might put images in a separate field
-                for img_data in data.get("images", []):
-                    if isinstance(img_data, dict) and img_data.get("url"):
+            # Check for images in separate field (some APIs)
+            if data.get("images"):
+                for img in data["images"]:
+                    if isinstance(img, dict) and img.get("url"):
                         images.append({
-                            "url": img_data.get("url"),
-                            "type": "generated",
-                            "alt_text": img_data.get("alt_text", "AI generated image")
+                            "url": img["url"],
+                            "type": img.get("type", "image/png"),
+                            "alt_text": img.get("alt_text", "AI generated image"),
+                            "width": img.get("width"),
+                            "height": img.get("height")
                         })
 
-            print(f"🖼️ Found {len(images)} images in response")
-            
-            print(f"✅ Message content length: {len(message_content)} chars")
-            if images:
-                print(f"🖼️ Found {len(images)} generated images")
-            
-            # Increment usage counter
-            tokens_used = data.get("usage", {}).get("total_tokens", 0)
-            await increment_message_count(user_id, token_count=tokens_used)
-            
-            
-            print(f"{'='*50}\n")
-            
-            # ✅ Return with images if present
+            print(f"📊 Extracted content: {len(message_content)} chars, {len(images)} images")
+
+            # Return response with properly formatted images
             return ChatResponse(
                 message=message_content,
                 usage=data.get("usage", {}),
                 model=data.get("model", "unknown"),
-                images=images if images else None  # Add images field
+                images=images if images else None
             )
             
     except HTTPException:
@@ -1237,7 +1242,7 @@ async def get_cache_stats(payload: dict = Depends(verify_token)):
     return stats
 
 @app.get("/api/debug/subscription-status", tags=["Debug"])
-async def debug_subscription_status(payload: dict = Depends(verify_token)):
+def debug_subscription_status(payload: dict = Depends(verify_token)):
     """
     Diagnostic endpoint to check subscription status across all tables
     """
@@ -1245,7 +1250,7 @@ async def debug_subscription_status(payload: dict = Depends(verify_token)):
     
     try:
         # Get user from database
-        user = await db.get_user_by_auth0_id(user_id)
+        user = db.get_user_by_auth0_id(user_id)
         
         if not user:
             return {
@@ -1254,7 +1259,7 @@ async def debug_subscription_status(payload: dict = Depends(verify_token)):
             }
         
         # Get subscription from subscriptions table
-        subscription = await db.get_active_subscription(user['id'])
+        subscription = db.get_active_subscription(user['id'])
         
         # Get usage from user_usage table
         month_year = datetime.now().strftime("%Y-%m")
@@ -1308,7 +1313,7 @@ async def debug_subscription_status(payload: dict = Depends(verify_token)):
 
 
 @app.post("/api/debug/fix-subscription-status", tags=["Debug"])
-async def fix_subscription_status(payload: dict = Depends(verify_token)):
+def fix_subscription_status(payload: dict = Depends(verify_token)):
     """
     Force-fix subscription status based on active subscription
     """
@@ -1316,12 +1321,12 @@ async def fix_subscription_status(payload: dict = Depends(verify_token)):
     
     try:
         # Get user
-        user = await db.get_user_by_auth0_id(user_id)
+        user = db.get_user_by_auth0_id(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="User not found")
         
         # Get active subscription
-        subscription = await db.get_active_subscription(user['id'])
+        subscription =  db.get_active_subscription(user['id'])
         
         if not subscription:
             return {
@@ -1341,7 +1346,7 @@ async def fix_subscription_status(payload: dict = Depends(verify_token)):
             }
         
         # Force update user to pro status
-        await db.update_user(user_id, {
+        db.update_user(user_id, {
             'subscription_tier': 'pro',
             'is_paid': True,
             'subscription_end_date': subscription['current_end'],

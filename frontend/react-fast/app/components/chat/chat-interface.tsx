@@ -1421,7 +1421,7 @@ const loadSession = async (sessionId: string) => {
                         <div
                           className={cn(
                             "max-w-full sm:max-w-[85%] px-4 py-2 rounded-2xl leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words overflow-hidden",
-                            "text-white backdrop-blur-lg rounded-bl-none"
+                            "text-white rounded-bl-none"
                           )}
                         >
                           {msg.isLoading ? (
@@ -1514,7 +1514,7 @@ const loadSession = async (sessionId: string) => {
                 isMobile ? (
                   isKeyboardOpen 
                     ? "p-3 max-h-[150px] rounded-t-2xl rounded-b-none" 
-                    : "p-3 max-h-[200px] "
+                    : "p-3 max-h-[300px]"  // ✅ INCREASED: 200px → 300px on mobile
                 ) : "p-3 sm:p-4"
               )}>
                 <textarea
@@ -1527,26 +1527,33 @@ const loadSession = async (sessionId: string) => {
                       handleSendMessage(e);
                     }
                   }}
-                  placeholder="Ask anything..."
+                  placeholder="Ask anything... (Paste code blocks, large text, etc.)"
                   disabled={isLoading}
                   rows={1}
                   className={cn(
                     "flex-1 w-full bg-transparent outline-none resize-none overflow-hidden placeholder:text-muted-foreground/60 leading-relaxed",
                     "touch-manipulation",
-                    isMobile ? "text-base min-h-[44px] max-h-[120px] text-white" : "text-white text-sm sm:text-base min-h-[32px] max-h-[200px]"
+                    isMobile ? "text-base min-h-[44px] max-h-[250px] text-white" : "text-white text-sm sm:text-base min-h-[32px] max-h-[600px]"  // ✅ INCREASED: max-h from 200px to 600px on desktop
                   )}
                   style={{
                     minHeight: isMobile ? '44px' : '32px',
-                    maxHeight: isMobile ? '120px' : '200px',
+                    maxHeight: isMobile ? '250px' : '600px',  // ✅ INCREASED: Support for large code blocks
                     fontSize: isMobile ? '16px' : '14px',
-                    lineHeight: '1.5'
+                    lineHeight: '1.5',
+                    overflow: 'auto'  // ✅ ADDED: Better scrolling for large inputs
                   }}
                   onInput={(e) => {
                     const target = e.target as HTMLTextAreaElement;
-                    const maxHeight = isMobile ? 120 : 200;
+                    // ✅ UPDATED: Properly handle large text with auto-scrolling
+                    const maxHeight = isMobile ? 250 : 600;
                     const minHeight = isMobile ? 44 : 32;
                     target.style.height = `${minHeight}px`;
                     target.style.height = `${Math.min(target.scrollHeight, maxHeight)}px`;
+                    
+                    // ✅ ADDED: Show character count warning for very large inputs
+                    if ((e.target as HTMLTextAreaElement).value.length > 400000) {
+                      console.warn('⚠️ Large input detected: Consider splitting into smaller messages for better performance');
+                    }
                   }}
                   onFocus={() => {
                     // Small delay to allow keyboard to appear before scrolling
