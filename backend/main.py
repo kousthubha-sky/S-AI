@@ -704,104 +704,189 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
         if chat_request.system_prompt:
             messages.insert(0, {"role": "system", "content": chat_request.system_prompt})
         
-        # Prepare request body
-        request_body = {
-            "model": chat_request.model or "anthropic/claude-3.5-sonnet",
-            "messages": messages,
-            "max_tokens": chat_request.max_tokens or 1000,
-            "temperature": chat_request.temperature or 0.7,
-            "modalities": ["text", "image"]
-        }
+        # Determine which models to try (primary + fallbacks)
+        from models.ai_models import get_fallback_models, PROBLEMATIC_MODELS
+        models_to_try = [chat_request.model or "anthropic/claude-3.5-sonnet"]
         
+        # If using a problematic model or if request fails, try fallbacks
+        if models_to_try[0] in PROBLEMATIC_MODELS:
+            print(f"⚠️ Primary model {models_to_try[0]} has known issues, adding fallbacks")
+            models_to_try.extend(get_fallback_models(is_pro))
         
+        # Try each model in sequence
+        last_error = None
+        response = None
         
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers=headers,
-                json=request_body
+        for attempt_model in models_to_try:
+            try:
+                print(f"🔄 Attempting request with model: {attempt_model}")
+                
+                # Prepare request body
+                request_body = {
+                    "model": attempt_model,
+                    "messages": messages,
+                    "max_tokens": chat_request.max_tokens or 1000,
+                    "temperature": chat_request.temperature or 0.7,
+                }
+                
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    response = await client.post(
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers=headers,
+                        json=request_body
+                    )
+                    
+                    if response.status_code == 200:
+                        print(f"✅ Request successful with model: {attempt_model}")
+                        break  # Success! Exit the retry loop
+                    elif response.status_code == 403:
+                        # Moderation filter or model restriction
+                        try:
+                            error_data = response.json()
+                            error_msg = error_data.get('error', {}).get('message', '')
+                            print(f"⚠️ Model {attempt_model} returned 403: {error_msg}")
+                            
+                            # Check if it's a moderation issue
+                            if 'moderation' in error_msg.lower() or 'flagged' in error_msg.lower():
+                                print(f"🚫 Moderation filter triggered on {attempt_model}")
+                                # Try next model
+                                last_error = HTTPException(
+                                    status_code=403,
+                                    detail=f"Content moderation: {error_msg}"
+                                )
+                                continue
+                        except:
+                            pass
+                        # If we have more models to try, continue
+                        if attempt_model != models_to_try[-1]:
+                            print(f"📋 Trying next model...")
+                            continue
+                    elif response.status_code == 429:
+                        # Rate limited - try next model
+                        print(f"⏱️ Rate limited on {attempt_model}, trying next...")
+                        last_error = HTTPException(
+                            status_code=429,
+                            detail="Service rate limited, retrying..."
+                        )
+                        continue
+                    else:
+                        # Other error
+                        try:
+                            error_data = response.json()
+                            error_detail = error_data.get('error', {}).get('message', f"Error: {response.status_code}")
+                            print(f"❌ Error from {attempt_model}: {error_data}")
+                        except:
+                            error_detail = f"OpenRouter API error: {response.status_code}"
+                        
+                        last_error = HTTPException(
+                            status_code=response.status_code,
+                            detail=error_detail
+                        )
+                        
+                        # Try next model if available
+                        if attempt_model != models_to_try[-1]:
+                            print(f"📋 Trying next model...")
+                            continue
+                        
+                        # No more models to try
+                        raise last_error
+                        
+            except httpx.TimeoutException:
+                print(f"⏱️ Timeout with {attempt_model}")
+                if attempt_model != models_to_try[-1]:
+                    print(f"📋 Trying next model...")
+                    last_error = HTTPException(
+                        status_code=504,
+                        detail="Request timeout, retrying..."
+                    )
+                    continue
+                else:
+                    raise HTTPException(
+                        status_code=504,
+                        detail="Request timed out on all available models"
+                    )
+            except Exception as e:
+                print(f"❌ Error with {attempt_model}: {str(e)}")
+                last_error = e
+                if attempt_model != models_to_try[-1]:
+                    print(f"📋 Trying next model...")
+                    continue
+                else:
+                    raise
+        
+        # Check if we got a response
+        if response is None or response.status_code != 200:
+            if last_error:
+                raise last_error
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to get response from all available models"
             )
-            
-          
-            
-            if response.status_code != 200:
-                error_detail = f"OpenRouter API error: {response.status_code}"
-                try:
-                    error_data = response.json()
-                    error_detail = error_data.get('error', {}).get('message', error_detail)
-                    print(f"❌ OpenRouter error: {error_data}")
-                except:
-                    pass
-                raise HTTPException(
-                    status_code=response.status_code,
-                    detail=error_detail
-                )
-                
-            data = response.json()
-            print(f"✅ Got response from OpenRouter")
-            
-            # Check if we got a valid response
-            if not data.get("choices") or len(data["choices"]) == 0:
-               
-                raise HTTPException(
-                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                    detail="No response from AI model"
-                )
-            
-            choice = data["choices"][0]
-            message_content = choice["message"]["content"]
-            images = []
+        
+        data = response.json()
+        print(f"✅ Got response from OpenRouter")
+        
+        # Check if we got a valid response
+        if not data.get("choices") or len(data["choices"]) == 0:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="No response from AI model"
+            )
+        
+        choice = data["choices"][0]
+        message_content = choice["message"]["content"]
+        images = []
 
-            # Handle different response formats
-            if isinstance(message_content, list):
-                # Multimodal response (text + images)
-                text_parts = []
-                for part in message_content:
-                    if isinstance(part, dict):
-                        if part.get("type") == "text":
-                            text_parts.append(part.get("text", ""))
-                        elif part.get("type") == "image_url":
-                            image_data = part.get("image_url", {})
-                            url = image_data.get("url", "")
-                            if url:
-                                images.append({
-                                    "url": url,
-                                    "type": "image/png",  # Or detect from URL
-                                    "alt_text": image_data.get("detail", "AI generated image"),
-                                    "width": None,
-                                    "height": None
-                                })
-                message_content = "\n".join(text_parts)
-
-            elif isinstance(message_content, str):
-                # Plain text response - check for embedded image references
-                import re
-                
-                # Extract markdown images: ![alt](url)
-                markdown_images = re.findall(r'!\[([^\]]*)\]\(([^)]+)\)', message_content)
-                for alt_text, url in markdown_images:
-                    if url.startswith(('http://', 'https://', 'data:image/')):
-                        images.append({
-                            "url": url,
-                            "type": "image/png",
-                            "alt_text": alt_text or "AI generated image",
-                            "width": None,
-                            "height": None
-                        })
-                
-                # Extract HTML images: <img src="url">
-                html_images = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', message_content)
-                for url in html_images:
-                    if url.startswith(('http://', 'https://', 'data:image/')):
-                        # Avoid duplicates
-                        if not any(img["url"] == url for img in images):
+        # Handle different response formats
+        if isinstance(message_content, list):
+            # Multimodal response (text + images)
+            text_parts = []
+            for part in message_content:
+                if isinstance(part, dict):
+                    if part.get("type") == "text":
+                        text_parts.append(part.get("text", ""))
+                    elif part.get("type") == "image_url":
+                        image_data = part.get("image_url", {})
+                        url = image_data.get("url", "")
+                        if url:
                             images.append({
                                 "url": url,
-                                "type": "image/png",
-                                "alt_text": "AI generated image",
+                                "type": "image/png",  # Or detect from URL
+                                "alt_text": image_data.get("detail", "AI generated image"),
                                 "width": None,
                                 "height": None
                             })
+            message_content = "\n".join(text_parts)
+
+        elif isinstance(message_content, str):
+            # Plain text response - check for embedded image references
+            import re
+            
+            # Extract markdown images: ![alt](url)
+            markdown_images = re.findall(r'!\[([^\]]*)\]\(([^)]+)\)', message_content)
+            for alt_text, url in markdown_images:
+                if url.startswith(('http://', 'https://', 'data:image/')):
+                    images.append({
+                        "url": url,
+                        "type": "image/png",
+                        "alt_text": alt_text or "AI generated image",
+                        "width": None,
+                        "height": None
+                    })
+            
+            # Extract HTML images: <img src="url">
+            html_images = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', message_content)
+            for url in html_images:
+                if url.startswith(('http://', 'https://', 'data:image/')):
+                    # Avoid duplicates
+                    if not any(img["url"] == url for img in images):
+                        images.append({
+                            "url": url,
+                            "type": "image/png",
+                            "alt_text": "AI generated image",
+                            "width": None,
+                            "height": None
+                        })
 
             # Check for images in separate field (some APIs)
             if data.get("images"):
