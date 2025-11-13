@@ -23,7 +23,7 @@ export const AI_MODELS: AIModel[] = [
     description: 'High-quality base model optimized for general chat',
     tier: 'free',
     contextWindow: 131072,
-    provider: 'TNGTech'
+    provider: 'OpenAI'
   },
   
   {
