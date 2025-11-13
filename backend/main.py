@@ -215,8 +215,6 @@ async def health_check():
     
     return {
         "status": "healthy",
-        "database": db_status,
-        "version": "2.0.0"
     }
 
 # User profile endpoints
