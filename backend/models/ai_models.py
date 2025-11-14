@@ -4,6 +4,7 @@ PRO_MODELS = [
     "x-ai/grok-4-fast",
     "google/gemini-2.5-flash-image",
     "meta-llama/llama-3.3-70b-instruct:free",
+    "meta-llama/llama-4-maverick-17b-128e-instruct:free", 
     "anthropic/claude-3.5-sonnet",  # Add Claude as premium option
     "openai/gpt-4-turbo-preview",
 ]
@@ -16,6 +17,7 @@ FREE_MODELS = [
     # NOTE: meta-llama/llama-4-maverick variants have strict moderation policies
     # They flag common words as "misc" violations and return 403 errors
     # Use alternative free models above instead
+    "meta-llama/llama-4-maverick:free",
     "qwen/qwen3-30b-a3b:free",
     "qwen/qwen3-235b-a22b:free",
 ]

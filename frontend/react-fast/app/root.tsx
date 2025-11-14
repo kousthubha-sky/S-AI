@@ -188,7 +188,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           }}
         />
       </head>
-      <body className="text-black bg-[#0f0f0f] selection:bg-purple-500 selection:text-white min-h-screen relative overflow-x-hidden">
+      <body className=" selection:bg-purple-500 selection:text-white min-h-screen relative overflow-x-hidden">
         {/* Background threads */}
         <div style={{
           position: 'fixed',
@@ -199,11 +199,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
           zIndex: 0,
           pointerEvents: 'inherit'
         }}>
-          <Threads
-            amplitude={1}
-            distance={0}
-            enableMouseInteraction={true}
-          />
+          
         </div>
         
         {/* Content layer */}

@@ -90,8 +90,8 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "flex items-center gap-2 px-3 py-1.5 rounded-md border text-xs font-medium transition-all duration-200",
-          "bg-background/80 backdrop-blur-sm border-border/50 hover:border-border",
+          "flex items-center gap-2  py-1.5 rounded-2xl border text-xs font-medium transition-all duration-200",
+          "bg-background/80  border-border/50 hover:border-border",
           "text-foreground hover:bg-muted/50"
         )}
         whileHover={{ scale: 1.02 }}

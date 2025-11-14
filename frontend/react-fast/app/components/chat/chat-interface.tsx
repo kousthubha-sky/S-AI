@@ -1,20 +1,16 @@
 // components/chat/chat-interface.tsx
 import { useState, useRef, useEffect, type JSX } from "react"
-import { Send, Paperclip,Share, X, AlertCircle, Plus, Menu, Copy, Check, Brain } from "lucide-react"
+import { AlertCircle, Copy, Check } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { cn } from "~/lib/utils"
 import { useAuthApi } from "~/hooks/useAuthApi"
 import { useAuth0 } from "@auth0/auth0-react"
-import { PaymentDialog } from "./payment-dialog"
-import { ModelSelector } from "./model-selector"
 import { AI_MODELS } from "~/lib/models"
 import { ChatService } from '~/services/chatService'
-import { motion, AnimatePresence } from "framer-motion"
-import React from "react"
-import { useDynamicModel } from "~/hooks/useDynamicModel"
-import ColorBends from '~/components/ui/ColorBends'
 import { useToast } from "~/components/ui/toast"
-import Orb from "../ui/background-orb"
+import { PromptInputBox } from "~/components/ai-prompt-box"
+import React from "react"
+
 interface ChatSession {
   id: string
   title: string
@@ -45,7 +41,7 @@ interface Message {
   timestamp: Date
   attachments?: Attachment[]
   isLoading?: boolean
-  images?: ImageData[]  // ✅ NEW: Add images field
+  images?: ImageData[]
 }
 
 interface ChatInterfaceProps {
@@ -64,14 +60,6 @@ interface ChatInterfaceProps {
   isSidebarCollapsed?: boolean;
 }
 
-const PROMPT_CATEGORIES = {
-  write: ["Write executive summaries", "Compare my writing style to famous authors", "Write compelling CTAs", "Improve my writing style", "Help me develop a unique voice for an audience"],
-  learn: ["Explain complex concepts simply", "Create a study plan", "Summarize research papers", "Generate quiz questions", "Help with homework"],
-  code: ["Debug this code", "Explain programming concepts", "Write documentation", "Optimize performance", "Code review"],
-  life: ["Plan my weekly schedule", "Relationship advice", "Financial planning tips", "Health and wellness advice", "Travel recommendations"],
-  claudes: ["Creative brainstorming", "Philosophical discussions", "Book recommendations", "Career guidance", "Personal growth tips"]
-}
-
 const GeneratedImages = ({ images }: { images: ImageData[] }) => {
   const [loadingImages, setLoadingImages] = useState<Record<string, boolean>>({});
   const [imageErrors, setImageErrors] = useState<Record<string, boolean>>({});
@@ -86,7 +74,6 @@ const GeneratedImages = ({ images }: { images: ImageData[] }) => {
   };
 
   useEffect(() => {
-    // Set all images as loading initially
     const loading: Record<string, boolean> = {};
     images.forEach(img => {
       loading[img.url] = true;
@@ -147,15 +134,6 @@ const GeneratedImages = ({ images }: { images: ImageData[] }) => {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
               </button>
-              <button
-                onClick={() => window.open(image.url, '_blank')}
-                className="p-2 bg-black/50 hover:bg-black/70 backdrop-blur-sm rounded-lg transition-colors"
-                title="Open in new tab"
-              >
-                <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </button>
             </div>
           )}
         </div>
@@ -164,7 +142,6 @@ const GeneratedImages = ({ images }: { images: ImageData[] }) => {
   );
 };
 
-// Improved CodeBlock with mobile responsiveness and better colors
 const CodeBlock = ({ code, language = 'text' }: { code: string; language?: string }) => {
   const [copied, setCopied] = useState(false);
 
@@ -174,87 +151,84 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const highlightCode = (code: string, lang: string): JSX.Element[] => {
+  const syntaxHighlight = (code: string, lang: string): JSX.Element => {
     const lines = code.split('\n');
-    
-    return lines.map((line, idx) => {
-      if (!line.trim()) {
-        return <div key={idx} className="font-mono text-sm h-5 select-text">&nbsp;</div>;
+    const keywordColors: Record<string, string> = {
+      // JavaScript/TypeScript
+      'function': '#FF6692', 'const': '#FF6692', 'let': '#FF6692', 'var': '#FF6692',
+      'return': '#FF6692', 'if': '#FF6692', 'else': '#FF6692', 'for': '#FF6692',
+      'while': '#FF6692', 'import': '#FF6692', 'export': '#FF6692', 'default': '#FF6692',
+      'async': '#FF6692', 'await': '#FF6692',
+      // Python
+      'def': '#FF6692', 'class': '#FF6692', 'from': '#FF6692', 'as': '#FF6692',
+      'True': '#1ABC9C', 'False': '#1ABC9C', 'None': '#1ABC9C', 'self': '#FFD700',
+      'true': '#1ABC9C', 'false': '#1ABC9C', 'null': '#1ABC9C', 'undefined': '#1ABC9C',
+      'in': '#FF6692', 'range': '#FFD700',
+    };
+
+    const highlightLine = (line: string): JSX.Element[] => {
+      const parts: JSX.Element[] = [];
+      let lastIndex = 0;
+      // Updated regex to capture numbers separately
+      const regex = /\b(\w+)\b|'([^']*)\'|"([^"]*)"|`([^`]*)`|#.*$|\/\/.*$|\d+/gm;
+      let match;
+
+      while ((match = regex.exec(line)) !== null) {
+        // Add text before match
+        if (match.index > lastIndex) {
+          parts.push(
+            <span key={`text-${lastIndex}`} style={{ color: '#E5E7EB' }}>
+              {line.substring(lastIndex, match.index)}
+            </span>
+          );
+        }
+
+        // Determine color based on match type
+        let color = '#E5E7EB';
+        if (match[2]) {
+          color = '#A8E6CF'; // Single-quoted string
+        } else if (match[3]) {
+          color = '#A8E6CF'; // Double-quoted string
+        } else if (match[4]) {
+          color = '#A8E6CF'; // Backtick string
+        } else if (match[0].startsWith('#') || match[0].startsWith('//')) {
+          color = '#6B7280'; // Comment
+        } else if (/^\d+$/.test(match[0])) {
+          color = '#1ABC9C'; // Numbers (all languages)
+        } else if (keywordColors[match[0]]) {
+          color = keywordColors[match[0]]; // Keyword
+        }
+
+        parts.push(
+          <span key={`match-${match.index}`} style={{ color }}>
+            {match[0]}
+          </span>
+        );
+        lastIndex = regex.lastIndex;
       }
 
-      const parts: (string | JSX.Element)[] = [];
-      let remaining = line;
-      let partIndex = 0;
-
-      // Programming keywords to highlight
-      const keywords = [
-        'function', 'const', 'let', 'var', 'return', 'if', 'else', 'for', 'while', 
-        'switch', 'case', 'break', 'continue', 'class', 'extends', 'import', 'export',
-        'default', 'async', 'await', 'try', 'catch', 'finally', 'throw', 'new', 'this',
-        'public', 'private', 'protected', 'static', 'void', 'int', 'string', 'boolean',
-        'number', 'any', 'interface', 'type', 'enum', 'namespace', 'module'
-      ];
-      
-      // Common programming patterns
-      const patterns = [
-        // Strings
-        { regex: /("([^"\\]|\\.)*"|'([^'\\]|\\.)*')/, className: "text-green-400" },
-        // Numbers
-        { regex: /\b(\d+\.?\d*|\.\d+)\b/, className: "text-orange-400" },
-        // Comments
-        { regex: /(\/\/.*$|\/\*[\s\S]*?\*\/)/, className: "text-gray-500 italic" },
-        // Functions
-        { regex: /\b([a-zA-Z_$][a-zA-Z0-9_$]*)\s*\(/, className: "text-yellow-300" },
-        // HTML tags
-        { regex: /(<\/?[a-zA-Z][^>]*>)/, className: "text-pink-400" },
-        // CSS properties
-        { regex: /([a-zA-Z-]+)\s*:/, className: "text-blue-300" }
-      ];
-
-      while (remaining.length > 0) {
-        let matched = false;
-
-        // Try patterns first
-        for (const pattern of patterns) {
-          const match = pattern.regex.exec(remaining);
-          if (match && match.index === 0) {
-            const matchedText = match[0];
-            parts.push(
-              <span key={partIndex++} className={pattern.className}>
-                {matchedText}
-              </span>
-            );
-            remaining = remaining.substring(matchedText.length);
-            matched = true;
-            break;
-          }
-        }
-
-        if (matched) continue;
-
-        // Check for keywords
-        for (const kw of keywords) {
-          if (remaining.startsWith(kw) && (remaining.length === kw.length || !/[a-zA-Z0-9_]/.test(remaining[kw.length]))) {
-            parts.push(<span key={partIndex++} className="text-purple-400 font-semibold">{kw}</span>);
-            remaining = remaining.substring(kw.length);
-            matched = true;
-            break;
-          }
-        }
-
-        if (!matched) {
-          // Add single character
-          parts.push(remaining[0]);
-          remaining = remaining.substring(1);
-        }
+      // Add remaining text
+      if (lastIndex < line.length) {
+        parts.push(
+          <span key={`text-end-${lastIndex}`} style={{ color: '#E5E7EB' }}>
+            {line.substring(lastIndex)}
+          </span>
+        );
       }
 
-      return (
-        <div key={idx} className="font-mono text-sm text-gray-100 whitespace-pre select-text">
-          {parts}
-        </div>
-      );
-    });
+      return parts;
+    };
+
+    return (
+      <>
+        {lines.map((line, idx) => (
+          <div key={`line-${idx}`} className="flex">
+            <span className="select-none pr-3 text-gray-600 min-w-[3rem] text-right">{idx + 1}</span>
+            <span className="flex-1">{highlightLine(line)}</span>
+          </div>
+        ))}
+      </>
+    );
   };
 
   return (
@@ -272,9 +246,9 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
         </button>
       </div>
       <div className="overflow-x-auto">
-        <pre className="p-3 sm:p-4 max-w-full">
-          <code className="block min-w-0 overflow-x-auto">
-            {highlightCode(code, language)}
+        <pre className="p-3 sm:p-4 max-w-full m-0">
+          <code className="block min-w-0 overflow-x-auto text-sm font-mono" style={{ color: '#E5E7EB' }}>
+            {syntaxHighlight(code, language)}
           </code>
         </pre>
       </div>
@@ -282,7 +256,6 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
   );
 };
 
-// Improved FormattedMessage with mobile-optimized code blocks
 const FormattedMessage = ({ content, images }: { content: string; images?: ImageData[] }) => {
   const formatContent = (text: string) => {
     const lines = text.split('\n');
@@ -304,33 +277,22 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
       }
     };
 
-    const formatTextWithBold = (line: string): (string | JSX.Element)[] => {
-      const parts: (string | JSX.Element)[] = [];
-      const boldRegex = /\*\*([^*]+?)\*\*/g;
-      let lastIndex = 0;
-      let match;
-
-      while ((match = boldRegex.exec(line)) !== null) {
-        if (match.index > lastIndex) {
-          parts.push(line.slice(lastIndex, match.index));
-        }
-        parts.push(
-          <strong key={`bold-${parts.length}`} className="font-bold">
-            {match[1]}
-          </strong>
-        );
-        lastIndex = boldRegex.lastIndex;
-      }
-
-      if (lastIndex < line.length) {
-        parts.push(line.slice(lastIndex));
-      }
-
-      return parts.length > 0 ? parts : [line];
+    const parseMarkdown = (line: string) => {
+      // Handle code inline
+      line = line.replace(/`([^`]+)`/g, '<code class="bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
+      
+      // Handle bold
+      line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      line = line.replace(/__([^_]+)__/g, '<strong>$1</strong>');
+      
+      // Handle italic
+      line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
+      line = line.replace(/_([^_]+)_/g, '<em>$1</em>');
+      
+      return line;
     };
 
     lines.forEach((line, idx) => {
-      // Handle code blocks
       if (line.trim().startsWith('```')) {
         if (inCodeBlock) {
           addCodeBlock();
@@ -347,46 +309,98 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         return;
       }
 
-      // Handle headings - make them responsive
-     if (line.match(/^#{1,6}/)) {
-        const level = line.match(/^(#{1,6})/)?.[1].length || 1;
-        // Remove all leading #'s and optional spaces — handles ###🌍Global and ### Global both
-        const text = line.replace(/^#{1,6}\s*/, '');
-        const Tag = `h${Math.min(level, 6)}` as keyof JSX.IntrinsicElements;
-
+      // Headers (### or ## or #)
+      if (line.match(/^#{1,6}\s/)) {
+        const levelMatch = line.match(/^#+/);
+        const level = levelMatch ? levelMatch[0].length : 3;
+        const headerText = line.replace(/^#+\s/, '').trim();
+        const headingClasses: Record<number, string> = {
+          1: "text-2xl font-bold mt-4 mb-2",
+          2: "text-xl font-bold mt-3 mb-2",
+          3: "text-lg font-bold mt-2 mb-1",
+          4: "text-base font-bold mt-2 mb-1",
+          5: "text-sm font-bold mt-1 mb-1",
+          6: "text-sm font-bold mt-1 mb-1"
+        };
         
         elements.push(
-          React.createElement(Tag, {
-            key: idx,
-            className: cn(
-              "font-bold my-3 break-words",
-              level === 1 && "text-xl sm:text-2xl",
-              level === 2 && "text-lg sm:text-xl", 
-              level === 3 && "text-base sm:text-lg"
-            )
-          }, formatTextWithBold(text))
+          React.createElement(
+            `h${level}` as any,
+            { 
+              key: `header-${idx}`, 
+              className: `${headingClasses[level]} text-white`,
+              dangerouslySetInnerHTML: { __html: parseMarkdown(headerText) }
+            }
+          )
         );
         return;
       }
 
-      // Handle lists
-      if (line.trim().match(/^[-*•]\s/) || line.trim().match(/^\d+\.\s/)) {
-        const text = line.replace(/^[-*•]\s/, '').replace(/^\d+\.\s/, '');
+      // Unordered lists (-, *, +)
+      if (line.match(/^[\s]*[-*+]\s/)) {
+        const indentMatch = line.match(/^[\s]*/);
+        const indent = indentMatch ? indentMatch[0].length : 0;
+        const listText = line.replace(/^[\s]*[-*+]\s/, '').trim();
         elements.push(
-          <li key={idx} className="ml-4 my-1 break-words">{formatTextWithBold(text)}</li>
+          <div 
+            key={`list-${idx}`} 
+            className="ml-4 my-1 flex gap-2 text-gray-100"
+            style={{ marginLeft: `${indent + 16}px` }}
+          >
+            <span className="text-gray-400">•</span>
+            <span dangerouslySetInnerHTML={{ __html: parseMarkdown(listText) }} />
+          </div>
         );
         return;
       }
 
-      // Regular text with proper line breaks and word wrapping
+      // Ordered lists (1., 2., etc)
+      if (line.match(/^[\s]*\d+\.\s/)) {
+        const indentMatch = line.match(/^[\s]*/);
+        const indent = indentMatch ? indentMatch[0].length : 0;
+        const match = line.match(/^[\s]*(\d+)\.\s(.+)$/);
+        if (match) {
+          const number = match[1];
+          const listText = match[2].trim();
+          elements.push(
+            <div 
+              key={`ordered-list-${idx}`} 
+              className="ml-4 my-1 flex gap-2 text-gray-100"
+              style={{ marginLeft: `${indent + 16}px` }}
+            >
+              <span className="text-gray-400">{number}.</span>
+              <span dangerouslySetInnerHTML={{ __html: parseMarkdown(listText) }} />
+            </div>
+          );
+          return;
+        }
+      }
+
+      // Blockquotes
+      if (line.trim().startsWith('>')) {
+        const quoteText = line.replace(/^>\s?/, '').trim();
+        elements.push(
+          <div 
+            key={`quote-${idx}`} 
+            className="border-l-4 border-gray-600 pl-3 py-1 my-2 text-gray-300 italic"
+          >
+            <span dangerouslySetInnerHTML={{ __html: parseMarkdown(quoteText) }} />
+          </div>
+        );
+        return;
+      }
+
+      // Regular paragraphs
       if (line.trim()) {
         elements.push(
-          <p key={idx} className="my-2 leading-relaxed break-words whitespace-pre-wrap">
-            {formatTextWithBold(line)}
-          </p>
+          <p 
+            key={`p-${idx}`} 
+            className="my-2 leading-relaxed break-words text-gray-100"
+            dangerouslySetInnerHTML={{ __html: parseMarkdown(line) }}
+          />
         );
       } else {
-        elements.push(<br key={idx} />);
+        elements.push(<br key={`br-${idx}`} />);
       }
     });
 
@@ -397,7 +411,6 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
   return (
     <div className="space-y-1 break-words">
       {formatContent(content)}
-      {/* ✅ NEW: Render images if present */}
       {images && images.length > 0 && (
         <GeneratedImages images={images} />
       )}
@@ -411,79 +424,26 @@ export function ChatInterface({
   showPaymentDialog, setShowPaymentDialog, onMenuClick,
   isSidebarCollapsed = false
 }: ChatInterfaceProps) {
-   const { user: auth0User, isLoading: auth0Loading, isAuthenticated } = useAuth0();
-   const { fetchWithAuth } = useAuthApi();
-   const { showToast } = useToast();
-   
+  const { user: auth0User, isLoading: auth0Loading, isAuthenticated } = useAuth0();
+  const { fetchWithAuth } = useAuthApi();
+  const { showToast } = useToast();
+  
   const [selectedModel, setSelectedModel] = useState(AI_MODELS[0].id);
   const [newMessage, setNewMessage] = useState("")
   const [pendingAttachments, setPendingAttachments] = useState<Attachment[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [tempMessage, setTempMessage] = useState<Message | null>(null)
-  const [isLimitReached, setIsLimitReached] = useState(false)
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [hasStartedChat, setHasStartedChat] = useState(false);
-  const [isGenerating, setIsGenerating] = useState(false)
-  const [inputPosition, setInputPosition] = useState({ x: 0, y: 0 });
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [inputStartPos, setInputStartPos] = useState({ x: 0, y: 0 });
-  const [isInputPositioned, setIsInputPositioned] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [initialPosition, setInitialPosition] = useState({ x: 0, y: 0 });
-  const [hasCalculatedPosition, setHasCalculatedPosition] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [isLimitReached, setIsLimitReached] = useState(false);
+  const [tempMessage, setTempMessage] = useState<Message | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
-  const promptCategoriesRef = useRef<HTMLDivElement>(null)
-  const [activeCategory, setActiveCategory] = useState<string | null>(null);
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editedContent, setEditedContent] = useState("");
 
-  
-  // Dynamic model selection hook
-  const { selectModel } = useDynamicModel();
-  
-  // Track dynamic model selection for UI feedback
-  const [dynamicModelSelection, setDynamicModelSelection] = useState<{
-    isAutoSelected: boolean;
-    reason?: string;
-    suggestedModel?: string;
-  }>({ isAutoSelected: false });
-
-  // Track if user has manually selected a model (vs using default)
-  const [userManuallySelected, setUserManuallySelected] = useState(false);
-
-  // Helper function to explain why a model was selected
-  const getSelectionReason = (message: string, contextLength: number): string => {
-    const msg = message.toLowerCase();
-    
-    if (/\b(code|debug|function|class|script|python|java|js|c\+\+|error|programming)\b/.test(msg)) {
-      return 'Optimized for coding tasks';
-    }
-    if (/\b(reason|why|analyze|explain|logic|compare|evaluate|complex)\b/.test(msg)) {
-      return 'Selected for complex reasoning';
-    }
-    if (/\b(news|latest|today|headline|update|current)\b/.test(msg)) {
-      return 'Fast model for current information';
-    }
-    if (/[áàâäãåæçéèêëíìîïñóòôöõøúùûüýÿœ]/.test(msg)) {
-      return 'Multilingual support';
-    }
-    if (contextLength > 1000) {
-      return 'Large context window needed';
-    }
-    return 'Best model for your query';
-  };
-
-    if (auth0Loading) {
+  if (auth0Loading) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -494,7 +454,6 @@ export function ChatInterface({
     );
   }
 
-  // ✅ ADD THIS: Check if user is authenticated
   if (!isAuthenticated) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -506,319 +465,11 @@ export function ChatInterface({
     );
   }
 
-  // Detect mobile device and handle viewport changes
-  useEffect(() => {
-    const checkMobile = () => {
-      const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent) || 
-                            window.innerWidth <= 768;
-      setIsMobile(isMobileDevice);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    // Handle virtual keyboard on mobile
-    const handleViewportChange = () => {
-      const viewportHeight = window.visualViewport?.height || window.innerHeight;
-      const isKeyboardOpen = viewportHeight < window.innerHeight * 0.75;
-      setIsKeyboardOpen(isKeyboardOpen);
-    };
-    
-    if (window.visualViewport) {
-      window.visualViewport.addEventListener('resize', handleViewportChange);
-    }
-    
-    return () => {
-      window.removeEventListener('resize', checkMobile);
-      if (window.visualViewport) {
-        window.visualViewport.removeEventListener('resize', handleViewportChange);
-      }
-    };
-  }, []);
-
-  // FIXED: Simplified initial positioning logic
-  useEffect(() => {
-    if (hasCalculatedPosition || isMobile || hasStartedChat) return;
-    
-    const calculateInitialPosition = () => {
-      requestAnimationFrame(() => {
-        if (promptCategoriesRef.current && containerRef.current) {
-          try {
-            const categoriesRect = promptCategoriesRef.current.getBoundingClientRect();
-            const containerRect = containerRef.current.getBoundingClientRect();
-            
-            if (categoriesRect.height > 0 && containerRect.height > 0) {
-              // Calculate position below categories with proper offset
-              const categoriesBottom = categoriesRect.bottom;
-              const containerTop = containerRect.top;
-              const offsetTop = categoriesBottom - containerTop + 40; // Increased gap for better spacing
-              
-              // Center horizontally
-              const inputWidth = 500; // Approximate input width
-              const centerX = (containerRect.width / 2) - (inputWidth / 2);
-              
-              const finalPosition = { 
-                x: Math.max(20, centerX), 
-                y: Math.max(100, offsetTop) 
-              };
-              
-
-              
-              setInitialPosition(finalPosition);
-              setInputPosition(finalPosition);
-              setIsInputPositioned(true);
-              setHasCalculatedPosition(true);
-              setIsInitialLoad(false);
-            }
-          } catch (error) {
-            
-            // More reliable fallback position
-            const fallbackPosition = { x: 100, y: 400 };
-            setInitialPosition(fallbackPosition);
-            setInputPosition(fallbackPosition);
-            setIsInputPositioned(true);
-            setHasCalculatedPosition(true);
-            setIsInitialLoad(false);
-          }
-        } else {
-          // Retry if elements aren't ready yet
-          setTimeout(calculateInitialPosition, 100);
-        }
-      });
-    };
-
-    // Use a longer timeout to ensure everything is rendered
-    const timer = setTimeout(calculateInitialPosition, 500);
-    return () => clearTimeout(timer);
-  }, [isMobile, hasStartedChat, hasCalculatedPosition]);
-
-  // Handle window resize for recalculation
-  useEffect(() => {
-    if (hasCalculatedPosition || isMobile || hasStartedChat) return;
-    
-    const handleResize = () => {
-      setHasCalculatedPosition(false); // Reset to recalculate
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [hasCalculatedPosition, isMobile, hasStartedChat]);
-
-  const handleMouseDown = (e: React.MouseEvent) => {
-    // Only allow dragging on desktop or when explicitly touching the drag handle
-    if (isMobile) return;
-    if (e.target === inputRef.current || (e.target as Element).closest('.drag-handle')) {
-      setIsDragging(true);
-      setDragStart({ x: e.clientX, y: e.clientY });
-      setInputStartPos(inputPosition);
-    }
-  };
-
-  const handleMouseMove = (e: MouseEvent) => {
-    if (!isDragging) return;
-    
-    const deltaX = e.clientX - dragStart.x;
-    const deltaY = e.clientY - dragStart.y;
-    const newX = Math.max(-150, Math.min(inputStartPos.x + deltaX, window.innerWidth - 250));
-    const newY = Math.max(0, Math.min(inputStartPos.y + deltaY, window.innerHeight - 200));
-    setInputPosition({ x: newX, y: newY });
-  };
-
-  const handleMouseUp = () => {
-    setIsDragging(false);
-    setIsInputPositioned(true);
-  };
-
-  // Enhanced touch handling for mobile
-  const handleTouchStart = (e: React.TouchEvent) => {
-    const target = e.target as Element;
-    const isDragHandle = target.closest('.drag-handle');
-    
-    // Allow touch on drag handle or input on mobile
-    if (isDragHandle || (isMobile && target === inputRef.current)) {
-      e.preventDefault();
-      setIsDragging(true);
-      setDragStart({ 
-        x: e.touches[0].clientX, 
-        y: e.touches[0].clientY 
-      });
-      setInputStartPos(inputPosition);
-    }
-  };
-
-  const handleTouchMove = (e: TouchEvent) => {
-    if (!isDragging) return;
-    
-    e.preventDefault();
-    const deltaX = e.touches[0].clientX - dragStart.x;
-    const deltaY = e.touches[0].clientY - dragStart.y;
-    
-    // More restrictive bounds for mobile
-    const maxX = isMobile ? window.innerWidth - 200 : window.innerWidth - 250;
-    const maxY = isMobile ? window.innerHeight - 150 : window.innerHeight - 200;
-    const minX = isMobile ? -100 : -150;
-    const minY = 0;
-    
-    const newX = Math.max(minX, Math.min(inputStartPos.x + deltaX, maxX));
-    const newY = Math.max(minY, Math.min(inputStartPos.y + deltaY, maxY));
-    setInputPosition({ x: newX, y: newY });
-  };
-  const handleShareChat = async () => {
-  try {
-    const textToShare = messages
-      .map(msg => `${msg.role === 'user' ? 'You' : 'AI'}: ${msg.content}`)
-      .join('\n\n')
-
-    if (navigator.share) {
-      await navigator.share({
-        title: "SkyGPT Chat",
-        text: textToShare,
-      })
-    } else {
-      await navigator.clipboard.writeText(textToShare)
-      alert("Chat copied to clipboard! You can share it manually.")
-    }
-  } catch (err) {
-    console.error("Share failed:", err)
-  }
-}
-
-  const handleCopyMessage = async (content: string, messageId: string) => {
-    await navigator.clipboard.writeText(content);
-    setCopiedMessageId(messageId);
-    setTimeout(() => setCopiedMessageId(null), 2000);
-  };
-
-  const handleEditMessage = (message: Message) => {
-    setEditingMessageId(message.id);
-    setEditedContent(message.content);
-  };
-
-  const handleSaveEdit = (messageId: string) => {
-    setMessages(prev => prev.map(msg => 
-      msg.id === messageId ? { ...msg, content: editedContent } : msg
-    ));
-    setEditingMessageId(null);
-    setEditedContent("");
-  };
-
-  const handleCancelEdit = () => {
-    setEditingMessageId(null);
-    setEditedContent("");
-  };
-  const handleTouchEnd = () => {
-    setIsDragging(false);
-    if (isMobile) {
-      // Don't persist positioning on mobile by default
-      setIsInputPositioned(false);
-    } else {
-      setIsInputPositioned(true);
-    }
-  };
-
-  // Add global mouse and touch listeners
-  useEffect(() => {
-    if (isDragging) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      document.addEventListener('touchmove', handleTouchMove, { passive: false });
-      document.addEventListener('touchend', handleTouchEnd);
-      
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-        document.removeEventListener('touchmove', handleTouchMove);
-        document.removeEventListener('touchend', handleTouchEnd);
-      };
-    }
-  }, [isDragging, dragStart, inputStartPos, isMobile]);
-
-  // Get time-based greeting
-  const getGreeting = () => {
-    const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  };
-
-  const getWelcomeMessage = () => {
-    const userName = auth0User?.name || auth0User?.email?.split('@')[0] || 'there';
-    const isNewChat = !hasStartedChat;
-    const greeting = getGreeting();
-    
-    if (isNewChat) {
-      return {
-        title: `${greeting}, ${userName}!`,
-        subtitle: 'Welcome back! How can I assist you today?',
-        showWelcome: true
-      };
-    }
-    return {
-      title: 'Welcome back!',
-      subtitle: 'Continue your conversation or start a new one.',
-      showWelcome: false
-    };
-  };
-
-  // Enhanced mobile keyboard handling and focus management
-  useEffect(() => {
-    if (isMobile) {
-      // Prevent zoom on input focus for better mobile experience
-      const inputs = containerRef.current?.querySelectorAll('input, textarea, select');
-      inputs?.forEach(input => {
-        input.addEventListener('focus', () => {
-          (input as HTMLElement).style.fontSize = '16px'; // Prevent zoom on iOS
-        });
-        
-        input.addEventListener('blur', () => {
-          (input as HTMLElement).style.fontSize = '';
-        });
-      });
-
-      // Handle viewport changes for mobile
-      const handleViewportChange = () => {
-        const viewportHeight = window.visualViewport?.height || window.innerHeight;
-        const documentHeight = document.documentElement.clientHeight;
-        const isKeyboardOpen = viewportHeight < documentHeight * 0.75;
-        setIsKeyboardOpen(isKeyboardOpen);
-        
-        // Adjust layout when keyboard opens/closes
-        if (containerRef.current) {
-          if (isKeyboardOpen) {
-            containerRef.current.style.paddingBottom = '20px';
-          } else {
-            containerRef.current.style.paddingBottom = '';
-          }
-        }
-      };
-
-      if (window.visualViewport) {
-        window.visualViewport.addEventListener('resize', handleViewportChange);
-      }
-
-      return () => {
-        inputs?.forEach(input => {
-          input.removeEventListener('focus', () => {
-            (input as HTMLElement).style.fontSize = '16px';
-          });
-          input.removeEventListener('blur', () => {
-            (input as HTMLElement).style.fontSize = '';
-          });
-        });
-        
-        if (window.visualViewport) {
-          window.visualViewport.removeEventListener('resize', handleViewportChange);
-        }
-      };
-    }
-  }, [isMobile]);
-
   useEffect(() => {
     if (currentSessionId) {
       loadSession(currentSessionId);
       setActiveSessionId(currentSessionId);
     } else {
-      // No session selected - start fresh
       setMessages([]);
       setHasStartedChat(false);
       setIsInitializing(false);
@@ -826,94 +477,70 @@ export function ChatInterface({
     }
   }, [currentSessionId]);
 
-  // Add to ChatInterface
-useEffect(() => {
-  const savedMessage = localStorage.getItem(`draft_${currentSessionId}`);
-  if (savedMessage) setNewMessage(savedMessage);
-}, [currentSessionId]);
-
-useEffect(() => {
-  if (currentSessionId) {
-    localStorage.setItem(`draft_${currentSessionId}`, newMessage);
+  const loadSession = async (sessionId: string) => {
+    try {
+      setIsInitializing(true);
+      const sessionMessages = await ChatService.getChatMessages(sessionId, fetchWithAuth);
+      
+      const formattedMessages: Message[] = sessionMessages.map(msg => ({
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: new Date(msg.created_at),
+        images: msg.images || undefined
+      }));
+      
+      setMessages(formattedMessages);
+      setHasStartedChat(formattedMessages.length > 0);
+      setError(null);
+    } catch (error: any) {
+      console.error('Failed to load session:', error);
+      setError('Failed to load chat session');
+      setMessages([]);
+      setHasStartedChat(false);
+    } finally {
+      setIsInitializing(false);
+    }
   }
-}, [newMessage, currentSessionId]);
 
-const loadSession = async (sessionId: string) => {
-  try {
-    setIsInitializing(true);
-    const sessionMessages = await ChatService.getChatMessages(sessionId, fetchWithAuth);
-    
-    const formattedMessages: Message[] = sessionMessages.map(msg => ({
-      id: msg.id,
-      role: msg.role as 'user' | 'assistant',
-      content: msg.content,
-      timestamp: new Date(msg.created_at),
-      images: msg.images || undefined  // ✅ Include images from database
-    }));
-    
-    setMessages(formattedMessages);
-    setHasStartedChat(formattedMessages.length > 0);
-    setError(null);
-  } catch (error: any) {
-    console.error('Failed to load session:', error);
-    setError('Failed to load chat session');
-    setMessages([]);
-    setHasStartedChat(false);
-  } finally {
-    setIsInitializing(false);
-  }
-}
-
- const handleSendMessage = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if ((!newMessage.trim() && pendingAttachments.length === 0) || isLoading) return
+  const handleSendMessage = async (messageText: string, files?: File[]) => {
+    if ((!messageText.trim() && (!files || files.length === 0)) || isLoading) return;
 
     setHasStartedChat(true);
-    setActiveCategory(null);
-    setIsGenerating(true);
 
-    // Create abort controller for this request
     abortControllerRef.current = new AbortController();
 
-    // Calculate context length for model selection
-    const contextLength = messages.reduce((acc, msg) => acc + msg.content.length, 0);
+    // Process files into attachments
+    const attachments: Attachment[] = files ? files.map(file => ({
+      id: Date.now().toString() + Math.random(),
+      type: file.type,
+      url: URL.createObjectURL(file),
+      name: file.name,
+      file
+    })) : [];
 
-    // Get intelligent model suggestion based on query
-    const suggestedModel = selectModel({
-      userTier,
-      message: newMessage,
-      contextLength
-    });
-
-    // Show AI suggestion if there's a better model for this query type
-    const shouldShowSuggestion = selectedModel !== suggestedModel;
-
-    // Update UI feedback for suggestions
-    if (shouldShowSuggestion && suggestedModel) {
-      setDynamicModelSelection({
-        isAutoSelected: false,
-        reason: `💡 Better for this: ${getSelectionReason(newMessage, contextLength)}`,
-        suggestedModel: suggestedModel
-      });
-    } else {
-      setDynamicModelSelection({ isAutoSelected: false });
-    }
-
-    // Model selection logic
+    // Parse special prefixes from PromptInputBox
+    let actualMessage = messageText;
     let modelToUse = selectedModel;
     
-    if (!userManuallySelected && !selectedModel) {
-      modelToUse = suggestedModel;
-    } else if (userManuallySelected) {
-      console.log('Using user-selected model:', selectedModel);
+    if (messageText.startsWith('[Search:')) {
+      actualMessage = messageText.replace('[Search:', '').replace(/\]$/, '').trim();
+      // You can add web search logic here
+    } else if (messageText.startsWith('[Think:')) {
+      actualMessage = messageText.replace('[Think:', '').replace(/\]$/, '').trim();
+      // Use a reasoning-focused model
+      modelToUse = AI_MODELS.find(m => m.name.includes('Opus'))?.id || selectedModel;
+    } else if (messageText.startsWith('[Canvas:')) {
+      actualMessage = messageText.replace('[Canvas:', '').replace(/\]$/, '').trim();
+      // Use canvas/code generation model
     }
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: newMessage,
+      content: actualMessage,
       timestamp: new Date(),
-      attachments: pendingAttachments.length > 0 ? [...pendingAttachments] : undefined
+      attachments: attachments.length > 0 ? attachments : undefined
     }
 
     setMessages(prev => [...prev, userMessage])
@@ -930,152 +557,120 @@ const loadSession = async (sessionId: string) => {
     }
     setMessages(prev => [...prev, tempAssistantMessage])
 
-    // ====== OPTIMIZED SESSION CREATION ======
     let sessionIdToUse = currentSessionId || activeSessionId;
     let sessionCreationPromise: Promise<void> = Promise.resolve();
 
-    // If no session exists, create one BUT don't wait for it to complete
     if (!sessionIdToUse && user && messages.length === 0) {
       sessionCreationPromise = (async () => {
         try {
-          // Show quick toast
           showToast('Creating new chat...', 'info', 1000);
-          
           const newSession = await ChatService.createChatSession('New Chat', fetchWithAuth);
           sessionIdToUse = newSession.id;
-          
-          // Update state but don't block the main flow
           setActiveSessionId(newSession.id);
           onSessionUpdate([newSession, ...sessions]);
-          
-          console.log('New session created:', newSession.id);
         } catch (error) {
           console.error('Failed to create chat session:', error);
-          // Don't block the chat flow if session creation fails
         }
       })();
     }
-    // ====== END OPTIMIZED SESSION CREATION ======
 
     try {
-  const apiMessages = [...messages, userMessage]
-    .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
-    .map(msg => ({ role: msg.role, content: msg.content }))
+      const apiMessages = [...messages, userMessage]
+        .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
+        .map(msg => ({ role: msg.role, content: msg.content }))
 
-  if (pendingAttachments.length > 0) {
-    apiMessages[apiMessages.length - 1].content += '\n' + 
-      pendingAttachments.map(a => `[Attachment: ${a.name}]`).join('\n')
-  }
-
-  const response = await fetchWithAuth(
-    `${import.meta.env.VITE_API_BASE_URL}/api/chat`, 
-    {
-      method: 'POST',
-      body: JSON.stringify({ 
-        messages: apiMessages, 
-        model: modelToUse, 
-        temperature: 0.7, 
-        max_tokens: 1000 
-      }),
-      signal: abortControllerRef.current.signal
-    }
-  )
-
-  const messageContent = response.message || response.data?.message || 
-                         response.content || response.choices?.[0]?.message?.content || 
-                         response.result;
-  
-  if (!messageContent) {
-    throw new Error('No message content received from API');
-  }
-
-  // ✅ Extract images from response
-  const responseImages = response.images || [];
-
-  // Update UI with AI response including images
-  setMessages(prev => prev.map(msg => 
-    msg.id === tempAssistantMessage.id 
-      ? { 
-          ...msg, 
-          content: messageContent, 
-          isLoading: false, 
-          images: responseImages 
-        } 
-      : msg
-  ))
-
-  setDynamicModelSelection({ isAutoSelected: false });
-
-  // Wait for session creation to complete (if it's still running)
-  await sessionCreationPromise;
-
-  // ✅ UPDATED: Save messages with images (in background)
-  if (sessionIdToUse && user) {
-    setTimeout(async () => {
-      try {
-        // Save user message (no images for user messages typically)
-        await ChatService.saveMessage(
-          sessionIdToUse!, 
-          'user', 
-          newMessage, 
-          modelToUse, 
-          undefined,
-          undefined,  // No images for user message
-          fetchWithAuth
-        )
-        
-        // Update session title if it's the first message
-        if (messages.length === 0) {
-          const title = newMessage.slice(0, 50) + (newMessage.length > 50 ? '...' : '')
-          await ChatService.updateSessionTitle(sessionIdToUse!, title, fetchWithAuth)
-          
-          onSessionUpdate(sessions.map(s => 
-            s.id === sessionIdToUse ? { ...s, title } : s
-          ))
-        }
-        
-        // ✅ Save assistant message WITH images
-        await ChatService.saveMessage(
-          sessionIdToUse!, 
-          'assistant', 
-          messageContent, 
-          modelToUse, 
-          response.usage?.total_tokens,
-          responseImages,  // ✅ Include images
-          fetchWithAuth
-        )
-        
-        console.log('✅ Messages saved with', responseImages.length, 'images')
-      } catch (error) {
-        console.error('Failed to save messages:', error)
+      if (attachments.length > 0) {
+        apiMessages[apiMessages.length - 1].content += '\n' + 
+          attachments.map(a => `[Attachment: ${a.name}]`).join('\n')
       }
-    }, 0);
-  }
+
+      const response = await fetchWithAuth(
+        `${import.meta.env.VITE_API_BASE_URL}/api/chat`, 
+        {
+          method: 'POST',
+          body: JSON.stringify({ 
+            messages: apiMessages, 
+            model: modelToUse, 
+            temperature: 0.7, 
+            max_tokens: 1000 
+          }),
+          signal: abortControllerRef.current.signal
+        }
+      )
+
+      const messageContent = response.message || response.data?.message || 
+                             response.content || response.choices?.[0]?.message?.content || 
+                             response.result;
+      
+      if (!messageContent) {
+        throw new Error('No message content received from API');
+      }
+
+      const responseImages = response.images || [];
+
+      setMessages(prev => prev.map(msg => 
+        msg.id === tempAssistantMessage.id 
+          ? { 
+              ...msg, 
+              content: messageContent, 
+              isLoading: false, 
+              images: responseImages 
+            } 
+          : msg
+      ))
+
+      await sessionCreationPromise;
+
+      if (sessionIdToUse && user) {
+        setTimeout(async () => {
+          try {
+            await ChatService.saveMessage(
+              sessionIdToUse!, 
+              'user', 
+              actualMessage, 
+              modelToUse, 
+              undefined,
+              undefined,
+              fetchWithAuth
+            )
+            
+            if (messages.length === 0) {
+              const title = actualMessage.slice(0, 50) + (actualMessage.length > 50 ? '...' : '')
+              await ChatService.updateSessionTitle(sessionIdToUse!, title, fetchWithAuth)
+              
+              onSessionUpdate(sessions.map(s => 
+                s.id === sessionIdToUse ? { ...s, title } : s
+              ))
+            }
+            
+            await ChatService.saveMessage(
+              sessionIdToUse!, 
+              'assistant', 
+              messageContent, 
+              modelToUse, 
+              response.usage?.total_tokens,
+              responseImages,
+              fetchWithAuth
+            )
+          } catch (error) {
+            console.error('Failed to save messages:', error)
+          }
+        }, 0);
+      }
 
     } catch (error: any) {
       if (error.name === 'AbortError') {
         setMessages(prev => prev.map(msg => 
           msg.id === tempAssistantMessage.id ? { ...msg, content: 'Response stopped by user.', isLoading: false } : msg
         ))
-        
-        // Still try to save what we have if aborted
-        if (sessionIdToUse && user) {
-          setTimeout(async () => {
-            try {
-              await ChatService.saveMessage(sessionIdToUse!, 'user', newMessage, modelToUse, undefined, undefined, fetchWithAuth)
-            } catch (e) {
-              console.error('Failed to save aborted message:', e)
-            }
-          }, 0);
-        }
         return;
       }
 
       if (error.status === 402 || error?.message?.includes('limit reached')) {
-        setTempMessage(tempAssistantMessage)
+        setTempMessage(tempAssistantMessage);
+        setIsLimitReached(error?.message?.includes('Daily limit reached') || false);
         if (error?.message?.includes('Daily limit reached')) {
           setMessages(prev => prev.filter(msg => msg.id !== tempAssistantMessage.id));
-          setIsLimitReached(true);
         }
         setShowPaymentDialog(true)
         return
@@ -1086,45 +681,13 @@ const loadSession = async (sessionId: string) => {
       ))
     } finally {
       setIsLoading(false)
-      setIsGenerating(false)
       abortControllerRef.current = null
     }
   }
 
-  const handleStopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-    }
-  }
-
- const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files?.length) return;
-    
-    Array.from(files).forEach(file => {
-      if (file.size > 10 * 1024 * 1024) {
-        showToast(`File "${file.name}" is too large (max 10MB)`, 'error');
-        return;
-      }
-      
-      setPendingAttachments(prev => [...prev, {
-        id: Date.now().toString() + Math.random(),
-        type: file.type,
-        url: URL.createObjectURL(file),
-        name: file.name,
-        file
-      }]);
-      
-      showToast(`File "${file.name}" attached`, 'success');
-    });
-  };
-
-  const removeAttachment = (id: string) => {
-    setPendingAttachments(prev => prev.filter(a => {
-      if (a.id === id) { URL.revokeObjectURL(a.url); return false; }
-      return true;
-    }))
-  }
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
   if (isInitializing) {
     return (
@@ -1137,543 +700,113 @@ const loadSession = async (sessionId: string) => {
     )
   }
 
-  // RETURN SECTION - Everything below this stays exactly the same as your original
   return (
-    <div className="flex flex-col h-full relative">
-      
-
-
-      {onMenuClick && (
-        <div className="lg:hidden fixed top-4 left-4 z-30">
-          <Button onClick={onMenuClick} variant="ghost" size="icon" className="bg-background/80 backdrop-blur-sm border">
-            <Menu className="h-5 w-5" />
-          </Button>
-        </div>
-      )}
-
-      {showPaymentDialog && (
-        <PaymentDialog
-          onClose={() => {
-            setShowPaymentDialog(false)
-            setIsLimitReached(false)
-            if (tempMessage) {
-              setMessages(prev => prev.filter(msg => msg.id !== tempMessage.id))
-              setTempMessage(null)
-            }
-          }}
-          onSuccess={() => {
-            setShowPaymentDialog(false)
-            if (tempMessage) {
-              const lastUserMsg = messages[messages.length - 2];
-              if (lastUserMsg?.role === 'user') setNewMessage(lastUserMsg.content)
-            }
-            setTempMessage(null)
-          }}
-          showLimitReachedMessage={isLimitReached}
-        />
-      )}
-
-      {/* Mobile Responsive Messages Area */}
-      <div 
-        className="flex-1 overflow-y-auto" 
-        ref={containerRef}
-        style={{
-          WebkitOverflowScrolling: 'touch',
-          overscrollBehavior: 'contain'
-        }}
-      >
-        
-  
-        
-<div className={cn(
-  "min-h-full transition-colorsx duration-500",
-  hasStartedChat ? (
-    isMobile ? "pb-20 px-3 space-y-4" : "bg-[#0f0f0f] px-4 sm:px-8 py-6 space-y-6"
-  ) : (
-    isMobile ? "pb-28 flex items-center justify-center px-3" : "pb-32 flex items-center justify-center px-4"
-  )
-)}>
-         {!hasStartedChat ? (
-            <div className="relative w-full max-w-4xl mx-auto">
-              {/* ColorBends background */}
-              <div className="absolute inset-0 rounded-4xl overflow-hidden z-10">
-                <ColorBends
-                  colors={["#ff5c7a", "#8a5cff", "#00ffd1"]}
-                  rotation={37}
-                  speed={0.2}
-                  scale={2}
-                  frequency={3}
-                  warpStrength={1.2}
-                  mouseInfluence={0.8}
-                  parallax={0.9}
-                  noise={0.1}
-                  transparent
-                />
-              </div>
-              
-              {/* Welcome content */}
-              <motion.div 
-                initial={{ opacity: 0, y: 20 }} 
-                animate={{ opacity: 1, y: 0 }} 
-                className="relative p-10 rounded-4xl text-center space-y-8 px-4 bg-[#0f0f0f]/80 backdrop-blur-sm border-2 border-white/10 "
-              >
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <h1 className="text-4xl sm:text-6xl font-bold bg-gradient-to-r from-white via-blue-100 to-blue-400 bg-clip-text text-transparent">
-                      {getWelcomeMessage().title}
-                    </h1>
-                    <p className="text-lg sm:text-xl text-muted-foreground">
-                      {getWelcomeMessage().subtitle}
-                    </p>
-                  </div>
-                </div>
-                
-                {/* FIXED: Prompt categories with proper ref and min-height */}
-                <div 
-                  className="flex flex-wrap justify-center gap-2 z-100" 
-                  ref={!hasStartedChat ? promptCategoriesRef : null}
-                  style={{ minHeight: '40px' }}
-                >
-                  {Object.keys(PROMPT_CATEGORIES).map((cat) => (
-                    <button
-                      key={cat}
-                      onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
-                      className={cn("px-4 py-2 rounded-full border text-sm font-bold transition-all ",
-                        activeCategory === cat ? "bg-[#0f0f0f] text-primary-foreground" : "bg-card/80 hover:bg-card"
-                      )}
-                    >
-                      {cat.charAt(0).toUpperCase() + cat.slice(1)}
-                    </button>
-                  ))}
-                </div>
-                
-                <AnimatePresence>
-                  {activeCategory && (
-                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-                      <div className="grid md:grid-cols-2 gap-2 max-w-2xl mx-auto">
-                        {(PROMPT_CATEGORIES as any)[activeCategory]?.map((p: string, i: number) => (
-                          <button key={i} onClick={() => { setNewMessage(p); setActiveCategory(null); inputRef.current?.focus(); }}
-                            className="text-left p-3 rounded-lg border bg-card/50 hover:bg-card text-sm">
-                            {p}
-                          </button>
-                        ))}
-                      </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-                
-                {/* Show input position hint for desktop users */}
-                {!isInputPositioned && !isMobile && (
-                  <motion.div 
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-xs text-muted-foreground/50 italic"
-                  >
-                    💡 Drag the input box anywhere you like!
-                  </motion.div>
-                )}
-              </motion.div>
+    <div 
+      ref={containerRef}
+      className="flex flex-col h-full w-full flex-1 bg-[radial-gradient(125%_125%_at_50%_101%,rgba(245,87,2,1)_10.5%,rgba(245,120,2,1)_16%,rgba(245,140,2,1)_17.5%,rgba(245,170,100,1)_25%,rgba(238,174,202,1)_40%,rgba(202,179,214,1)_65%,rgba(148,201,233,1)_100%)]"
+    >
+      {messages.length === 0 ? (
+        /* Welcome Screen - Centered */
+        <div className="flex-1 flex flex-col items-center justify-center px-4">
+          <div className="w-full max-w-3xl space-y-8">
+            {/* Welcome Header */}
+            <div className="text-center space-y-4 mb-12">
+              <h1 className="text-5xl md:text-6xl font-bold text-white drop-shadow-lg">
+                Welcome to SkyGPT
+              </h1>
+              <p className="text-xl md:text-2xl text-white/90 drop-shadow">
+                Start a conversation by typing a message below
+              </p>
             </div>
-          ) : (
             
-            <div className="max-w-full mx-auto w-full space-y-4 px-2 sm:px-4 pb-24 ">
-              <div className="absolute top-4 left-1 z-20">
-                <Button size="icon" onClick={handleShareChat} className="bg-transparent hover:bg-white/10 "> 
-                  <Share className="h-6 w-6 text-white" />
-                </Button>
-              </div>
-              {error && (
-                <div className="flex items-center gap-2 p-3 bg-card/90 border rounded-lg text-sm text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <span>{error}</span>
-                </div>
-              )}
-             <AnimatePresence>
-                  {messages.map((msg) => (
-                    <motion.div
-                      key={msg.id}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className={cn(
-                        "flex w-full gap-3 items-start group",
-                        msg.role === "user" ? "justify-end" : "justify-start"
-                      )}
-                    >
-                      {/* User Message with Actions */}
-                      {msg.role === "user" ? (
-                        <div className="flex flex-col items-end max-w-full sm:max-w-[85%]">
-                          {/* Action Buttons */}
-                          <div className={cn(
-                            "flex items-center gap-1 transition-all duration-200",
-                            isMobile ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                          )}>
-                            {editingMessageId === msg.id ? (
-                              <>
-                                <button
-                                  onClick={() => handleSaveEdit(msg.id)}
-                                  className="p-1.5 text-green-400 hover:bg-green-400/10 rounded-lg transition-colors"
-                                  title="Save changes"
-                                >
-                                  <Check className="h-3.5 w-3.5" />
-                                </button>
-                                <button
-                                  onClick={handleCancelEdit}
-                                  className="p-1.5 text-red-400 hover:bg-red-400/10 rounded-lg transition-colors"
-                                  title="Cancel edit"
-                                >
-                                  <X className="h-3.5 w-3.5" />
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <button
-                                  onClick={() => handleEditMessage(msg)}
-                                  className="p-1.5 text-blue-400 hover:bg-blue-400/10 rounded-lg transition-colors"
-                                  title="Edit message"
-                                >
-                                  <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 003-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                  </svg>
-                                </button>
-                                <button
-                                  onClick={() => handleCopyMessage(msg.content, msg.id)}
-                                  className="p-1.5 text-gray-400 hover:bg-gray-400/10 rounded-lg transition-colors"
-                                  title="Copy message"
-                                >
-                                  {copiedMessageId === msg.id ? (
-                                    <Check className="h-3.5 w-3.5 text-green-400" />
-                                  ) : (
-                                    <Copy className="h-3.5 w-3.5" />
-                                  )}
-                                </button>
-                              </>
-                            )}
-                          </div>
-                          
-                          {/* Message Content */}
-                          <div
-                            className={cn(
-                              "px-4 rounded-2xl leading-relaxed text-sm sm:text-base bg-gray-800 whitespace-pre-wrap break-words overflow-hidden",
-                              "text-white relative"
-                            )}
-                          >
-                            {msg.isLoading ? (
-                            <div className="flex items-center justify-center py-2 space-x-2">
-                              <div className="w-12 h-12 relative">
-                                <Orb 
-                                  hue={160} 
-                                  hoverIntensity={0.2}
-                                  rotateOnHover={true}
-                                  forceHoverState={true}
-                                />
-                              </div>
-                              <div className="relative">
-                                <motion.span
-                                  className="text-sm font-medium bg-gradient-to-r from-green-200 to-emerald-200 bg-clip-text text-transparent"
-                                  animate={{
-                                    opacity: [0.4, 0.8, 0.4],
-                                  }}
-                                  transition={{
-                                    duration: 1.5,
-                                    repeat: Infinity,
-                                    ease: "easeInOut"
-                                  }}
-                                >
-                                  Thinking
-                                </motion.span>
-                                <motion.span
-                                  className="absolute left-0 top-0 bg-gradient-to-r from-transparent via-green-200 to-transparent h-full w-6 opacity-60"
-                                  animate={{
-                                    x: ["0%", "400%"],
-                                  }}
-                                  transition={{
-                                    duration: 1.5,
-                                    repeat: Infinity,
-                                    ease: "easeInOut",
-                                    delay: 0.3
-                                  }}
-                                />
-                              </div>
-                            </div>
-                          ) : editingMessageId === msg.id ? (
-                              <textarea
-                                value={editedContent}
-                                onChange={(e) => setEditedContent(e.target.value)}
-                                className="w-full bg-transparent text-white outline-none resize-none min-h-[80px]"
-                                autoFocus
-                                onKeyDown={(e) => {
-                                  if (e.key === 'Enter' && e.ctrlKey) {
-                                    handleSaveEdit(msg.id);
-                                  }
-                                  if (e.key === 'Escape') {
-                                    handleCancelEdit();
-                                  }
-                                }}
-                              />
-                            ) : (
-                              <FormattedMessage content={msg.content} images={msg.images} />
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        /* Assistant Message */
-                        <div
-                          className={cn(
-                            "max-w-full sm:max-w-[85%] px-4 py-2 rounded-2xl leading-relaxed text-sm sm:text-base whitespace-pre-wrap break-words overflow-hidden",
-                            "text-white rounded-bl-none"
-                          )}
-                        >
-                          {msg.isLoading ? (
-                            <div className="flex items-center justify-center py-4">
-                              <div className="w-16 h-16 relative">
-                                <Orb 
-                                  hue={220} 
-                                  hoverIntensity={0.8}
-                                  rotateOnHover={true}
-                                  forceHoverState={true}
-                                />
-                              </div>
-                            </div>
-                          ) : (
-                             <FormattedMessage content={msg.content} images={msg.images} />
-                          )}
-                        </div>
-                      )}
-                    </motion.div>
-                  ))}
-                </AnimatePresence>
-              <div ref={messagesEndRef} />
+            {/* Centered Prompt Input */}
+            <div className="w-full">
+              <PromptInputBox
+                onSend={handleSendMessage}
+                isLoading={isLoading}
+                placeholder="Type your message here..."
+                selectedModel={selectedModel}
+                onModelChange={(model) => {
+                  setSelectedModel(model);
+                }}
+                userTier={userTier}
+              />
             </div>
-          )}
-        </div>
-      </div>
 
-      {/* FIXED: Mobile Input Always Fixed to Bottom */}
-      <div 
-        className={cn(
-          "fixed z-30 ",
-          // Mobile: Always fixed to bottom, no drag functionality
-          isMobile ? "bottom-0 left-0 right-0 px-4 p-0" : "",
-          // Desktop: Positioning based on calculated position
-          !isMobile ? (
-            hasCalculatedPosition ? "cursor-move transition-all duration-300" : ""
-          ) : "",
-          isDragging && !isMobile && "cursor-grabbing scale-105"
-        )}
-        style={{
-          // Mobile: Completely fixed to bottom with safe area
-          left: isMobile ? '0' : (isInputPositioned && !isMobile && hasCalculatedPosition) ? `${inputPosition.x}px` : '50%',
-          top: isMobile ? 'auto' : (isInputPositioned && !isMobile && hasCalculatedPosition) ? `${inputPosition.y}px` : 'auto',
-          bottom: isMobile ? '0' : 'auto',
-          right: isMobile ? '0' : (isInputPositioned && !isMobile && hasCalculatedPosition) ? 'auto' : 'auto',
-          transform: isMobile ? 'none' : (isInputPositioned && !isMobile && hasCalculatedPosition) ? 'none' : 'translateX(-50%)',
-          transition: isDragging && !isMobile ? 'none' : isMobile ? 'none' : 'all 0.3s ease'
-        }}
-        onMouseDown={handleMouseDown}
-        onTouchStart={handleTouchStart}
-      >
-        <div className={cn(
-          isMobile ? "w-full max-w-none" : "max-w-md sm:max-w-lg",
-          isInputPositioned && !isMobile ? "mx-0" : isMobile ? "mx-auto" : "mx-auto"
-        )}>
-          {pendingAttachments.length > 0 && (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {pendingAttachments.map((a) => (
-                <div key={a.id} className="relative group bg-card/90 border rounded-lg p-2 pr-8">
-                  <div className="flex items-center gap-2">
-                    {a.type.startsWith("image/") ? (
-                      <img src={a.url} alt={a.name} className="w-8 h-8 object-cover rounded" />
-                    ) : (
-                      <Paperclip className="w-4 h-4" />
-                    )}
-                    <span className="text-xs truncate max-w-[150px]">{a.name}</span>
-                  </div>
-                  <button type="button" onClick={() => removeAttachment(a.id)}
-                    className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100">
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
+            {/* Quick Suggestions (Optional) */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-8">
+              {[
+                { icon: "💡", text: "Explain a complex concept" },
+                { icon: "✍️", text: "Help me write something" },
+                { icon: "🔍", text: "Search for information" },
+                { icon: "💻", text: "Help me with code" },
+              ].map((suggestion, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => handleSendMessage(suggestion.text, [])}
+                  className="flex items-center gap-3 p-4 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-200 text-white text-left group"
+                >
+                  <span className="text-2xl">{suggestion.icon}</span>
+                  <span className="text-sm font-medium group-hover:translate-x-1 transition-transform">
+                    {suggestion.text}
+                  </span>
+                </button>
               ))}
             </div>
-          )}
-          <form onSubmit={handleSendMessage}>
-            {/* Input Container */}
-            <div className="relative group">
-              {/* Drag Handle - only show on desktop and when positioned */}
-              {!isMobile && hasCalculatedPosition && (
-                <div className="absolute -top-6 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity text-xs text-muted-foreground whitespace-nowrap flex items-center gap-1 drag-handle">
-                  <span>↕</span>
-                  <span>Drag me</span>
-                </div>
-              )}
-              
-              <div className={cn(
-                "flex flex-col items-end  bg-[#0f0f0f]  rounded-2xl border-3 inset[shadow(255,255,255,00.5)] backdrop-blur-sm shadow[0_4px_30px_rgba(0,0,0,0.5)] inset[0_4px_30px_rgba(0,0,0,0.5)]",
-                // Mobile: Optimized for bottom positioning with proper padding and safe areas
-                isMobile ? (
-                  isKeyboardOpen 
-                    ? "p-3 max-h-[150px] rounded-t-2xl rounded-b-none" 
-                    : "p-3 max-h-[300px]"  // ✅ INCREASED: 200px → 300px on mobile
-                ) : "p-3 sm:p-4"
-              )}>
-                <textarea
-                  ref={inputRef as any}
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage(e);
-                    }
-                  }}
-                  placeholder="Ask anything... (Paste code blocks, large text, etc.)"
-                  disabled={isLoading}
-                  rows={1}
+          </div>
+        </div>
+      ) : (
+        /* Chat Messages View */
+        <>
+          <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={cn(
+                  "flex gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300",
+                  message.role === 'user' ? 'justify-end' : 'justify-start'
+                )}
+              >
+                <div
                   className={cn(
-                    "flex-1 w-full bg-transparent outline-none resize-none overflow-hidden placeholder:text-muted-foreground/60 leading-relaxed",
-                    "touch-manipulation",
-                    isMobile ? "text-base min-h-[44px] max-h-[250px] text-white" : "text-white text-sm sm:text-base min-h-[32px] max-h-[600px]"  // ✅ INCREASED: max-h from 200px to 600px on desktop
+                    "max-w-[80%] rounded-2xl px-4 shadow-lg",
+                    message.role === 'user'
+                      ? 'bg-[#b0b0b0] text-gray-900'
+                      : ' text-white border border-white/10'
                   )}
-                  style={{
-                    minHeight: isMobile ? '44px' : '32px',
-                    maxHeight: isMobile ? '250px' : '600px',  // ✅ INCREASED: Support for large code blocks
-                    fontSize: isMobile ? '16px' : '14px',
-                    lineHeight: '1.5',
-                    overflow: 'auto'  // ✅ ADDED: Better scrolling for large inputs
-                  }}
-                  onInput={(e) => {
-                    const target = e.target as HTMLTextAreaElement;
-                    // ✅ UPDATED: Properly handle large text with auto-scrolling
-                    const maxHeight = isMobile ? 250 : 600;
-                    const minHeight = isMobile ? 44 : 32;
-                    target.style.height = `${minHeight}px`;
-                    target.style.height = `${Math.min(target.scrollHeight, maxHeight)}px`;
-                    
-                    // ✅ ADDED: Show character count warning for very large inputs
-                    if ((e.target as HTMLTextAreaElement).value.length > 400000) {
-                      console.warn('⚠️ Large input detected: Consider splitting into smaller messages for better performance');
-                    }
-                  }}
-                  onFocus={() => {
-                    // Small delay to allow keyboard to appear before scrolling
-                    if (isMobile) {
-                      setTimeout(() => {
-                        messagesEndRef.current?.scrollIntoView({ 
-                          behavior: "auto",
-                          block: "end"
-                        });
-                      }, 500);
-                    }
-                  }}
-                />
-
-                <div className={cn(
-                  "flex items-center justify-between gap-2 w-full",
-                  isMobile ? "flex-wrap" : "flex-nowrap"
-                )}>
-                  <input
-                    type="file"
-                    id="file-upload"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                    accept="image/*,.pdf,.doc,.docx,.txt"
-                    multiple
-                    disabled={isLoading}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => document.getElementById("file-upload")?.click()}
-                    disabled={isLoading}
-                    className={cn(
-                      "rounded-lg text-stone-50 flex-shrink-0",
-                      isMobile ? "p-3" : "p-2"
-                    )}
-                  >
-                    <Plus className={cn(isMobile ? "w-6 h-6" : "w-5 h-5")} />
-                  </button>
-
-                  <ModelSelector 
-                    selectedModel={selectedModel} 
-                    onModelChange={(model) => {
-                      setSelectedModel(model);
-                      setUserManuallySelected(true);
-                    }} 
-                    userTier={userTier} 
-                  />
-                  
-                  {/* AI Model Suggestion Indicator */}
-                  {dynamicModelSelection.suggestedModel && selectedModel !== dynamicModelSelection.suggestedModel && (
-                    <motion.div 
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.8 }}
-                      className="flex items-center gap-2 px-3 py-1.5 "
-                    >
-                      <Brain className="w-3 h-3 text-green-300" />
-                      <span className="text-xs text-green-200 font-medium">AI Suggestion</span>
-                      <div className="w-1 h-1 bg-green-300 rounded-full"></div>
-                      <span className="text-xs text-green-300 truncate max-w-[80px]" title={dynamicModelSelection.reason}>
-                        {dynamicModelSelection.reason}
-                      </span>
-                      <button
-                        onClick={() => {
-                          setSelectedModel(dynamicModelSelection.suggestedModel!);
-                          setUserManuallySelected(true);
-                        }}
-                        className="text-xs text-green-300 hover:text-green-200 underline ml-1"
-                      >
-                        Use
-                      </button>
-                    </motion.div>
-                  )}
-
-                  {isGenerating ? (
-                    <button
-                      type="button"
-                      onClick={handleStopGeneration}
-                      className={cn(
-                        "text-white rounded-lg transition-colors flex-shrink-0",
-                        isMobile ? "p-3" : "p-2"
-                      )}
-                      aria-label="Stop generation"
-                    >
-                      <X className={cn(isMobile ? "w-6 h-6" : "w-5 h-5")} />
-                    </button>
+                >
+                  {message.isLoading ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                    </div>
                   ) : (
-                    <button
-                      type="submit"
-                      disabled={isLoading || (!newMessage.trim() && pendingAttachments.length === 0)}
-                      className={cn(
-                        "text-white rounded-lg transition-colors disabled:opacity-70 flex-shrink-0",
-                        isMobile ? "p-3" : "p-2"
-                      )}
-                    >
-                      <Send className={cn(isMobile ? "w-6 h-6" : "w-5 h-5")} />
-                    </button>
+                    <FormattedMessage content={message.content} images={message.images} />
                   )}
-                </div>
-                <div className="text-xs text-gray-500 border-t border-white/5 pt-2 flex justify-between">
-                  <span>
-                    Upgrade to Student Starter to unlock all features and more credits
-                  </span>
-                  
                 </div>
               </div>
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
+
+          {/* Input Area - Fixed at bottom when chat started */}
+          <div className=" pb-6">
+            <div className="max-w-3xl mx-auto">
+              <PromptInputBox
+                onSend={handleSendMessage}
+                isLoading={isLoading}
+                placeholder="Type your message here..."
+                selectedModel={selectedModel}
+                onModelChange={(model) => {
+                  setSelectedModel(model);
+                }}
+                userTier={userTier}
+              />
             </div>
-          </form>
-          <p className="text-center text-xs text-muted-foreground mt-3">
-            {isMobile ? "AI can make mistakes. Check  info." : "AI can make mistakes. Check important info."}
-            {!isMobile && hasCalculatedPosition && (
-              <span className="block mt-1 text-[10px] opacity-60">
-                💡 Positioned  drag to move
-              </span>
-            )}
-          </p>
-        </div>
-      </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
-
-

@@ -192,7 +192,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage }: P
   const currentPlan = PLANS;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-md">
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-md">
       <motion.div
         className="relative w-[360px] h-[520px] [perspective:1200px]"
         onClick={(e) => e.stopPropagation()}

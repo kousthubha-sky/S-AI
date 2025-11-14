@@ -694,7 +694,7 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
         headers = {
             "Authorization": f"Bearer {api_key}",
             "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:5173'),
-            "X-Title": "SAAS Chat Application",
+            "X-Title": "SKY GPT Application",
             "Content-Type": "application/json"
         }
         
