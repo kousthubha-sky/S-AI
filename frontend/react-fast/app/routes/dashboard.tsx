@@ -506,7 +506,7 @@ function DashboardContent() {
   };
 
   return (
-    <div className="flex h-screen w-full bg-neutral-100 dark:bg-neutral-900 flex-col md:flex-row">
+    <div className="flex h-screen w-full bg-gradient-to-b from-sky-300 to-pink-300  flex-col md:flex-row">
       <Sidebar open={open} setOpen={setOpen}>
         <SidebarBody className="justify-between gap-10 md:flex-col">
           <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">

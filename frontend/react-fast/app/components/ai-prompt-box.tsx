@@ -675,8 +675,11 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
             <PromptInputAction tooltip="Upload image">
               <button
                 onClick={() => uploadInputRef.current?.click()}
-                className="flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB]"
-                disabled={isRecording}
+                className={cn(
+                  "flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB]",
+                  showSearch && "opacity-40 cursor-not-allowed hover:bg-transparent"
+                )}
+                disabled={isRecording || showSearch}
               >
                 <Paperclip className="h-5 w-5 transition-colors" />
                 <input
@@ -737,8 +740,10 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
                   "rounded-full transition-all flex items-center gap-1 px-2 py-1 border h-8",
                   showThink
                     ? "bg-[#8B5CF6]/15 border-[#8B5CF6] text-[#8B5CF6]"
-                    : "bg-transparent border-transparent text-[#9CA3AF] hover:text-[#D1D5DB]"
+                    : "bg-transparent border-transparent text-[#9CA3AF] hover:text-[#D1D5DB]",
+                  showSearch && "opacity-40 cursor-not-allowed hover:text-[#9CA3AF]"
                 )}
+                disabled={showSearch}
               >
                 <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
                   <motion.div
@@ -773,8 +778,10 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
                   "rounded-full transition-all flex items-center gap-1 px-2 py-1 border h-8",
                   showCanvas
                     ? "bg-[#F97316]/15 border-[#F97316] text-[#F97316]"
-                    : "bg-transparent border-transparent text-[#9CA3AF] hover:text-[#D1D5DB]"
+                    : "bg-transparent border-transparent text-[#9CA3AF] hover:text-[#D1D5DB]",
+                  showSearch && "opacity-40 cursor-not-allowed hover:text-[#9CA3AF]"
                 )}
+                disabled={showSearch}
               >
                 <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
                   <motion.div
@@ -801,7 +808,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
               </button>
 
               {/* Model Selector */}
-            {selectedModel && (
+            {selectedModel && !showSearch && (
               <ModelSelector
                 selectedModel={selectedModel}
                 onModelChange={onModelChange}
@@ -830,7 +837,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
                 isRecording
                   ? "bg-transparent hover:bg-gray-600/30 text-red-500 hover:text-red-400"
                   : hasContent
-                  ? "bg-white hover:bg-white/80 text-[#1F2023]"
+                  ? "bg-white hover:bg-white/80 text-black"
                   : "bg-transparent hover:bg-gray-600/30 text-[#9CA3AF] hover:text-[#D1D5DB]"
               )}
               onClick={() => {
@@ -841,13 +848,13 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
               disabled={isLoading && !hasContent}
             >
               {isLoading ? (
-                <Square className="h-4 w-4 fill-[#1F2023] animate-pulse" />
+                <Square className="h-4 w-4 fill-black animate-pulse" />
               ) : isRecording ? (
                 <StopCircle className="h-5 w-5 text-red-500" />
               ) : hasContent ? (
-                <ArrowUp className="h-4 w-4 text-[#1F2023]" />
+                <ArrowUp className="h-4 w-4 text-black" />
               ) : (
-                <Mic className="h-5 w-5 text-[#1F2023] transition-colors" />
+                <Mic className="h-5 w-5 text-[#9CA3AF] transition-colors" />
               )}
             </Button>
           </PromptInputAction>

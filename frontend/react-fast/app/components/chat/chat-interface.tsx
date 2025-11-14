@@ -7,6 +7,7 @@ import { useAuthApi } from "~/hooks/useAuthApi"
 import { useAuth0 } from "@auth0/auth0-react"
 import { AI_MODELS } from "~/lib/models"
 import { ChatService } from '~/services/chatService'
+import { NewsService } from '~/services/newsService'
 import { useToast } from "~/components/ui/toast"
 import { PromptInputBox } from "~/components/ai-prompt-box"
 import React from "react"
@@ -278,6 +279,9 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
     };
 
     const parseMarkdown = (line: string) => {
+      // Handle markdown links [text](url) - MUST be before other replacements
+      line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline cursor-pointer">$1</a>');
+      
       // Handle code inline
       line = line.replace(/`([^`]+)`/g, '<code class="bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
       
@@ -522,10 +526,11 @@ export function ChatInterface({
     // Parse special prefixes from PromptInputBox
     let actualMessage = messageText;
     let modelToUse = selectedModel;
+    let isSearchRequest = false;
     
     if (messageText.startsWith('[Search:')) {
+      isSearchRequest = true;
       actualMessage = messageText.replace('[Search:', '').replace(/\]$/, '').trim();
-      // You can add web search logic here
     } else if (messageText.startsWith('[Think:')) {
       actualMessage = messageText.replace('[Think:', '').replace(/\]$/, '').trim();
       // Use a reasoning-focused model
@@ -575,38 +580,55 @@ export function ChatInterface({
     }
 
     try {
-      const apiMessages = [...messages, userMessage]
-        .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
-        .map(msg => ({ role: msg.role, content: msg.content }))
+      let messageContent: string;
+      let responseImages: ImageData[] = [];
+      let totalTokens: number | undefined = undefined;
 
-      if (attachments.length > 0) {
-        apiMessages[apiMessages.length - 1].content += '\n' + 
-          attachments.map(a => `[Attachment: ${a.name}]`).join('\n')
-      }
-
-      const response = await fetchWithAuth(
-        `${import.meta.env.VITE_API_BASE_URL}/api/chat`, 
-        {
-          method: 'POST',
-          body: JSON.stringify({ 
-            messages: apiMessages, 
-            model: modelToUse, 
-            temperature: 0.7, 
-            max_tokens: 1000 
-          }),
-          signal: abortControllerRef.current.signal
+      // Handle search request separately
+      if (isSearchRequest) {
+        try {
+          const newsResponse = await NewsService.fetchLiveNews(actualMessage, fetchWithAuth);
+          messageContent = newsResponse.message;
+          // No images from news API, but we could add them if needed
+        } catch (error) {
+          messageContent = `Failed to fetch news: ${error instanceof Error ? error.message : 'Unknown error'}\n\nTry searching for different keywords or check your internet connection.`;
         }
-      )
+      } else {
+        // Regular AI API call
+        const apiMessages = [...messages, userMessage]
+          .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
+          .map(msg => ({ role: msg.role, content: msg.content }))
 
-      const messageContent = response.message || response.data?.message || 
-                             response.content || response.choices?.[0]?.message?.content || 
-                             response.result;
-      
-      if (!messageContent) {
-        throw new Error('No message content received from API');
+        if (attachments.length > 0) {
+          apiMessages[apiMessages.length - 1].content += '\n' + 
+            attachments.map(a => `[Attachment: ${a.name}]`).join('\n')
+        }
+
+        const response = await fetchWithAuth(
+          `${import.meta.env.VITE_API_BASE_URL}/api/chat`, 
+          {
+            method: 'POST',
+            body: JSON.stringify({ 
+              messages: apiMessages, 
+              model: modelToUse, 
+              temperature: 0.7, 
+              max_tokens: 1000 
+            }),
+            signal: abortControllerRef.current.signal
+          }
+        )
+
+        messageContent = response.message || response.data?.message || 
+                                 response.content || response.choices?.[0]?.message?.content || 
+                                 response.result;
+        
+        if (!messageContent) {
+          throw new Error('No message content received from API');
+        }
+
+        responseImages = response.images || [];
+        totalTokens = response.usage?.total_tokens;
       }
-
-      const responseImages = response.images || [];
 
       setMessages(prev => prev.map(msg => 
         msg.id === tempAssistantMessage.id 
@@ -628,7 +650,7 @@ export function ChatInterface({
               sessionIdToUse!, 
               'user', 
               actualMessage, 
-              modelToUse, 
+              isSearchRequest ? 'live_news_api' : modelToUse, 
               undefined,
               undefined,
               fetchWithAuth
@@ -647,8 +669,8 @@ export function ChatInterface({
               sessionIdToUse!, 
               'assistant', 
               messageContent, 
-              modelToUse, 
-              response.usage?.total_tokens,
+              isSearchRequest ? 'live_news_api' : modelToUse, 
+              totalTokens,
               responseImages,
               fetchWithAuth
             )
