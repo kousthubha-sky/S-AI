@@ -6,6 +6,7 @@ import { ChatInterface } from "~/components/chat/chat-interface";
 import { PaymentDialog } from "~/components/chat/payment-dialog";
 import { useAuthApi } from "~/hooks/useAuthApi";
 import { useToast } from "~/components/ui/toast";
+import PricingSection4 from "~/components/chat/pricing-section-3";
 import { 
   MessageSquare, 
   Plus, 
@@ -205,11 +206,11 @@ function SidebarChatHistorySection({ sessions, currentSessionId, onSelect, onDel
 function SidebarUserSection({ auth0User, userTier, onProfileClick, onLogout }: any) {
   const { shouldShowText } = useSidebar();
   return (
-    <div className="px-2 pb-2">
+    <div className=" pb-2">
       <button
         onClick={onProfileClick}
         className={cn(
-          "w-full flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors",
+          "w-full flex items-center gap-2 py-2 rounded-lg hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors",
           !shouldShowText && "justify-center"
         )}
       >
@@ -235,7 +236,7 @@ function SidebarUserSection({ auth0User, userTier, onProfileClick, onLogout }: a
             {auth0User?.name || 'User'}
           </span>
           <span className="text-xs text-neutral-500 dark:text-neutral-400 truncate w-full">
-            {userTier === 'pro' ? 'Pro Plan' : 'Free Plan'}
+            {userTier === 'free' ? 'Free Plan' : userTier.replace('_', ' ').toUpperCase() + ' Plan'}
           </span>
         </motion.div>
       </button>
@@ -291,18 +292,19 @@ function UpgradeButton({ open, onClick }: { open: boolean; onClick: () => void }
 function DashboardContent() {
   const { user: auth0User, logout, getAccessTokenSilently, isAuthenticated } = useAuth0<Auth0User>();
   const { fetchWithAuth } = useAuthApi();
-  const [userTier, setUserTier] = useState<'free' | 'pro'>('free');
+  const [userTier, setUserTier] = useState<'free' | 'starter' | 'pro' | 'pro_plus'>('free');
   const [messageCount, setMessageCount] = useState<number>(0);
   const [nextResetTime, setNextResetTime] = useState<string>('');
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
   const [user, setUser] = useState<User | null>(null);
-  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
+  const [showPricingSection, setShowPricingSection] = useState(false);
   const [showProfileCard, setShowProfileCard] = useState(false);
   const [showProfileSettings, setShowProfileSettings] = useState<boolean>(false);
   const [showV0Clone, setShowV0Clone] = useState<boolean>(false);
   const { showToast } = useToast();
   const [isLoadingSessions, setIsLoadingSessions] = useState<boolean>(true);
+  const [isLoadingSubscription, setIsLoadingSubscription] = useState<boolean>(true);
   const [open, setOpen] = useState(false);
 
   useEffect(() => {
@@ -420,13 +422,23 @@ function DashboardContent() {
 
   const checkUserSubscription = async () => {
     try {
+      setIsLoadingSubscription(true);
       const usage = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/usage`);
       
-      let tier: 'free' | 'pro' = 'free';
+      let tier: 'free' | 'starter' | 'pro' | 'pro_plus' = 'free';
       
-      if (usage.is_paid === true && usage.subscription_tier === 'pro') {
-        tier = 'pro';
+      // ✅ Check all paid tiers - use usage.tier from API response
+      if (usage.is_paid === true) {
+        if (usage.tier === 'starter') {
+          tier = 'starter';
+        } else if (usage.tier === 'pro') {
+          tier = 'pro';
+        } else if (usage.tier === 'pro_plus') {
+          tier = 'pro_plus';
+        }
       }
+      
+      console.log('📊 Subscription check:', { is_paid: usage.is_paid, tier_from_api: usage.tier, tier_set: tier });
       
       setUserTier(tier);
       
@@ -448,6 +460,8 @@ function DashboardContent() {
     } catch (error) {
       console.error('Failed to check subscription:', error);
       setUserTier('free');
+    } finally {
+      setIsLoadingSubscription(false);
     }
   };
 
@@ -565,9 +579,9 @@ function DashboardContent() {
 
             {/* User Profile Section */}
             <div className=" pb-2">
-              {/* Upgrade Button */}
-              {userTier === 'free' && (
-                <UpgradeButton open={open} onClick={() => setShowPaymentDialog(true)} />
+              {/* Upgrade Button - Only show when subscription is loaded AND user is on free tier */}
+              {!isLoadingSubscription && userTier === 'free' && (
+                <UpgradeButton open={open} onClick={() => setShowPricingSection(true)} />
               )}
               <SidebarUserSection 
                 auth0User={auth0User}
@@ -599,8 +613,8 @@ function DashboardContent() {
             onSessionUpdate={handleSessionUpdate}
             onNewChat={handleNewChatFunc}
             user={user}
-            showPaymentDialog={showPaymentDialog}
-            setShowPaymentDialog={setShowPaymentDialog}
+            showPaymentDialog={showPricingSection}
+            setShowPaymentDialog={setShowPricingSection}
             isSidebarCollapsed={!open}
           />
         )}
@@ -651,9 +665,12 @@ function DashboardContent() {
                       <p className="text-sm text-gray-300">{auth0User?.email}</p>
                       <div className="flex items-center gap-2">
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          userTier === 'pro' ? 'bg-purple-500/20 text-purple-300' : 'bg-gray-500/20 text-gray-300'
+                          userTier === 'pro_plus' ? 'bg-orange-500/20 text-orange-300' :
+                          userTier === 'pro' ? 'bg-purple-500/20 text-purple-300' :
+                          userTier === 'starter' ? 'bg-blue-500/20 text-blue-300' :
+                          'bg-gray-500/20 text-gray-300'
                         }`}>
-                          {userTier.toUpperCase()} Plan
+                          {userTier === 'free' ? 'FREE' : userTier.replace('_', ' ').toUpperCase()} Plan
                         </span>
                       </div>
                     </div>
@@ -672,17 +689,29 @@ function DashboardContent() {
                     </div>
 
                     <div className="flex gap-2 pt-2">
-                      {userTier === 'free' && (
+                      {userTier === 'free' ? (
                         <Button
                           onClick={() => {
                             setShowProfileCard(false);
-                            setShowPaymentDialog(true);
+                            setShowPricingSection(true);
                           }}
                           size="sm"
                           className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg"
                         >
                           <Crown className="h-3 w-3 mr-1" />
                           Upgrade
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => {
+                            setShowProfileCard(false);
+                            setShowPricingSection(true);
+                          }}
+                          size="sm"
+                          className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg"
+                        >
+                          <Crown className="h-3 w-3 mr-1" />
+                          Upgrade Plan
                         </Button>
                       )}
                       <Button
@@ -706,15 +735,19 @@ function DashboardContent() {
         )}
       </AnimatePresence>
       
-      {showPaymentDialog && (
-        <PaymentDialog
-          onClose={() => setShowPaymentDialog(false)}
-          onSuccess={() => {
-            setShowPaymentDialog(false);
-            forceRefreshSubscription();
-          }}
-        />
-      )}
+      {/* ADD THIS INSTEAD: */}
+{showPricingSection && (
+  <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+    <PricingSection4 />
+    <Button
+      onClick={() => setShowPricingSection(false)}
+      className="fixed top-4 right-4 z-50"
+      variant="outline"
+    >
+      Close
+    </Button>
+  </div>
+)}
     </div>
   );
 }

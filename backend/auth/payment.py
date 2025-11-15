@@ -1,4 +1,4 @@
-# backend/auth/payment.py - FIXED VERSION WITH SHORT RECEIPT
+# backend/auth/payment.py - MULTI-TIER VERSION
 
 import os
 import razorpay
@@ -6,7 +6,7 @@ import hmac
 import hashlib
 import uuid
 from fastapi import HTTPException, status
-from models.payment import OrderCreate, OrderVerify, SubscriptionCreate, SubscriptionVerify
+from models.payment import OrderCreate, OrderVerify
 from typing import Optional, Dict, Any
 import logging
 from datetime import datetime
@@ -27,12 +27,34 @@ class PaymentManager:
         self.client = razorpay.Client(auth=(key_id, key_secret))
         self.key_secret = key_secret
         
-        # Plan IDs (one-time payments)
+        # ✅ UPDATED: All 3 paid plans with Razorpay plan IDs
         self.PLANS = {
-            "pro_monthly": {
-                "amount": 24900,  # ₹249 in paise
-                "currency": "INR", 
-                "name": "Pro Monthly"
+            # Student Starter Pack
+            "plan_RWzEUovz8FVbX4": {
+                "amount": 19900,  # ₹199 in paise
+                "currency": "INR",
+                "name": "Student Starter Pack",
+                "tier": "starter",
+                "requests_per_month": 500,
+                "tokens_per_month": 500000  # 500K
+            },
+            # Student Pro Pack
+            "plan_RWzF9BaZU7q9jw": {
+                "amount": 29900,  # ₹299 in paise
+                "currency": "INR",
+                "name": "Student Pro Pack",
+                "tier": "pro",
+                "requests_per_month": 2000,
+                "tokens_per_month": 2000000  # 2M
+            },
+            # Student Pro Plus Pack
+            "plan_RWzFoX6NgEM6MX": {
+                "amount": 59900,  # ₹599 in paise
+                "currency": "INR",
+                "name": "Student Pro Plus Pack",
+                "tier": "pro_plus",
+                "requests_per_month": -1,  # Unlimited
+                "tokens_per_month": -1  # Unlimited
             }
         }
 
@@ -42,26 +64,29 @@ class PaymentManager:
         """
         try:
             if plan_type not in self.PLANS:
+                logger.error(f"Invalid plan type: {plan_type}")
+                logger.error(f"Available plans: {list(self.PLANS.keys())}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid plan type"
+                    detail=f"Invalid plan type. Available plans: {list(self.PLANS.keys())}"
                 )
             
             plan = self.PLANS[plan_type]
             
-            # ✅ FIXED: Create very short receipt (max 40 chars)
-            short_uuid = str(uuid.uuid4())[:8]  # Just 8 chars
-            receipt = f"ord_{short_uuid}"  # Total: ord_12345678 = 12 chars
+            # ✅ Create very short receipt (max 40 chars)
+            short_uuid = str(uuid.uuid4())[:8]
+            receipt = f"ord_{short_uuid}"
             
             # Create order data
             order_data = {
                 "amount": plan["amount"],
                 "currency": plan["currency"],
-                "receipt": receipt,  # ✅ Now guaranteed under 40 chars
+                "receipt": receipt,
                 "notes": {
                     "user_id": user_id,
                     "plan_type": plan_type,
-                    "plan_name": plan["name"]
+                    "plan_name": plan["name"],
+                    "tier": plan["tier"]
                 }
             }
             
@@ -85,7 +110,8 @@ class PaymentManager:
                 "currency": order['currency'],
                 "key_id": os.getenv("RAZORPAY_KEY_ID"),
                 "plan_type": plan_type,
-                "plan_name": plan["name"]
+                "plan_name": plan["name"],
+                "tier": plan["tier"]
             }
             
         except razorpay.errors.BadRequestError as e:
@@ -220,3 +246,39 @@ class PaymentManager:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to create refund"
             )
+    
+    def get_plan_tier(self, plan_type: str) -> str:
+        """Get subscription tier from plan type"""
+        if plan_type in self.PLANS:
+            return self.PLANS[plan_type]["tier"]
+        return "free"
+    
+    def get_plan_limits(self, tier: str) -> Dict[str, int]:
+        """Get usage limits for a tier"""
+        limits = {
+            "free": {
+                "requests_per_day": 50,
+                "tokens_per_day": 50000,
+                "requests_per_month": -1,  # Not applicable
+                "tokens_per_month": -1
+            },
+            "starter": {
+                "requests_per_day": -1,  # No daily limit
+                "tokens_per_day": -1,
+                "requests_per_month": 500,
+                "tokens_per_month": 500000
+            },
+            "pro": {
+                "requests_per_day": -1,
+                "tokens_per_day": -1,
+                "requests_per_month": 2000,
+                "tokens_per_month": 2000000
+            },
+            "pro_plus": {
+                "requests_per_day": -1,
+                "tokens_per_day": -1,
+                "requests_per_month": -1,  # Unlimited
+                "tokens_per_month": -1
+            }
+        }
+        return limits.get(tier, limits["free"])

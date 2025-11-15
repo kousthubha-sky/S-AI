@@ -46,7 +46,7 @@ interface Message {
 }
 
 interface ChatInterfaceProps {
-  userTier: 'free' | 'pro';
+  userTier: 'free' | 'starter' | 'pro' | 'pro_plus';
   messageCount?: number;
   maxDailyMessages?: number;
   nextResetTime?: string;

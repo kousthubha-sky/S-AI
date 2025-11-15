@@ -28,13 +28,13 @@ async def get_user_usage(user_id: str) -> UserUsage:
         # Get usage statistics (NO await)
         usage_data = db.get_user_usage(user['id'])
         
-        # Get active subscription (NO await)
-        subscription = db.get_active_subscription(user['id'])
-        
-        # Determine subscription status
+        # Determine subscription status - FIXED LOGIC
         is_paid = False
         subscription_tier = user.get('subscription_tier', 'free')
         subscription_end_date = None
+        
+        # ✅ PRIMARY: Check if subscription record exists and is active
+        subscription = db.get_active_subscription(user['id'])
         
         if subscription and subscription.get('status') == 'active':
             end_date_str = subscription.get('current_end')
@@ -49,10 +49,11 @@ async def get_user_usage(user_id: str) -> UserUsage:
                     
                     if subscription_end_date > now_aware:
                         is_paid = True
-                        subscription_tier = user.get('subscription_tier', 'pro')
-                        print(f"✅ Subscription is valid and active")
+                        subscription_tier = subscription.get('tier', user.get('subscription_tier', 'pro'))
+                        print(f"✅ Active subscription found: tier={subscription_tier}, expires={subscription_end_date}")
                     else:
-                        print(f"⚠️ Subscription expired")
+                        print(f"⚠️ Subscription expired: {subscription_end_date}")
+                        # Update user record to reflect expired subscription
                         db.update_user(user['auth0_id'], {
                             'subscription_tier': 'free',
                             'is_paid': False,
@@ -61,11 +62,13 @@ async def get_user_usage(user_id: str) -> UserUsage:
                         subscription_tier = 'free'
                         is_paid = False
                 except ValueError as e:
-                    print(f"❌ Error parsing date: {e}")
+                    print(f"❌ Error parsing subscription date: {e}")
         
-        # Backup check from user table
+        # ✅ FALLBACK: Check users table if no active subscription record
         if not is_paid and user.get('is_paid'):
             user_end_date_str = user.get('subscription_end_date')
+            print(f"📋 User table shows: is_paid={user.get('is_paid')}, tier={user.get('subscription_tier')}, end_date={user_end_date_str}")
+            
             if user_end_date_str:
                 try:
                     user_end_date = datetime.fromisoformat(user_end_date_str)
@@ -78,8 +81,19 @@ async def get_user_usage(user_id: str) -> UserUsage:
                         is_paid = True
                         subscription_tier = user.get('subscription_tier', 'pro')
                         subscription_end_date = user_end_date
-                except ValueError:
-                    pass
+                        print(f"✅ Valid subscription in users table: tier={subscription_tier}, expires={subscription_end_date}")
+                    else:
+                        print(f"⚠️ Subscription in users table is expired")
+                except ValueError as e:
+                    print(f"❌ Error parsing user table date: {e}")
+        
+        # ✅ Use tier from users table as ultimate source of truth
+        if is_paid:
+            subscription_tier = user.get('subscription_tier', subscription_tier)
+            print(f"📊 FINAL RESULT: is_paid=True, tier={subscription_tier}")
+        else:
+            subscription_tier = 'free'
+            print(f"📊 FINAL RESULT: is_paid=False, tier=free")
         
         result = UserUsage(
             user_id=user_id,
@@ -93,6 +107,7 @@ async def get_user_usage(user_id: str) -> UserUsage:
             subscription_end_date=subscription_end_date
         )
         
+        print(f"✅ Returning UserUsage: tier={result.subscription_tier}, is_paid={result.is_paid}")
         return result
         
     except Exception as e:

@@ -297,10 +297,98 @@ def get_monthly_limit(subscription_tier: str) -> int:
 
 @app.get("/api/usage", tags=["Payment"])
 async def get_usage(payload: dict = Depends(verify_token)):
-    """Get current user's usage information"""
+    """Get current user's usage information with tier details"""
     user_id = payload.get("sub")
-    usage = await get_user_usage(user_id)  # This now uses Supabase
-    return usage
+    usage = await get_user_usage(user_id)
+    
+    # Get tier information
+    tier = usage.subscription_tier or "free"
+    tier = tier.lower()
+    
+    # Get plan limits
+    plan_limits = payment_manager.get_plan_limits(tier)
+    
+    # Get tier features
+    from models.ai_models import get_tier_features, get_tier_name
+    tier_features = get_tier_features(tier)
+    
+    # Calculate usage percentages
+    daily_usage_percent = 0
+    monthly_usage_percent = 0
+    
+    if tier == "free":
+        # Daily limits for free tier
+        if plan_limits["requests_per_day"] > 0:
+            daily_usage_percent = (usage.daily_message_count / plan_limits["requests_per_day"]) * 100
+    else:
+        # Monthly limits for paid tiers (except pro_plus which is unlimited)
+        if plan_limits["requests_per_month"] > 0:
+            monthly_usage_percent = (usage.prompt_count / plan_limits["requests_per_month"]) * 100
+    
+    # Calculate days remaining in subscription
+    days_remaining = None
+    if usage.subscription_end_date:
+        from datetime import timezone
+        now_aware = datetime.now(timezone.utc)
+        if usage.subscription_end_date.tzinfo is None:
+            subscription_end_date = usage.subscription_end_date.replace(tzinfo=timezone.utc)
+        else:
+            subscription_end_date = usage.subscription_end_date
+        
+        if subscription_end_date > now_aware:
+            days_remaining = (subscription_end_date - now_aware).days
+    
+    return {
+        "user_id": usage.user_id,
+        "tier": tier,
+        "tier_name": get_tier_name(tier),
+        "is_paid": usage.is_paid,
+        
+        # Usage statistics
+        "daily_message_count": usage.daily_message_count,
+        "monthly_message_count": usage.prompt_count,
+        "last_reset_date": usage.last_reset_date.isoformat() if usage.last_reset_date else None,
+        
+        # Limits
+        "limits": {
+            "requests_per_day": plan_limits["requests_per_day"],
+            "requests_per_month": plan_limits["requests_per_month"],
+            "tokens_per_day": plan_limits["tokens_per_day"],
+            "tokens_per_month": plan_limits["tokens_per_month"],
+            "is_unlimited": plan_limits["requests_per_month"] == -1
+        },
+        
+        # Usage percentages
+        "usage_percentage": {
+            "daily": round(daily_usage_percent, 2) if tier == "free" else None,
+            "monthly": round(monthly_usage_percent, 2) if tier != "free" and plan_limits["requests_per_month"] > 0 else None
+        },
+        
+        # Subscription details
+        "subscription": {
+            "end_date": usage.subscription_end_date.isoformat() if usage.subscription_end_date else None,
+            "days_remaining": days_remaining,
+            "is_active": usage.is_paid and (days_remaining > 0 if days_remaining is not None else False)
+        },
+        
+        # Feature access
+        "features": tier_features,
+        
+        # Warnings
+        "warnings": {
+            "approaching_limit": (
+                daily_usage_percent > 80 if tier == "free" 
+                else monthly_usage_percent > 80 if tier != "free" and plan_limits["requests_per_month"] > 0
+                else False
+            ),
+            "limit_reached": (
+                usage.daily_message_count >= plan_limits["requests_per_day"] if tier == "free"
+                else usage.prompt_count >= plan_limits["requests_per_month"] if tier != "free" and plan_limits["requests_per_month"] > 0
+                else False
+            ),
+            "subscription_expiring_soon": days_remaining is not None and days_remaining <= 7
+        }
+    }
 
 @app.post("/api/users", tags=["User"])
 async def create_user(user_data: dict, payload: dict = Depends(verify_token)):
@@ -460,10 +548,19 @@ async def verify_payment(
         
         # Get order to extract plan info
         order = payment_manager.client.order.fetch(verification.razorpay_order_id)
-        plan_type = order.get('notes', {}).get('plan_type', 'basic_monthly')
+        plan_type = order.get('notes', {}).get('plan_type')
         
-        # Determine subscription tier based on plan
-        tier = 'pro' if 'pro' in plan_type else 'basic'
+        if not plan_type:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Plan type not found in order"
+            )
+        
+        # ✅ Get tier from payment manager based on Razorpay plan ID
+        tier = payment_manager.get_plan_tier(plan_type)
+        
+        print(f"📊 Plan Type: {plan_type}")
+        print(f"📊 Tier: {tier}")
         
         # Calculate subscription end date (30 days)
         end_date = datetime.now() + timedelta(days=30)
@@ -477,13 +574,40 @@ async def verify_payment(
                 detail="User not found"
             )
         
-        # Update user subscription
+        # ✅ Update user subscription with correct tier
         db.update_user(user_id, {
-            'subscription_tier': tier,
+            'subscription_tier': tier,  # starter, pro, or pro_plus
             'subscription_end_date': end_date.isoformat(),
             'is_paid': True,
             'updated_at': datetime.now().isoformat()
         })
+        
+        print(f"✅ User updated with tier: {tier}")
+        
+        # ✅ CRITICAL FIX: Update Redis cache so get_user_usage() returns correct tier
+        await update_user_subscription(user_id, tier, True, end_date)
+        print(f"✅ Database subscription updated with tier: {tier}")
+        
+        # ✅ CRITICAL FIX: Create subscription record in subscriptions table
+        subscription_record = {
+            'user_id': user['id'],
+            'razorpay_subscription_id': verification.razorpay_payment_id,  # Using payment ID as subscription ref
+            'razorpay_payment_id': verification.razorpay_payment_id,
+            'plan_type': plan_type,
+            'tier': tier,
+            'status': 'active',  # ✅ Set to active so get_user_usage() finds it
+            'current_start': datetime.now().isoformat(),
+            'current_end': end_date.isoformat(),
+            'renewal_date': end_date.isoformat(),
+            'created_at': datetime.now().isoformat(),
+            'updated_at': datetime.now().isoformat()
+        }
+        
+        try:
+            db.create_subscription(subscription_record)
+            print(f"✅ Subscription record created with status='active'")
+        except Exception as sub_error:
+            print(f"⚠️ Subscription record error (non-critical): {sub_error}")
         
         # Record payment transaction
         payment_data = {
@@ -494,6 +618,8 @@ async def verify_payment(
             'currency': payment_details['currency'],
             'status': 'captured',
             'payment_method': payment_details.get('method', 'card'),
+            'plan_type': plan_type,
+            'tier': tier,
             'created_at': datetime.now().isoformat()
         }
         
@@ -513,7 +639,7 @@ async def verify_payment(
             db.client.table('user_usage').update(usage_update).eq(
                 'user_id', user['id']
             ).eq('month_year', month_year).execute()
-            print(f"✅ User usage updated")
+            print(f"✅ User usage updated with tier: {tier}")
         except Exception as usage_error:
             print(f"⚠️ Usage update error: {usage_error}")
         
@@ -525,18 +651,24 @@ async def verify_payment(
         except:
             pass
         
+        # ✅ Get plan limits for response
+        plan_limits = payment_manager.get_plan_limits(tier)
+        
         return {
             "status": "success",
             "message": "Payment verified and subscription activated",
             "subscription": {
                 "tier": tier,
+                "tier_name": get_tier_name(tier),
                 "end_date": end_date.isoformat(),
-                "is_paid": True
+                "is_paid": True,
+                "limits": plan_limits
             },
             "payment": {
                 "id": verification.razorpay_payment_id,
                 "amount": payment_details['amount'] / 100,
-                "currency": payment_details['currency']
+                "currency": payment_details['currency'],
+                "plan_type": plan_type
             }
         }
         
@@ -551,6 +683,7 @@ async def verify_payment(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Payment verification failed: {str(e)}"
         )
+
 
 
 # 3. GET PAYMENT STATUS
@@ -599,7 +732,7 @@ async def create_refund(
         )
         
 # Import AI models validation
-from models.ai_models import validate_model_access
+from models.ai_models import validate_model_access,get_tier_name
 
 # Chat endpoint
 # In main.py - REPLACE the entire /api/chat endpoint (around line 408)
@@ -609,19 +742,16 @@ from models.ai_models import validate_model_access
 @app.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
 @limiter.limit("30/minute") 
 async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depends(verify_token)):
-    """Process chat messages through OpenRouter with image generation support"""
+    """Process chat messages through OpenRouter with multi-tier support"""
     user_id = payload.get("sub")
-    
-
     
     try:
         # Sanitize chat messages
-        # ✅ UPDATED: Support large code blocks and high input volumes
         sanitized_messages = []
         for msg in chat_request.messages:
             sanitized_messages.append({
                 "role": msg.role,
-                "content": InputValidator.sanitize_string(msg.content, max_length=500000)  # ✅ 5x larger (100KB → 500KB)
+                "content": InputValidator.sanitize_string(msg.content, max_length=500000)
             })
         print(f"✅ Messages sanitized")
         
@@ -644,43 +774,82 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
                 usage.subscription_tier = "free"
                 await update_user_subscription(user_id, "free", False, datetime.now())
         
-        # Validate model access
+        # ✅ Get tier and normalize it
         tier = usage.subscription_tier or "free"
+        tier = tier.lower()  # Ensure lowercase
         
-        # Ensure tier is a valid value
-        if tier not in ["free", "pro", "basic"]:
-            print(f"⚠️ Invalid tier value '{tier}', defaulting to 'free'")
+        # ✅ Validate tier is one of the expected values
+        valid_tiers = ["free", "starter", "pro", "pro_plus"]
+        if tier not in valid_tiers:
+            print(f"⚠️ Invalid tier '{tier}', defaulting to 'free'")
             tier = "free"
         
-        is_pro = tier == "pro"
-        
         # Debug logging
-        print(f"🔍 Model validation debug:")
+        print(f"🔍 Chat request validation:")
         print(f"   - Model ID: {chat_request.model}")
         print(f"   - User tier (raw): {usage.subscription_tier}")
         print(f"   - User tier (sanitized): {tier}")
-        print(f"   - Is Pro: {is_pro}")
-        print(f"   - Usage.is_paid: {usage.is_paid}")
+        print(f"   - Is paid: {usage.is_paid}")
         
-        has_access = validate_model_access(chat_request.model, is_pro)
+        # ✅ Validate model access with new tier system
+        has_access = validate_model_access(chat_request.model, tier)
         print(f"   - Has access: {has_access}")
         
         if not has_access:
             print(f"❌ Model access denied for {chat_request.model}")
+            
+            # Determine required tier for this model
+            from models.ai_models import PRO_MODELS, PRO_PLUS_MODELS, STARTER_MODELS
+            
+            if chat_request.model in PRO_PLUS_MODELS:
+                required_tier = "pro_plus"
+            elif chat_request.model in PRO_MODELS:
+                required_tier = "pro"
+            elif chat_request.model in STARTER_MODELS:
+                required_tier = "starter"
+            else:
+                required_tier = "free"
+            
+            # Get upgrade message
+            from models.ai_models import get_upgrade_message
+            message = get_upgrade_message(tier, required_tier)
+            
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"This model is only available to Pro users. Please upgrade your subscription. (Model: {chat_request.model}, Tier: {tier})"
+                detail=f"{message} (Model: {chat_request.model}, Your tier: {tier})"
             )
+        
         print(f"✅ Model access granted")
         
-        # Check daily limit for free users
-        FREE_TIER_DAILY_LIMIT = 25
-        if usage.daily_message_count >= FREE_TIER_DAILY_LIMIT and not usage.is_paid:
-            print(f"❌ Daily limit reached")
-            raise HTTPException(
-                status_code=status.HTTP_402_PAYMENT_REQUIRED,
-                detail="Daily limit reached. Please subscribe to continue."
-            )
+        # ✅ Check usage limits based on tier
+        if tier == "free":
+            # Free tier: 50 requests per day
+            FREE_TIER_DAILY_LIMIT = 50
+            if usage.daily_message_count >= FREE_TIER_DAILY_LIMIT:
+                print(f"❌ Daily limit reached")
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Daily limit reached (50 requests/day). Upgrade to continue."
+                )
+        elif tier == "starter":
+            # Starter tier: 500 requests per month
+            STARTER_MONTHLY_LIMIT = 500
+            if usage.prompt_count >= STARTER_MONTHLY_LIMIT:
+                print(f"❌ Monthly limit reached")
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Monthly limit reached (500 requests/month). Upgrade to Pro for 2000 requests."
+                )
+        elif tier == "pro_monthly":
+            # Pro tier: 2000 requests per month
+            PRO_MONTHLY_LIMIT = 2000
+            if usage.prompt_count >= PRO_MONTHLY_LIMIT:
+                print(f"❌ Monthly limit reached")
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Monthly limit reached (2000 requests/month). Upgrade to Pro Plus for unlimited."
+                )
+        # pro_plus tier: unlimited, no check needed
         
         # Check for API key
         api_key = os.getenv("OPENROUTER_API_KEY")
@@ -695,7 +864,7 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
         headers = {
             "Authorization": f"Bearer {api_key}",
             "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:5173'),
-            "X-Title": "SKY GPT Application",
+            "X-Title": "SAAS Chat Application",
             "Content-Type": "application/json"
         }
         
@@ -705,189 +874,99 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
         if chat_request.system_prompt:
             messages.insert(0, {"role": "system", "content": chat_request.system_prompt})
         
-        # Determine which models to try (primary + fallbacks)
-        from models.ai_models import get_fallback_models, PROBLEMATIC_MODELS
-        models_to_try = [chat_request.model or "anthropic/claude-3.5-sonnet"]
+        # Prepare request body
+        request_body = {
+            "model": chat_request.model or "tngtech/deepseek-r1t2-chimera:free",
+            "messages": messages,
+            "max_tokens": chat_request.max_tokens or 1000,
+            "temperature": chat_request.temperature or 0.7,
+            "modalities": ["text", "image"]
+        }
         
-        # If using a problematic model or if request fails, try fallbacks
-        if models_to_try[0] in PROBLEMATIC_MODELS:
-            print(f"⚠️ Primary model {models_to_try[0]} has known issues, adding fallbacks")
-            models_to_try.extend(get_fallback_models(is_pro))
-        
-        # Try each model in sequence
-        last_error = None
-        response = None
-        
-        for attempt_model in models_to_try:
-            try:
-                print(f"🔄 Attempting request with model: {attempt_model}")
-                
-                # Prepare request body
-                request_body = {
-                    "model": attempt_model,
-                    "messages": messages,
-                    "max_tokens": chat_request.max_tokens or 1000,
-                    "temperature": chat_request.temperature or 0.7,
-                }
-                
-                async with httpx.AsyncClient(timeout=60.0) as client:
-                    response = await client.post(
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        headers=headers,
-                        json=request_body
-                    )
-                    
-                    if response.status_code == 200:
-                        print(f"✅ Request successful with model: {attempt_model}")
-                        break  # Success! Exit the retry loop
-                    elif response.status_code == 403:
-                        # Moderation filter or model restriction
-                        try:
-                            error_data = response.json()
-                            error_msg = error_data.get('error', {}).get('message', '')
-                            print(f"⚠️ Model {attempt_model} returned 403: {error_msg}")
-                            
-                            # Check if it's a moderation issue
-                            if 'moderation' in error_msg.lower() or 'flagged' in error_msg.lower():
-                                print(f"🚫 Moderation filter triggered on {attempt_model}")
-                                # Try next model
-                                last_error = HTTPException(
-                                    status_code=403,
-                                    detail=f"Content moderation: {error_msg}"
-                                )
-                                continue
-                        except:
-                            pass
-                        # If we have more models to try, continue
-                        if attempt_model != models_to_try[-1]:
-                            print(f"📋 Trying next model...")
-                            continue
-                    elif response.status_code == 429:
-                        # Rate limited - try next model
-                        print(f"⏱️ Rate limited on {attempt_model}, trying next...")
-                        last_error = HTTPException(
-                            status_code=429,
-                            detail="Service rate limited, retrying..."
-                        )
-                        continue
-                    else:
-                        # Other error
-                        try:
-                            error_data = response.json()
-                            error_detail = error_data.get('error', {}).get('message', f"Error: {response.status_code}")
-                            print(f"❌ Error from {attempt_model}: {error_data}")
-                        except:
-                            error_detail = f"OpenRouter API error: {response.status_code}"
-                        
-                        last_error = HTTPException(
-                            status_code=response.status_code,
-                            detail=error_detail
-                        )
-                        
-                        # Try next model if available
-                        if attempt_model != models_to_try[-1]:
-                            print(f"📋 Trying next model...")
-                            continue
-                        
-                        # No more models to try
-                        raise last_error
-                        
-            except httpx.TimeoutException:
-                print(f"⏱️ Timeout with {attempt_model}")
-                if attempt_model != models_to_try[-1]:
-                    print(f"📋 Trying next model...")
-                    last_error = HTTPException(
-                        status_code=504,
-                        detail="Request timeout, retrying..."
-                    )
-                    continue
-                else:
-                    raise HTTPException(
-                        status_code=504,
-                        detail="Request timed out on all available models"
-                    )
-            except Exception as e:
-                print(f"❌ Error with {attempt_model}: {str(e)}")
-                last_error = e
-                if attempt_model != models_to_try[-1]:
-                    print(f"📋 Trying next model...")
-                    continue
-                else:
-                    raise
-        
-        # Check if we got a response
-        if response is None or response.status_code != 200:
-            if last_error:
-                raise last_error
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to get response from all available models"
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                json=request_body
             )
-        
-        data = response.json()
-        print(f"✅ Got response from OpenRouter")
-        
-        # Check if we got a valid response
-        if not data.get("choices") or len(data["choices"]) == 0:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="No response from AI model"
-            )
-        
-        choice = data["choices"][0]
-        message_content = choice["message"]["content"]
-        images = []
-
-        # Handle different response formats
-        if isinstance(message_content, list):
-            # Multimodal response (text + images)
-            text_parts = []
-            for part in message_content:
-                if isinstance(part, dict):
-                    if part.get("type") == "text":
-                        text_parts.append(part.get("text", ""))
-                    elif part.get("type") == "image_url":
-                        image_data = part.get("image_url", {})
-                        url = image_data.get("url", "")
-                        if url:
-                            images.append({
-                                "url": url,
-                                "type": "image/png",  # Or detect from URL
-                                "alt_text": image_data.get("detail", "AI generated image"),
-                                "width": None,
-                                "height": None
-                            })
-            message_content = "\n".join(text_parts)
-
-        elif isinstance(message_content, str):
-            # Plain text response - check for embedded image references
-            import re
             
-            # Extract markdown images: ![alt](url)
-            markdown_images = re.findall(r'!\[([^\]]*)\]\(([^)]+)\)', message_content)
-            for alt_text, url in markdown_images:
-                if url.startswith(('http://', 'https://', 'data:image/')):
-                    images.append({
-                        "url": url,
-                        "type": "image/png",
-                        "alt_text": alt_text or "AI generated image",
-                        "width": None,
-                        "height": None
-                    })
+            if response.status_code != 200:
+                error_detail = f"OpenRouter API error: {response.status_code}"
+                try:
+                    error_data = response.json()
+                    error_detail = error_data.get('error', {}).get('message', error_detail)
+                    print(f"❌ OpenRouter error: {error_data}")
+                except:
+                    pass
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail=error_detail
+                )
+                
+            data = response.json()
+            print(f"✅ Got response from OpenRouter")
             
-            # Extract HTML images: <img src="url">
-            html_images = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', message_content)
-            for url in html_images:
-                if url.startswith(('http://', 'https://', 'data:image/')):
-                    # Avoid duplicates
-                    if not any(img["url"] == url for img in images):
+            # Check if we got a valid response
+            if not data.get("choices") or len(data["choices"]) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="No response from AI model"
+                )
+            
+            choice = data["choices"][0]
+            message_content = choice["message"]["content"]
+            images = []
+
+            # Handle different response formats
+            if isinstance(message_content, list):
+                # Multimodal response (text + images)
+                text_parts = []
+                for part in message_content:
+                    if isinstance(part, dict):
+                        if part.get("type") == "text":
+                            text_parts.append(part.get("text", ""))
+                        elif part.get("type") == "image_url":
+                            image_data = part.get("image_url", {})
+                            url = image_data.get("url", "")
+                            if url:
+                                images.append({
+                                    "url": url,
+                                    "type": "image/png",
+                                    "alt_text": image_data.get("detail", "AI generated image"),
+                                    "width": None,
+                                    "height": None
+                                })
+                message_content = "\n".join(text_parts)
+
+            elif isinstance(message_content, str):
+                # Plain text response - check for embedded image references
+                import re
+                
+                # Extract markdown images: ![alt](url)
+                markdown_images = re.findall(r'!\[([^\]]*)\]\(([^)]+)\)', message_content)
+                for alt_text, url in markdown_images:
+                    if url.startswith(('http://', 'https://', 'data:image/')):
                         images.append({
                             "url": url,
                             "type": "image/png",
-                            "alt_text": "AI generated image",
+                            "alt_text": alt_text or "AI generated image",
                             "width": None,
                             "height": None
                         })
+                
+                # Extract HTML images: <img src="url">
+                html_images = re.findall(r'<img[^>]+src=["\']([^"\']+)["\']', message_content)
+                for url in html_images:
+                    if url.startswith(('http://', 'https://', 'data:image/')):
+                        # Avoid duplicates
+                        if not any(img["url"] == url for img in images):
+                            images.append({
+                                "url": url,
+                                "type": "image/png",
+                                "alt_text": "AI generated image",
+                                "width": None,
+                                "height": None
+                            })
 
             # Check for images in separate field (some APIs)
             if data.get("images"):
@@ -902,6 +981,10 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
                         })
 
             print(f"📊 Extracted content: {len(message_content)} chars, {len(images)} images")
+
+            # ✅ Increment usage counter (important!)
+            token_count = data.get("usage", {}).get("total_tokens", 0)
+            await increment_message_count(user_id, token_count)
 
             # Return response with properly formatted images
             return ChatResponse(
@@ -927,7 +1010,7 @@ async def chat(request: Request, chat_request: ChatRequest, payload: dict = Depe
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Chat processing error: {str(e)}"
         )
-                        
+        
 # Document upload endpoint
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 ALLOWED_MIME_TYPES = {

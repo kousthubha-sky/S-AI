@@ -1,34 +1,56 @@
+// frontend/react-fast/app/components/chat/model-selector.tsx - MULTI-TIER FIXED
+
 import { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
-import { ChevronDown, Info } from "lucide-react";
+import { ChevronDown, Info, Lock } from "lucide-react";
 import { AI_MODELS } from "~/lib/models";
 import { cn } from "~/lib/utils";
 
 interface ModelSelectorProps {
   selectedModel: string;
   onModelChange: (modelId: string) => void;
-  userTier: "free" | "pro";
+  userTier: "free" | "starter" | "pro" | "pro_plus"; // ✅ Updated types
 }
 
 export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredModel, setHoveredModel] = useState<string | null>(null);
 
-  const availableModels =
-    userTier === "pro"
-      ? AI_MODELS
-      : AI_MODELS.filter((model) => model.tier === "free");
+  // ✅ Helper function to check if user has access to a model
+  const hasAccessToModel = (modelTier: string): boolean => {
+    const tierHierarchy = {
+      "free": 0,
+      "starter": 1,
+      "pro": 2,
+      "pro_plus": 3
+    };
+    
+    const userLevel = tierHierarchy[userTier] || 0;
+    const modelLevel = tierHierarchy[modelTier as keyof typeof tierHierarchy] || 0;
+    
+    return userLevel >= modelLevel;
+  };
+
+  // ✅ Filter models based on user's tier
+  const availableModels = AI_MODELS.filter((model) => hasAccessToModel(model.tier));
+  
+  // ✅ All models for display (including locked ones)
+  const allModels = AI_MODELS;
 
   const selectedModelData = AI_MODELS.find((m) => m.id === selectedModel);
 
   useEffect(() => {
     const currentModel = AI_MODELS.find((m) => m.id === selectedModel);
-    if (!currentModel || (userTier !== "pro" && currentModel.tier === "pro")) {
-      const firstFreeModel = AI_MODELS.find((m) => m.tier === "free");
-      if (firstFreeModel) onModelChange(firstFreeModel.id);
+    
+    // ✅ If current model is not accessible, switch to first available model
+    if (!currentModel || !hasAccessToModel(currentModel.tier)) {
+      const firstAvailableModel = availableModels[0];
+      if (firstAvailableModel) {
+        onModelChange(firstAvailableModel.id);
+      }
     }
-  }, [userTier, selectedModel, onModelChange]);
+  }, [userTier, selectedModel, onModelChange, availableModels]);
 
   const handleMouseEnter = (e: React.MouseEvent, id: string) => {
     setHoveredModel(id);
@@ -42,10 +64,23 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
     setHoveredModel(null);
   };
 
+  // ✅ Get tier badge component
+  const getTierBadge = (tier: string) => {
+    const badges = {
+      "free": null,
+      "starter": <span className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs px-1.5 py-0.5 rounded">STARTER</span>,
+      "pro": <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-1.5 py-0.5 rounded">PRO</span>,
+      "pro_plus": <span className="bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs px-1.5 py-0.5 rounded">PRO+</span>
+    };
+    return badges[tier as keyof typeof badges];
+  };
+
   const Tooltip = () => {
     if (!hoveredModel) return null;
     const model = AI_MODELS.find((m) => m.id === hoveredModel);
     if (!model) return null;
+
+    const isLocked = !hasAccessToModel(model.tier);
 
     return createPortal(
       <AnimatePresence>
@@ -57,8 +92,8 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
           transition={{ duration: 0.15 }}
           className="fixed z-[9999] pointer-events-none"
           style={{
-            bottom: '80px',
-            left: '20px',
+            top: '80px',
+            left: '180px',
           }}
         >
           <div className="bg-black/90 text-white text-xs rounded-lg px-3 py-2 max-w-xs backdrop-blur-sm border border-white/10 shadow-xl">
@@ -69,10 +104,13 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
                 <div className="text-white/70 leading-relaxed">{model.description}</div>
                 <div className="flex items-center gap-2 mt-2 text-white/50">
                   <span>Provider: {model.provider}</span>
-                  {model.tier === "pro" && (
-                    <span className="bg-white/10 text-white/80 px-1.5 py-0.5 rounded text-xs">PRO</span>
-                  )}
+                  {getTierBadge(model.tier)}
                 </div>
+                {isLocked && (
+                  <div className="mt-2 text-orange-400 text-xs">
+                    🔒 Upgrade to access this model
+                  </div>
+                )}
               </div>
             </div>
             {/* Arrow */}
@@ -84,14 +122,20 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
     );
   };
 
+  // ✅ Group models by tier
+  const freeModels = allModels.filter(m => m.tier === "free");
+  const starterModels = allModels.filter(m => m.tier === "starter");
+  const proModels = allModels.filter(m => m.tier === "pro");
+  const proPlusModels = allModels.filter(m => m.tier === "pro_plus");
+
   return (
     <div className="relative">
       {/* Compact Selector Trigger */}
       <motion.button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          "flex items-center gap-2  py-1.5 rounded-2xl border text-xs font-medium transition-all duration-200",
-          "bg-background/80  border-border/50 hover:border-border",
+          "flex items-center gap-2 py-1.5 rounded-2xl border text-xs font-medium transition-all duration-200",
+          "bg-background/80 border-border/50 hover:border-border",
           "text-foreground hover:bg-muted/50"
         )}
         whileHover={{ scale: 1.02 }}
@@ -117,7 +161,7 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute bottom-full mb-2 right-0 bg-background/95 backdrop-blur-xl border border-border/50 rounded-lg shadow-2xl min-w-[280px] overflow-hidden"
+            className="absolute bottom-full mb-2 right-0 bg-background/95 backdrop-blur-xl border border-border/50 rounded-lg shadow-2xl min-w-[280px] max-h-[400px] overflow-hidden"
             onMouseLeave={() => {
               setIsOpen(false);
               handleModelSelect();
@@ -137,83 +181,106 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
             </div>
 
             {/* Model List */}
-            <div className="overflow-hidden scrollbar-hide">
+            <div className="overflow-y-auto max-h-[139px] scrollbar-hide">
               {/* Free Models */}
-              {availableModels.filter((m) => m.tier === "free").length > 0 && (
+              {freeModels.length > 0 && (
                 <>
                   <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/10">
                     Free Models
                   </div>
-                  {availableModels
-                    .filter((model) => model.tier === "free")
-                    .map((model) => (
-                      <motion.button
-                        key={model.id}
-                        onClick={() => {
+                  {freeModels.map((model) => (
+                    <ModelButton
+                      key={model.id}
+                      model={model}
+                      isSelected={selectedModel === model.id}
+                      isLocked={false}
+                      onSelect={() => {
+                        onModelChange(model.id);
+                        setIsOpen(false);
+                        handleModelSelect();
+                      }}
+                      onMouseEnter={(e) => handleMouseEnter(e, model.id)}
+                      onMouseLeave={handleMouseLeave}
+                    />
+                  ))}
+                </>
+              )}
+
+              {/* Starter Models */}
+              {starterModels.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/10 border-t border-border/30">
+                    Starter Models
+                  </div>
+                  {starterModels.map((model) => (
+                    <ModelButton
+                      key={model.id}
+                      model={model}
+                      isSelected={selectedModel === model.id}
+                      isLocked={!hasAccessToModel(model.tier)}
+                      onSelect={() => {
+                        if (hasAccessToModel(model.tier)) {
                           onModelChange(model.id);
                           setIsOpen(false);
                           handleModelSelect();
-                        }}
-                        onMouseEnter={(e) => handleMouseEnter(e, model.id)}
-                        onMouseLeave={handleMouseLeave}
-                        className={cn(
-                          "w-full flex items-center justify-between px-3 py-2 text-left transition-colors",
-                          selectedModel === model.id
-                            ? "bg-primary/10 text-primary border-r-2 border-primary"
-                            : "hover:bg-muted/50 text-foreground"
-                        )}
-                        whileHover={{ x: 2 }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className={cn(
-                            "w-2 h-2 rounded-full",
-                            selectedModel === model.id ? "bg-primary" : "bg-muted-foreground"
-                          )}></div>
-                          <span className="text-xs font-medium">{model.name}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">{model.provider}</span>
-                      </motion.button>
-                    ))}
+                        }
+                      }}
+                      onMouseEnter={(e) => handleMouseEnter(e, model.id)}
+                      onMouseLeave={handleMouseLeave}
+                    />
+                  ))}
                 </>
               )}
 
               {/* Pro Models */}
-              {userTier === "pro" && availableModels.filter((m) => m.tier === "pro").length > 0 && (
+              {proModels.length > 0 && (
                 <>
                   <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/10 border-t border-border/30">
                     Pro Models
                   </div>
-                  {availableModels
-                    .filter((model) => model.tier === "pro")
-                    .map((model) => (
-                      <motion.button
-                        key={model.id}
-                        onClick={() => {
+                  {proModels.map((model) => (
+                    <ModelButton
+                      key={model.id}
+                      model={model}
+                      isSelected={selectedModel === model.id}
+                      isLocked={!hasAccessToModel(model.tier)}
+                      onSelect={() => {
+                        if (hasAccessToModel(model.tier)) {
                           onModelChange(model.id);
                           setIsOpen(false);
                           handleModelSelect();
-                        }}
-                        onMouseEnter={(e) => handleMouseEnter(e, model.id)}
-                        onMouseLeave={handleMouseLeave}
-                        className={cn(
-                          "w-full flex items-center justify-between px-3 py-2 text-left transition-colors",
-                          selectedModel === model.id
-                            ? "bg-primary/10 text-primary border-r-2 border-primary"
-                            : "hover:bg-muted/50 text-foreground"
-                        )}
-                        whileHover={{ x: 2 }}
-                      >
-                        <div className="flex items-center gap-2">
-                          <div className={cn(
-                            "w-2 h-2 rounded-full",
-                            selectedModel === model.id ? "bg-primary" : "bg-muted-foreground"
-                          )}></div>
-                          <span className="text-xs font-medium">{model.name}</span>
-                          <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-1.5 py-0.5 rounded">PRO</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">{model.provider}</span>
-                      </motion.button>
-                    ))}
+                        }
+                      }}
+                      onMouseEnter={(e) => handleMouseEnter(e, model.id)}
+                      onMouseLeave={handleMouseLeave}
+                    />
+                  ))}
+                </>
+              )}
+
+              {/* Pro Plus Models */}
+              {proPlusModels.length > 0 && (
+                <>
+                  <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground bg-muted/10 border-t border-border/30">
+                    Pro Plus Models
+                  </div>
+                  {proPlusModels.map((model) => (
+                    <ModelButton
+                      key={model.id}
+                      model={model}
+                      isSelected={selectedModel === model.id}
+                      isLocked={!hasAccessToModel(model.tier)}
+                      onSelect={() => {
+                        if (hasAccessToModel(model.tier)) {
+                          onModelChange(model.id);
+                          setIsOpen(false);
+                          handleModelSelect();
+                        }
+                      }}
+                      onMouseEnter={(e) => handleMouseEnter(e, model.id)}
+                      onMouseLeave={handleMouseLeave}
+                    />
+                  ))}
                 </>
               )}
             </div>
@@ -222,7 +289,7 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
             <div className="px-3 py-2 border-t border-border/30 bg-muted/10">
               <div className="flex items-center justify-between text-xs text-muted-foreground">
                 <span>Current: {selectedModelData?.name}</span>
-                <span>{userTier.toUpperCase()}</span>
+                <span>{userTier.replace('_', ' ').toUpperCase()}</span>
               </div>
             </div>
           </motion.div>
@@ -231,5 +298,57 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
 
       <Tooltip />
     </div>
+  );
+}
+
+// ✅ Model Button Component
+interface ModelButtonProps {
+  model: any;
+  isSelected: boolean;
+  isLocked: boolean;
+  onSelect: () => void;
+  onMouseEnter: (e: React.MouseEvent) => void;
+  onMouseLeave: () => void;
+}
+
+function ModelButton({ model, isSelected, isLocked, onSelect, onMouseEnter, onMouseLeave }: ModelButtonProps) {
+  const getTierBadge = (tier: string) => {
+    const badges = {
+      "starter": <span className="bg-gradient-to-r from-blue-500 to-cyan-500 text-white text-xs px-1.5 py-0.5 rounded">STARTER</span>,
+      "pro": <span className="bg-gradient-to-r from-purple-500 to-pink-500 text-white text-xs px-1.5 py-0.5 rounded">PRO</span>,
+      "pro_plus": <span className="bg-gradient-to-r from-orange-500 to-red-500 text-white text-xs px-1.5 py-0.5 rounded">PRO+</span>
+    };
+    return badges[tier as keyof typeof badges];
+  };
+
+  return (
+    <motion.button
+      onClick={onSelect}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+      disabled={isLocked}
+      className={cn(
+        "w-full flex items-center justify-between px-3 py-2 text-left transition-colors",
+        isLocked && "opacity-50 cursor-not-allowed",
+        !isLocked && isSelected
+          ? "bg-primary/10 text-primary border-r-2 border-primary"
+          : !isLocked && "hover:bg-muted/50 text-foreground"
+      )}
+      whileHover={!isLocked ? { x: 2 } : {}}
+    >
+      <div className="flex items-center gap-2">
+        {isLocked ? (
+          <Lock className="w-3 h-3 text-muted-foreground" />
+        ) : (
+          <div className={cn(
+            "w-2 h-2 rounded-full",
+            isSelected ? "bg-primary" : "bg-muted-foreground"
+          )}></div>
+        )}
+        <span className="text-xs font-medium">{model.name}</span>
+        {model.tier !== "free" && getTierBadge(model.tier)}
+      </div>
+      <span className="text-xs text-muted-foreground">{model.provider}</span>
+    </motion.button>
   );
 }

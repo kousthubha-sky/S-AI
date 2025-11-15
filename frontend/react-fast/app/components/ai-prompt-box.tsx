@@ -459,7 +459,7 @@ interface PromptInputBoxProps {
   className?: string;
   selectedModel?: string;
   onModelChange?: (model: string) => void;
-  userTier?: 'free' | 'pro';
+  userTier?: 'free' | 'starter' | 'pro' | 'pro_plus';
 }
 export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref: React.Ref<HTMLDivElement>) => {
   const { 
