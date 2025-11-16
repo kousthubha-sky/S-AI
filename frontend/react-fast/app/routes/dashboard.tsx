@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
-import { ProtectedRoute } from "~/components/protected-route";
+import { useNavigate } from "react-router";
 import { Button } from "~/components/ui/button";
 import { ChatInterface } from "~/components/chat/chat-interface";
 import { PaymentDialog } from "~/components/chat/payment-dialog";
 import { useAuthApi } from "~/hooks/useAuthApi";
 import { useToast } from "~/components/ui/toast";
+import CardNav from "~/components/CardNav";
 import PricingSection4 from "~/components/chat/pricing-section-3";
 import { 
   MessageSquare, 
@@ -290,7 +291,8 @@ function UpgradeButton({ open, onClick }: { open: boolean; onClick: () => void }
 }
 
 function DashboardContent() {
-  const { user: auth0User, logout, getAccessTokenSilently, isAuthenticated } = useAuth0<Auth0User>();
+  const { user: auth0User, logout, getAccessTokenSilently, isAuthenticated, isLoading } = useAuth0<Auth0User>();
+  const navigate = useNavigate();
   const { fetchWithAuth } = useAuthApi();
   const [userTier, setUserTier] = useState<'free' | 'starter' | 'pro' | 'pro_plus'>('free');
   const [messageCount, setMessageCount] = useState<number>(0);
@@ -307,8 +309,42 @@ function DashboardContent() {
   const [isLoadingSubscription, setIsLoadingSubscription] = useState<boolean>(true);
   const [open, setOpen] = useState(false);
 
+  // CardNav configuration
+  const cardNavItems = [
+    {
+      label: "Features",
+      bgColor: "#6366f1",
+      textColor: "#fff",
+      links: [
+        { label: "AI Chat", href: "/features", ariaLabel: "Learn about AI Chat" },
+        { label: "Code Generation", href: "/features", ariaLabel: "Code Generation" },
+        { label: "Multi-model", href: "/features", ariaLabel: "Multi-model Support" },
+      ]
+    },
+    {
+      label: "Pricing",
+      bgColor: "#8b5cf6",
+      textColor: "#fff",
+      links: [
+        { label: "Free Plan", href: "/pricing", ariaLabel: "Free Plan" },
+        { label: "Pro Plans", href: "/pricing", ariaLabel: "Pro Plans" },
+        { label: "Enterprise", href: "/pricing", ariaLabel: "Enterprise" },
+      ]
+    },
+    {
+      label: "Resources",
+      bgColor: "#ec4899",
+      textColor: "#fff",
+      links: [
+        { label: "Documentation", href: "/about", ariaLabel: "Documentation" },
+        { label: "About Us", href: "/about", ariaLabel: "About Us" },
+        { label: "Support", href: "/about", ariaLabel: "Support" },
+      ]
+    }
+  ];
+
   useEffect(() => {
-    if (auth0User) {
+    if (isAuthenticated && auth0User) {
       initializeUser();
       checkUserSubscription();
       
@@ -326,7 +362,7 @@ function DashboardContent() {
         window.removeEventListener('paymentSuccess', handlePaymentSuccess);
       };
     }
-  }, [auth0User]);
+  }, [isAuthenticated, auth0User]);
 
   useEffect(() => {
     const handleOpenProfileSettings = () => {
@@ -427,7 +463,6 @@ function DashboardContent() {
       
       let tier: 'free' | 'starter' | 'pro' | 'pro_plus' = 'free';
       
-      // ✅ Check all paid tiers - use usage.tier from API response
       if (usage.is_paid === true) {
         if (usage.tier === 'starter') {
           tier = 'starter';
@@ -481,7 +516,7 @@ function DashboardContent() {
 
   const handleSessionSelect = async (sessionId: string) => {
     setCurrentSessionId(sessionId);
-    setOpen(false); // Close mobile sidebar on selection
+    setOpen(false);
   };
 
   const handleSessionUpdate = (updatedSessions: ChatSession[]) => {
@@ -519,83 +554,102 @@ function DashboardContent() {
     return date.toLocaleDateString();
   };
 
+  const handleGetStartedClick = () => {
+    navigate('/login');
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-sky-300 to-pink-300">
+        <div className="text-lg">Loading...</div>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-screen w-full bg-gradient-to-b from-sky-300 to-pink-300  flex-col md:flex-row">
-      <Sidebar open={open} setOpen={setOpen}>
-        <SidebarBody className="justify-between gap-10 md:flex-col">
-          <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
-            {/* Logo */}
-            <SidebarLogoSection />
+    <div className="flex h-screen w-full bg-gradient-to-b from-sky-300 to-pink-300 flex-col md:flex-row relative">
+      {/* CardNav - Only visible when not authenticated */}
+      {!isAuthenticated && (
+        <div className="fixed top-0 left-0 right-0 z-50">
+          <CardNav
+            logo="/favicon.ico"
+            logoAlt="SkyGPT Logo"
+            items={cardNavItems}
+            baseColor="#ffffff"
+            menuColor="#000000"
+            buttonBgColor="#6366f1"
+            buttonTextColor="#ffffff"
+            onGetStartedClick={handleGetStartedClick}
+          />
+        </div>
+      )}
 
-            {/* New Chat Button */}
-            <SidebarNewChatButton onClick={handleNewChatFunc} />
+      {/* Sidebar - Only show when authenticated */}
+      {isAuthenticated && (
+        <Sidebar open={open} setOpen={setOpen}>
+          <SidebarBody className="justify-between gap-10 md:flex-col">
+            <div className="flex flex-col flex-1 overflow-y-auto overflow-x-hidden">
+              <SidebarLogoSection />
+              <SidebarNewChatButton onClick={handleNewChatFunc} />
 
-            {/* Navigation Links */}
-            <div className="flex flex-col gap-1 mb-4 ">
-              
-              <SidebarLink
-                link={{
-                  label: "Starred",
-                  href: "#",
-                  icon: <Star className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
-                }}
-              />
-              <SidebarLink
-                
-                link={{
-                  label: "Documentation",
-                  href: "#",
-                  icon: <BookOpen className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
-                }}
+              <div className="flex flex-col gap-1 mb-4">
+                <SidebarLink
+                  link={{
+                    label: "Starred",
+                    href: "#",
+                    icon: <Star className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
+                  }}
+                />
+                <SidebarLink
+                  link={{
+                    label: "Documentation",
+                    href: "#",
+                    icon: <BookOpen className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
+                  }}
+                />
+                <SidebarSettingsButton onClick={() => setShowProfileSettings(true)} />
+                <SidebarLink
+                  link={{
+                    label: "History",
+                    href: "#",
+                    icon: <History className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
+                  }}
+                />
+              </div>
 
+              <div className="border-t border-neutral-300 dark:border-neutral-700 my-2 mx-2" />
+
+              <SidebarChatHistorySection 
+                sessions={sessions}
+                currentSessionId={currentSessionId}
+                onSelect={handleSessionSelect}
+                onDelete={handleDeleteSession}
+                formatTime={formatRelativeTime}
               />
-              
-              <SidebarSettingsButton
-                              
-              onClick={() => setShowProfileSettings(true)} />
-              <SidebarLink
-                link={{
-                  label: "History",
-                  href: "#",
-                  icon: <History className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
-                }}
-              />
+
+              <div className="border-t border-neutral-300 dark:border-neutral-700 my-2 mx-2" />
+
+              <div className="pb-2">
+                {!isLoadingSubscription && userTier === 'free' && (
+                  <UpgradeButton open={open} onClick={() => setShowPricingSection(true)} />
+                )}
+                <SidebarUserSection 
+                  auth0User={auth0User}
+                  userTier={userTier}
+                  onProfileClick={() => setShowProfileCard(true)}
+                  onLogout={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+                />
+              </div>
             </div>
+          </SidebarBody>
+        </Sidebar>
+      )}
 
-            {/* Divider */}
-            <div className="border-t border-neutral-300 dark:border-neutral-700 my-2 mx-2" />
-
-            {/* Chat History */}
-            <SidebarChatHistorySection 
-              sessions={sessions}
-              currentSessionId={currentSessionId}
-              onSelect={handleSessionSelect}
-              onDelete={handleDeleteSession}
-              formatTime={formatRelativeTime}
-            />
-
-            {/* Divider before user section */}
-            <div className="border-t border-neutral-300 dark:border-neutral-700 my-2 mx-2" />
-
-            {/* User Profile Section */}
-            <div className=" pb-2">
-              {/* Upgrade Button - Only show when subscription is loaded AND user is on free tier */}
-              {!isLoadingSubscription && userTier === 'free' && (
-                <UpgradeButton open={open} onClick={() => setShowPricingSection(true)} />
-              )}
-              <SidebarUserSection 
-                auth0User={auth0User}
-                userTier={userTier}
-                onProfileClick={() => setShowProfileCard(true)}
-                onLogout={() => logout({ logoutParams: { returnTo: window.location.origin } })}
-              />
-            </div>
-          </div>
-        </SidebarBody>
-      </Sidebar>
-
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col min-w-0 relative overflow-hidden w-full md:w-auto">
+      {/* Main Content - Add top padding for CardNav */}
+      <div className={cn(
+        "flex-1 flex flex-col min-w-0 relative overflow-hidden w-full md:w-auto",
+       
+      )}>
         {showProfileSettings && isAuthenticated ? (
           <ProfileSettingsPage
             onClose={() => setShowProfileSettings(false)}
@@ -616,146 +670,145 @@ function DashboardContent() {
             showPaymentDialog={showPricingSection}
             setShowPaymentDialog={setShowPricingSection}
             isSidebarCollapsed={!open}
+            isAuthed={isAuthenticated} // Use isAuthed to match your interface
           />
         )}
       </div>
 
-      {/* Profile Card Overlay */}
-      <AnimatePresence>
-        {showProfileCard && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
-            onClick={() => setShowProfileCard(false)}
-          >
+      {/* Profile Card Overlay - Only for authenticated users */}
+      {isAuthenticated && (
+        <AnimatePresence>
+          {showProfileCard && (
             <motion.div
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              transition={{ type: "spring", duration: 0.5 }}
-              className="relative max-w-full w-full"
-              onClick={(e) => e.stopPropagation()}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[999] bg-black/80 backdrop-blur-sm flex items-center justify-center p-4"
+              onClick={() => setShowProfileCard(false)}
             >
-              <button
-                onClick={() => setShowProfileCard(false)}
-                className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white transition-colors"
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                transition={{ type: "spring", duration: 0.5 }}
+                className="relative max-w-full w-full"
+                onClick={(e) => e.stopPropagation()}
               >
-                <X className="w-4 h-4" />
-              </button>
+                <button
+                  onClick={() => setShowProfileCard(false)}
+                  className="absolute top-4 right-4 z-10 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 flex items-center justify-center text-white transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
 
-              <TiltedCard
-                imageSrc={auth0User?.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(auth0User?.email || 'User')}&background=6366f1&color=fff&size=300`}
-                altText="Profile Picture"
-                captionText={auth0User?.name || 'User Profile'}
-                containerHeight="100%"
-                containerWidth="100%"
-                imageHeight="270px"
-                imageWidth="275px"
-                scaleOnHover={1.05}
-                rotateAmplitude={8}
-                showMobileWarning={false}
-                showTooltip={true}
-                displayOverlayContent={true}
-                overlayContent={
-                  <div className="bg-black/50 border-2 backdrop-blur-sm rounded-[15px] p-6 text-white space-y-4 w-full h-full flex flex-col justify-end">
-                    <div className="space-y-2">
-                      <h3 className="text-xl font-semibold truncate">{auth0User?.name || 'User'}</h3>
-                      <p className="text-sm text-gray-300">{auth0User?.email}</p>
-                      <div className="flex items-center gap-2">
-                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          userTier === 'pro_plus' ? 'bg-orange-500/20 text-orange-300' :
-                          userTier === 'pro' ? 'bg-purple-500/20 text-purple-300' :
-                          userTier === 'starter' ? 'bg-blue-500/20 text-blue-300' :
-                          'bg-gray-500/20 text-gray-300'
-                        }`}>
-                          {userTier === 'free' ? 'FREE' : userTier.replace('_', ' ').toUpperCase()} Plan
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="pt-4 border-t border-white/20">
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-gray-400">Messages Today</p>
-                          <p className="font-medium text-white">{messageCount}</p>
-                        </div>
-                        <div>
-                          <p className="text-gray-400">Next Reset</p>
-                          <p className="font-medium text-white">{nextResetTime || 'N/A'}</p>
+                <TiltedCard
+                  imageSrc={auth0User?.picture || `https://ui-avatars.com/api/?name=${encodeURIComponent(auth0User?.email || 'User')}&background=6366f1&color=fff&size=300`}
+                  altText="Profile Picture"
+                  captionText={auth0User?.name || 'User Profile'}
+                  containerHeight="100%"
+                  containerWidth="100%"
+                  imageHeight="270px"
+                  imageWidth="275px"
+                  scaleOnHover={1.05}
+                  rotateAmplitude={8}
+                  showMobileWarning={false}
+                  showTooltip={true}
+                  displayOverlayContent={true}
+                  overlayContent={
+                    <div className="bg-black/50 border-2 backdrop-blur-sm rounded-[15px] p-6 text-white space-y-4 w-full h-full flex flex-col justify-end">
+                      <div className="space-y-2">
+                        <h3 className="text-xl font-semibold truncate">{auth0User?.name || 'User'}</h3>
+                        <p className="text-sm text-gray-300">{auth0User?.email}</p>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            userTier === 'pro_plus' ? 'bg-orange-500/20 text-orange-300' :
+                            userTier === 'pro' ? 'bg-purple-500/20 text-purple-300' :
+                            userTier === 'starter' ? 'bg-blue-500/20 text-blue-300' :
+                            'bg-gray-500/20 text-gray-300'
+                          }`}>
+                            {userTier === 'free' ? 'FREE' : userTier.replace('_', ' ').toUpperCase()} Plan
+                          </span>
                         </div>
                       </div>
-                    </div>
+                      
+                      <div className="pt-4 border-t border-white/20">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                          <div>
+                            <p className="text-gray-400">Messages Today</p>
+                            <p className="font-medium text-white">{messageCount}</p>
+                          </div>
+                          <div>
+                            <p className="text-gray-400">Next Reset</p>
+                            <p className="font-medium text-white">{nextResetTime || 'N/A'}</p>
+                          </div>
+                        </div>
+                      </div>
 
-                    <div className="flex gap-2 pt-2">
-                      {userTier === 'free' ? (
+                      <div className="flex gap-2 pt-2">
+                        {userTier === 'free' ? (
+                          <Button
+                            onClick={() => {
+                              setShowProfileCard(false);
+                              setShowPricingSection(true);
+                            }}
+                            size="sm"
+                            className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg"
+                          >
+                            <Crown className="h-3 w-3 mr-1" />
+                            Upgrade
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={() => {
+                              setShowProfileCard(false);
+                              setShowPricingSection(true);
+                            }}
+                            size="sm"
+                            className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg"
+                          >
+                            <Crown className="h-3 w-3 mr-1" />
+                            Upgrade Plan
+                          </Button>
+                        )}
                         <Button
                           onClick={() => {
                             setShowProfileCard(false);
-                            setShowPricingSection(true);
+                            logout({ logoutParams: { returnTo: window.location.origin } });
                           }}
                           size="sm"
-                          className="flex-1 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg"
+                          variant="ghost"
+                          className="text-white hover:bg-white/10 rounded-lg"
                         >
-                          <Crown className="h-3 w-3 mr-1" />
-                          Upgrade
+                          <LogOut className="h-3 w-3 mr-1" />
+                          Logout
                         </Button>
-                      ) : (
-                        <Button
-                          onClick={() => {
-                            setShowProfileCard(false);
-                            setShowPricingSection(true);
-                          }}
-                          size="sm"
-                          className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-lg"
-                        >
-                          <Crown className="h-3 w-3 mr-1" />
-                          Upgrade Plan
-                        </Button>
-                      )}
-                      <Button
-                        onClick={() => {
-                          setShowProfileCard(false);
-                          logout({ logoutParams: { returnTo: window.location.origin } });
-                        }}
-                        size="sm"
-                        variant="ghost"
-                        className="text-white hover:bg-white/10 rounded-lg"
-                      >
-                        <LogOut className="h-3 w-3 mr-1" />
-                        Logout
-                      </Button>
+                      </div>
                     </div>
-                  </div>
-                }
-              />
+                  }
+                />
+              </motion.div>
             </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+          )}
+        </AnimatePresence>
+      )}
       
-      {/* ADD THIS INSTEAD: */}
-{showPricingSection && (
-  <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
-    <PricingSection4 />
-    <Button
-      onClick={() => setShowPricingSection(false)}
-      className="fixed top-4 right-4 z-50"
-      variant="outline"
-    >
-      Close
-    </Button>
-  </div>
-)}
+      {/* Pricing Section */}
+      {showPricingSection && (
+        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+          <PricingSection4 />
+          <Button
+            onClick={() => setShowPricingSection(false)}
+            className="fixed top-4 right-4 z-50"
+            variant="outline"
+          >
+            Close
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
 
 export default function Dashboard() {
-  return (
-    <ProtectedRoute>
-      <DashboardContent />
-    </ProtectedRoute>
-  );
+  return <DashboardContent />;
 }

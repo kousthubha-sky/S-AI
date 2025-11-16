@@ -1,6 +1,6 @@
 // components/chat/chat-interface.tsx
 import { useState, useRef, useEffect, type JSX } from "react"
-import { AlertCircle, Copy, Check } from "lucide-react"
+import { AlertCircle, Copy, Check, MessageSquare } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { cn } from "~/lib/utils"
 import { useAuthApi } from "~/hooks/useAuthApi"
@@ -59,6 +59,7 @@ interface ChatInterfaceProps {
   setShowPaymentDialog: (show: boolean) => void;
   onMenuClick?: () => void;
   isSidebarCollapsed?: boolean;
+  isAuthed?: boolean;
 }
 
 const GeneratedImages = ({ images }: { images: ImageData[] }) => {
@@ -155,12 +156,10 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
   const syntaxHighlight = (code: string, lang: string): JSX.Element => {
     const lines = code.split('\n');
     const keywordColors: Record<string, string> = {
-      // JavaScript/TypeScript
       'function': '#FF6692', 'const': '#FF6692', 'let': '#FF6692', 'var': '#FF6692',
       'return': '#FF6692', 'if': '#FF6692', 'else': '#FF6692', 'for': '#FF6692',
       'while': '#FF6692', 'import': '#FF6692', 'export': '#FF6692', 'default': '#FF6692',
       'async': '#FF6692', 'await': '#FF6692',
-      // Python
       'def': '#FF6692', 'class': '#FF6692', 'from': '#FF6692', 'as': '#FF6692',
       'True': '#1ABC9C', 'False': '#1ABC9C', 'None': '#1ABC9C', 'self': '#FFD700',
       'true': '#1ABC9C', 'false': '#1ABC9C', 'null': '#1ABC9C', 'undefined': '#1ABC9C',
@@ -170,12 +169,10 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
     const highlightLine = (line: string): JSX.Element[] => {
       const parts: JSX.Element[] = [];
       let lastIndex = 0;
-      // Updated regex to capture numbers separately
       const regex = /\b(\w+)\b|'([^']*)\'|"([^"]*)"|`([^`]*)`|#.*$|\/\/.*$|\d+/gm;
       let match;
 
       while ((match = regex.exec(line)) !== null) {
-        // Add text before match
         if (match.index > lastIndex) {
           parts.push(
             <span key={`text-${lastIndex}`} style={{ color: '#E5E7EB' }}>
@@ -184,20 +181,19 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
           );
         }
 
-        // Determine color based on match type
         let color = '#E5E7EB';
         if (match[2]) {
-          color = '#A8E6CF'; // Single-quoted string
+          color = '#A8E6CF';
         } else if (match[3]) {
-          color = '#A8E6CF'; // Double-quoted string
+          color = '#A8E6CF';
         } else if (match[4]) {
-          color = '#A8E6CF'; // Backtick string
+          color = '#A8E6CF';
         } else if (match[0].startsWith('#') || match[0].startsWith('//')) {
-          color = '#6B7280'; // Comment
+          color = '#6B7280';
         } else if (/^\d+$/.test(match[0])) {
-          color = '#1ABC9C'; // Numbers (all languages)
+          color = '#1ABC9C';
         } else if (keywordColors[match[0]]) {
-          color = keywordColors[match[0]]; // Keyword
+          color = keywordColors[match[0]];
         }
 
         parts.push(
@@ -208,7 +204,6 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
         lastIndex = regex.lastIndex;
       }
 
-      // Add remaining text
       if (lastIndex < line.length) {
         parts.push(
           <span key={`text-end-${lastIndex}`} style={{ color: '#E5E7EB' }}>
@@ -279,20 +274,12 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
     };
 
     const parseMarkdown = (line: string) => {
-      // Handle markdown links [text](url) - MUST be before other replacements
       line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline cursor-pointer">$1</a>');
-      
-      // Handle code inline
       line = line.replace(/`([^`]+)`/g, '<code class="bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
-      
-      // Handle bold
       line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
       line = line.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-      
-      // Handle italic
       line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
       line = line.replace(/_([^_]+)_/g, '<em>$1</em>');
-      
       return line;
     };
 
@@ -313,7 +300,6 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         return;
       }
 
-      // Headers (### or ## or #)
       if (line.match(/^#{1,6}\s/)) {
         const levelMatch = line.match(/^#+/);
         const level = levelMatch ? levelMatch[0].length : 3;
@@ -340,7 +326,6 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         return;
       }
 
-      // Unordered lists (-, *, +)
       if (line.match(/^[\s]*[-*+]\s/)) {
         const indentMatch = line.match(/^[\s]*/);
         const indent = indentMatch ? indentMatch[0].length : 0;
@@ -358,7 +343,6 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         return;
       }
 
-      // Ordered lists (1., 2., etc)
       if (line.match(/^[\s]*\d+\.\s/)) {
         const indentMatch = line.match(/^[\s]*/);
         const indent = indentMatch ? indentMatch[0].length : 0;
@@ -380,7 +364,6 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         }
       }
 
-      // Blockquotes
       if (line.trim().startsWith('>')) {
         const quoteText = line.replace(/^>\s?/, '').trim();
         elements.push(
@@ -394,7 +377,6 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         return;
       }
 
-      // Regular paragraphs
       if (line.trim()) {
         elements.push(
           <p 
@@ -425,7 +407,7 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
 export function ChatInterface({ 
   userTier, messageCount = 0, maxDailyMessages = 500, nextResetTime,
   currentSessionId, sessions, onSessionUpdate, onNewChat, user,
-  showPaymentDialog, setShowPaymentDialog, onMenuClick,
+  showPaymentDialog, setShowPaymentDialog, onMenuClick, isAuthed,
   isSidebarCollapsed = false
 }: ChatInterfaceProps) {
   const { user: auth0User, isLoading: auth0Loading, isAuthenticated } = useAuth0();
@@ -447,30 +429,11 @@ export function ChatInterface({
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  if (auth0Loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-3"></div>
-          <p className="text-sm text-muted-foreground">Initializing authentication...</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <AlertCircle className="h-8 w-8 text-destructive mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">Please log in to continue</p>
-        </div>
-      </div>
-    );
-  }
+  // REMOVED: Early return for auth0Loading
+  // REMOVED: Early return for !isAuthenticated
 
   useEffect(() => {
-    if (currentSessionId) {
+    if (currentSessionId && isAuthed) {
       loadSession(currentSessionId);
       setActiveSessionId(currentSessionId);
     } else {
@@ -479,7 +442,7 @@ export function ChatInterface({
       setIsInitializing(false);
       setActiveSessionId(null);
     }
-  }, [currentSessionId]);
+  }, [currentSessionId, isAuthed]);
 
   const loadSession = async (sessionId: string) => {
     try {
@@ -508,13 +471,13 @@ export function ChatInterface({
   }
 
   const handleSendMessage = async (messageText: string, files?: File[]) => {
-    if ((!messageText.trim() && (!files || files.length === 0)) || isLoading) return;
+    // Don't send if not authenticated
+    if (!isAuthed || (!messageText.trim() && (!files || files.length === 0)) || isLoading) return;
 
     setHasStartedChat(true);
 
     abortControllerRef.current = new AbortController();
 
-    // Process files into attachments
     const attachments: Attachment[] = files ? files.map(file => ({
       id: Date.now().toString() + Math.random(),
       type: file.type,
@@ -523,7 +486,6 @@ export function ChatInterface({
       file
     })) : [];
 
-    // Parse special prefixes from PromptInputBox
     let actualMessage = messageText;
     let modelToUse = selectedModel;
     let isSearchRequest = false;
@@ -533,11 +495,9 @@ export function ChatInterface({
       actualMessage = messageText.replace('[Search:', '').replace(/\]$/, '').trim();
     } else if (messageText.startsWith('[Think:')) {
       actualMessage = messageText.replace('[Think:', '').replace(/\]$/, '').trim();
-      // Use a reasoning-focused model
       modelToUse = AI_MODELS.find(m => m.name.includes('Opus'))?.id || selectedModel;
     } else if (messageText.startsWith('[Canvas:')) {
       actualMessage = messageText.replace('[Canvas:', '').replace(/\]$/, '').trim();
-      // Use canvas/code generation model
     }
 
     const userMessage: Message = {
@@ -584,17 +544,14 @@ export function ChatInterface({
       let responseImages: ImageData[] = [];
       let totalTokens: number | undefined = undefined;
 
-      // Handle search request separately
       if (isSearchRequest) {
         try {
           const newsResponse = await NewsService.fetchLiveNews(actualMessage, fetchWithAuth);
           messageContent = newsResponse.message;
-          // No images from news API, but we could add them if needed
         } catch (error) {
           messageContent = `Failed to fetch news: ${error instanceof Error ? error.message : 'Unknown error'}\n\nTry searching for different keywords or check your internet connection.`;
         }
       } else {
-        // Regular AI API call
         const apiMessages = [...messages, userMessage]
           .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
           .map(msg => ({ role: msg.role, content: msg.content }))
@@ -711,7 +668,8 @@ export function ChatInterface({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  if (isInitializing) {
+  // Show loading only when authenticated and initializing
+  if (auth0Loading || (isAuthed && isInitializing)) {
     return (
       <div className="flex h-full items-center justify-center">
         <div className="text-center">
@@ -727,107 +685,142 @@ export function ChatInterface({
       ref={containerRef}
       className="flex flex-col h-full w-full flex-1 bg-[radial-gradient(125%_125%_at_50%_101%,rgba(245,87,2,1)_10.5%,rgba(245,120,2,1)_16%,rgba(245,140,2,1)_17.5%,rgba(245,170,100,1)_25%,rgba(238,174,202,1)_40%,rgba(202,179,214,1)_65%,rgba(148,201,233,1)_100%)]"
     >
-      {messages.length === 0 ? (
-        /* Welcome Screen - Centered */
+      {/* CONDITIONALLY RENDER CONTENT BASED ON AUTH */}
+      {!isAuthed ? (
+        /* Welcome Screen for Unauthenticated Users */
         <div className="flex-1 flex flex-col items-center justify-center px-4">
           <div className="w-full max-w-3xl space-y-8">
-            {/* Welcome Header */}
             <div className="text-center space-y-4 mb-12">
+              
               <h1 className="text-5xl md:text-6xl font-bold text-white drop-shadow-lg">
                 Welcome to SkyGPT
               </h1>
               <p className="text-xl md:text-2xl text-white/90 drop-shadow">
-                Start a conversation by typing a message below
+                Access Claude, ChatGPT, Gemini, and more AI models in one platform
+              </p>
+              <p className="text-lg text-white/80 drop-shadow">
+                👆 Sign in above to start chatting
               </p>
             </div>
             
-            {/* Centered Prompt Input */}
+            {/* Show disabled prompt input */}
             <div className="w-full">
               <PromptInputBox
                 onSend={handleSendMessage}
-                isLoading={isLoading}
-                placeholder="Type your message here..."
+                isLoading={false}
+                placeholder="Sign in to start chatting..."
                 selectedModel={selectedModel}
                 onModelChange={(model) => {
                   setSelectedModel(model);
                 }}
                 userTier={userTier}
+                isAuthenticated={isAuthed}
               />
-            </div>
-
-            {/* Quick Suggestions (Optional) */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-8">
-              {[
-                { icon: "💡", text: "Explain a complex concept" },
-                { icon: "✍️", text: "Help me write something" },
-                { icon: "🔍", text: "Search for information" },
-                { icon: "💻", text: "Help me with code" },
-              ].map((suggestion, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => handleSendMessage(suggestion.text, [])}
-                  className="flex items-center gap-3 p-4 rounded-2xl bg-white/10 hover:bg-white/20 backdrop-blur-sm border border-white/20 transition-all duration-200 text-white text-left group"
-                >
-                  <span className="text-2xl">{suggestion.icon}</span>
-                  <span className="text-sm font-medium group-hover:translate-x-1 transition-transform">
-                    {suggestion.text}
-                  </span>
-                </button>
-              ))}
             </div>
           </div>
         </div>
       ) : (
-        /* Chat Messages View */
-        <>
-          <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={cn(
-                  "flex gap-3 animate-in fade-in slide-in-from-bottom-4 duration-300",
-                  message.role === 'user' ? 'justify-end' : 'justify-start'
-                )}
-              >
-                <div
-                  className={cn(
-                    "max-w-[80%] rounded-2xl px-4 shadow-lg",
-                    message.role === 'user'
-                      ? 'bg-[#b0b0b0] text-gray-900'
-                      : ' text-white border border-white/10'
-                  )}
-                >
-                  {message.isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                      <div className="w-2 h-2 bg-white/60 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                    </div>
-                  ) : (
-                    <FormattedMessage content={message.content} images={message.images} />
-                  )}
+        /* Authenticated Chat Interface */
+        <div className="flex-1 flex flex-col">
+          {!hasStartedChat ? (
+            // Before chat starts - centered prompt box with motif
+            <div className="flex-1 flex flex-col items-center justify-center px-4 py-4">
+              <div className="text-center space-y-8 w-full max-w-2xl">
+                <div className="space-y-4">
+                  <div className="w-16 h-16 mx-auto bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
+                    <MessageSquare className="w-8 h-8 text-white" />
+                  </div>
+                  <h2 className="text-3xl font-semibold text-gray-900">Start a New Conversation</h2>
+                  <p className="text-gray-500 text-lg">Ask me anything or describe what you need help with</p>
+                </div>
+
+                {/* Suggestions/motif lines */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div 
+                    onClick={() => {
+                      setSelectedModel('gpt-4o-mini');
+                      // Focus on input if needed
+                    }}
+                    className="p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
+                  >
+                    <p className="text-sm font-medium text-gray-900">💡 Get Ideas</p>
+                    <p className="text-xs text-gray-600">Brainstorm and explore new concepts</p>
+                  </div>
+                  <div 
+                    onClick={() => {
+                      setSelectedModel('gpt-4o');
+                      // Focus on input if needed
+                    }}
+                    className="p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
+                  >
+                    <p className="text-sm font-medium text-gray-900">📝 Write & Edit</p>
+                    <p className="text-xs text-gray-600">Create content or improve existing text</p>
+                  </div>
+                  <div className="p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
+                    <p className="text-sm font-medium text-gray-900">🔍 Analyze</p>
+                    <p className="text-xs text-gray-600">Break down complex topics</p>
+                  </div>
+                  <div className="p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
+                    <p className="text-sm font-medium text-gray-900">💻 Code</p>
+                    <p className="text-xs text-gray-600">Help with programming tasks</p>
+                  </div>
+                </div>
+
+                {/* Prompt Box */}
+                <div className="w-full mt-8">
+                  <PromptInputBox
+                    onSend={handleSendMessage}
+                    isLoading={isLoading}
+                    placeholder="Ask me anything..."
+                    selectedModel={selectedModel}
+                    onModelChange={(model) => {
+                      setSelectedModel(model);
+                    }}
+                    userTier={userTier}
+                    isAuthenticated={isAuthed}
+                  />
                 </div>
               </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Input Area - Fixed at bottom when chat started */}
-          <div className=" pb-6">
-            <div className="max-w-3xl mx-auto">
-              <PromptInputBox
-                onSend={handleSendMessage}
-                isLoading={isLoading}
-                placeholder="Type your message here..."
-                selectedModel={selectedModel}
-                onModelChange={(model) => {
-                  setSelectedModel(model);
-                }}
-                userTier={userTier}
-              />
             </div>
-          </div>
-        </>
+          ) : (
+            // After chat starts - normal layout
+            <>
+              {/* Messages Container */}
+              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                {messages.map((message) => (
+                  <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-100'}`}>
+                      <FormattedMessage content={message.content} images={message.images} />
+                      {message.attachments && message.attachments.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                          {message.attachments.map(att => (
+                            <div key={att.id} className="text-xs opacity-75">{att.name}</div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input Area - Bottom */}
+              <div className="px-4 py-4 border-t border-white/10">
+                <PromptInputBox
+                  onSend={handleSendMessage}
+                  isLoading={isLoading}
+                  placeholder="Type your message..."
+                  selectedModel={selectedModel}
+                  onModelChange={(model) => {
+                    setSelectedModel(model);
+                  }}
+                  userTier={userTier}
+                  isAuthenticated={isAuthed}
+                />
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
