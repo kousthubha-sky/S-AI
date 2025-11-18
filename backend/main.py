@@ -218,6 +218,79 @@ async def health_check():
         "status": "healthy",
     }
 
+# Pricing endpoint
+@app.get("/api/pricing", tags=["Pricing"])
+async def get_pricing():
+    """Get all available pricing plans (public endpoint)"""
+    plans = []
+    
+    # Free tier
+    plans.append({
+        "id": "free",
+        "name": "Free",
+        "price": 0,
+        "currency": "INR",
+        "period": "forever",
+        "description": "Perfect for trying out SkyGPT",
+        "limits": {
+            "requests_per_day": 50,
+            "tokens_per_day": 50000,
+            "requests_per_month": None,
+            "tokens_per_month": None
+        },
+        "features": [
+            "Basic AI models",
+            "Chat history (7 days)",
+            "Standard support"
+        ],
+        "popular": False
+    })
+    
+    # Add paid plans from payment manager
+    for plan_id, plan_info in payment_manager.PLANS.items():
+        plans.append({
+            "id": plan_id,
+            "name": plan_info["name"],
+            "price": plan_info["amount"] // 100,  # Convert paise to rupees
+            "currency": plan_info["currency"],
+            "period": "month",
+            "tier": plan_info["tier"],
+            "description": f"₹{plan_info['amount'] // 100} per month subscription",
+            "limits": {
+                "requests_per_month": plan_info["requests_per_month"],
+                "tokens_per_month": plan_info["tokens_per_month"]
+            },
+            "popular": plan_info["tier"] == "pro"
+        })
+    
+    # Enterprise tier
+    plans.append({
+        "id": "enterprise",
+        "name": "Enterprise",
+        "price": None,
+        "currency": "INR",
+        "period": "custom",
+        "description": "Custom solutions for large teams",
+        "limits": {
+            "requests_per_day": -1,
+            "tokens_per_day": -1,
+            "requests_per_month": -1,
+            "tokens_per_month": -1
+        },
+        "features": [
+            "Unlimited everything",
+            "API access",
+            "Dedicated support",
+            "Custom integrations",
+            "SLA guarantee",
+            "Dedicated account manager"
+        ],
+        "contact_sales": "sales@skygpt.com",
+        "popular": False
+    })
+    
+    return {"plans": plans}
+
 # User profile endpoints
 @app.get("/api/profile", response_model=UserProfile, tags=["User"])
 async def get_profile(payload: dict = Depends(verify_token)):

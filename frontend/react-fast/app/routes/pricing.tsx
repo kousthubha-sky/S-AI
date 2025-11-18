@@ -29,9 +29,9 @@ const plans = [
   {
     name: "Student Starter",
     price: 199,
-    originalPrice: 249,
     period: "month",
     description: "Great for students & learners",
+    planId: "plan_RWzEUovz8FVbX4",
     features: [
       { text: "500 requests per month", included: true },
       { text: "500K token limit", included: true },
@@ -43,19 +43,19 @@ const plans = [
       { text: "Image generation", included: false },
       { text: "Custom prompts", included: false },
     ],
-    cta: "Start 7-Day Trial",
-    ctaLink: "/login?plan=starter",
+    cta: "Start Now",
+    ctaLink: "/login?plan=plan_RWzEUovz8FVbX4",
     popular: false,
     color: "from-blue-500 to-cyan-500",
     icon: Star,
-    badge: "BEST VALUE"
+    badge: null
   },
   {
     name: "Student Pro",
     price: 299,
-    originalPrice: 399,
     period: "month",
     description: "Most popular for serious users",
+    planId: "plan_RWzF9BaZU7q9jw",
     features: [
       { text: "2000 requests per month", included: true },
       { text: "2M token limit", included: true },
@@ -67,8 +67,8 @@ const plans = [
       { text: "Priority support (24hr)", included: true },
       { text: "API access", included: false },
     ],
-    cta: "Start 7-Day Trial",
-    ctaLink: "/login?plan=pro",
+    cta: "Start Now",
+    ctaLink: "/login?plan=plan_RWzF9BaZU7q9jw",
     popular: true,
     color: "from-purple-500 to-pink-500",
     icon: Crown,
@@ -77,9 +77,9 @@ const plans = [
   {
     name: "Student Pro Plus",
     price: 599,
-    originalPrice: 799,
     period: "month",
     description: "Unlimited power for professionals",
+    planId: "plan_RWzFoX6NgEM6MX",
     features: [
       { text: "Unlimited requests", included: true },
       { text: "Unlimited tokens", included: true },
@@ -91,12 +91,35 @@ const plans = [
       { text: "Dedicated account manager", included: true },
       { text: "Early access to new features", included: true },
     ],
-    cta: "Start 7-Day Trial",
-    ctaLink: "/login?plan=proplus",
+    cta: "Start Now",
+    ctaLink: "/login?plan=plan_RWzFoX6NgEM6MX",
     popular: false,
     color: "from-orange-500 to-red-500",
     icon: Zap,
-    badge: "UNLIMITED"
+    badge: null
+  },
+  {
+    name: "Enterprise",
+    price: null,
+    period: "custom",
+    description: "Custom solutions for large teams",
+    features: [
+      { text: "Unlimited everything", included: true },
+      { text: "Advanced AI models", included: true },
+      { text: "API access", included: true },
+      { text: "Dedicated support", included: true },
+      { text: "Custom integrations", included: true },
+      { text: "SLA guarantee", included: true },
+      { text: "Dedicated account manager", included: true },
+      { text: "Custom training", included: true },
+      { text: "Priority onboarding", included: true },
+    ],
+    cta: "Contact Sales",
+    ctaLink: "mailto:sales@skygpt.com",
+    popular: false,
+    color: "from-indigo-500 to-blue-500",
+    icon: Sparkles,
+    badge: null
   }
 ];
 
@@ -104,37 +127,39 @@ const comparisonFeatures = [
   {
     category: "Usage Limits",
     features: [
-      { name: "Daily/Monthly Requests", free: "50/day", starter: "500/month", pro: "2000/month", proPlus: "Unlimited" },
-      { name: "Token Limit", free: "50K/day", starter: "500K/month", pro: "2M/month", proPlus: "Unlimited" },
-      { name: "Chat History", free: "7 days", starter: "Forever", pro: "Forever", proPlus: "Forever" },
-      { name: "File Uploads", free: "❌", starter: "✅ 5MB", pro: "✅ 10MB", proPlus: "✅ 50MB" },
+      { name: "Daily/Monthly Requests", free: "50/day", starter: "500/month", pro: "2000/month", proPlus: "Unlimited", enterprise: "Unlimited" },
+      { name: "Token Limit", free: "50K/day", starter: "500K/month", pro: "2M/month", proPlus: "Unlimited", enterprise: "Unlimited" },
+      { name: "Chat History", free: "7 days", starter: "Forever", pro: "Forever", proPlus: "Forever", enterprise: "Forever" },
+      { name: "File Uploads", free: "❌", starter: "✅ 5MB", pro: "✅ 10MB", proPlus: "✅ 50MB", enterprise: "✅ Custom" },
     ]
   },
   {
     category: "AI Models",
     features: [
-      { name: "Basic Models", free: "✅", starter: "✅", pro: "✅", proPlus: "✅" },
-      { name: "Llama 3.3 70B", free: "❌", starter: "✅", pro: "✅", proPlus: "✅" },
-      { name: "Grok 4 & Gemini 2.5", free: "❌", starter: "❌", pro: "✅", proPlus: "✅" },
-      { name: "Image Generation", free: "❌", starter: "❌", pro: "✅", proPlus: "✅" },
+      { name: "Basic Models", free: "✅", starter: "✅", pro: "✅", proPlus: "✅", enterprise: "✅" },
+      { name: "Llama 3.3 70B", free: "❌", starter: "✅", pro: "✅", proPlus: "✅", enterprise: "✅" },
+      { name: "Grok 4 & Gemini 2.5", free: "❌", starter: "❌", pro: "✅", proPlus: "✅", enterprise: "✅" },
+      { name: "Image Generation", free: "❌", starter: "❌", pro: "✅", proPlus: "✅", enterprise: "✅" },
     ]
   },
   {
     category: "Features",
     features: [
-      { name: "Code Generation", free: "Basic", starter: "Advanced", pro: "Advanced", proPlus: "Advanced" },
-      { name: "Document Analysis", free: "❌", starter: "✅", pro: "✅ Advanced", proPlus: "✅ Advanced" },
-      { name: "Export Chats", free: "❌", starter: "✅", pro: "✅", proPlus: "✅" },
-      { name: "Custom Prompts", free: "❌", starter: "❌", pro: "✅", proPlus: "✅" },
-      { name: "API Access", free: "❌", starter: "❌", pro: "❌", proPlus: "✅" },
+      { name: "Code Generation", free: "Basic", starter: "Advanced", pro: "Advanced", proPlus: "Advanced", enterprise: "Advanced" },
+      { name: "Document Analysis", free: "❌", starter: "✅", pro: "✅ Advanced", proPlus: "✅ Advanced", enterprise: "✅ Advanced" },
+      { name: "Export Chats", free: "❌", starter: "✅", pro: "✅", proPlus: "✅", enterprise: "✅" },
+      { name: "Custom Prompts", free: "❌", starter: "❌", pro: "✅", proPlus: "✅", enterprise: "✅" },
+      { name: "API Access", free: "❌", starter: "❌", pro: "❌", proPlus: "✅", enterprise: "✅ Full" },
+      { name: "Custom Integrations", free: "❌", starter: "❌", pro: "❌", proPlus: "❌", enterprise: "✅" },
     ]
   },
   {
-    category: "Support",
+    category: "Support & SLA",
     features: [
-      { name: "Response Time", free: "48 hours", starter: "24 hours", pro: "24 hours", proPlus: "2 hours" },
-      { name: "Support Channels", free: "Email", starter: "Email", pro: "Email", proPlus: "Email + Chat + Phone" },
-      { name: "Dedicated Manager", free: "❌", starter: "❌", pro: "❌", proPlus: "✅" },
+      { name: "Response Time", free: "48 hours", starter: "24 hours", pro: "24 hours", proPlus: "2 hours", enterprise: "1 hour" },
+      { name: "Support Channels", free: "Email", starter: "Email", pro: "Email", proPlus: "Email + Chat", enterprise: "Email + Chat + Phone" },
+      { name: "Dedicated Manager", free: "❌", starter: "❌", pro: "❌", proPlus: "✅", enterprise: "✅ Full" },
+      { name: "SLA Guarantee", free: "❌", starter: "❌", pro: "❌", proPlus: "❌", enterprise: "✅ 99.9%" },
     ]
   }
 ];
@@ -197,7 +222,7 @@ export default function PricingPage() {
 
       {/* Pricing Cards */}
       <div className="max-w-7xl mx-auto px-4 -mt-8 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
           {plans.map((plan, index) => {
             const Icon = plan.icon;
             return (
@@ -229,17 +254,15 @@ export default function PricingPage() {
                 <p className="text-gray-400 text-sm mb-4">{plan.description}</p>
 
                 <div className="mb-6">
-                  <div className="flex items-baseline gap-2">
-                    <span className="text-4xl font-bold">₹{plan.price}</span>
-                    {plan.originalPrice && (
-                      <span className="text-gray-400 line-through text-sm">₹{plan.originalPrice}</span>
-                    )}
-                  </div>
-                  <span className="text-gray-400 text-sm">/{plan.period}</span>
-                  {plan.originalPrice && (
-                    <div className="text-green-400 text-xs mt-1">
-                      Save ₹{plan.originalPrice - plan.price}/month
-                    </div>
+                  {plan.price !== null ? (
+                    <>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-4xl font-bold">₹{plan.price}</span>
+                      </div>
+                      <span className="text-gray-400 text-sm">/{plan.period}</span>
+                    </>
+                  ) : (
+                    <div className="text-2xl font-bold text-gray-300">Custom Pricing</div>
                   )}
                 </div>
 
@@ -248,6 +271,8 @@ export default function PricingPage() {
                   className={`block w-full py-3 rounded-lg font-semibold text-center mb-6 transition ${
                     plan.popular
                       ? 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600'
+                      : plan.name === "Enterprise"
+                      ? 'bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/50'
                       : 'bg-white/10 hover:bg-white/20'
                   }`}
                 >
@@ -292,6 +317,7 @@ export default function PricingPage() {
                 <th className="px-6 py-4 text-center font-semibold">Starter</th>
                 <th className="px-6 py-4 text-center font-semibold">Pro</th>
                 <th className="px-6 py-4 text-center font-semibold">Pro Plus</th>
+                <th className="px-6 py-4 text-center font-semibold">Enterprise</th>
               </tr>
             </thead>
             <tbody>
@@ -312,6 +338,7 @@ export default function PricingPage() {
                       <td className="px-6 py-4 text-center text-blue-400 text-sm">{feature.starter}</td>
                       <td className="px-6 py-4 text-center text-purple-400 text-sm">{feature.pro}</td>
                       <td className="px-6 py-4 text-center text-orange-400 text-sm">{feature.proPlus}</td>
+                      <td className="px-6 py-4 text-center text-indigo-400 text-sm">{feature.enterprise}</td>
                     </tr>
                   ))}
                 </>
