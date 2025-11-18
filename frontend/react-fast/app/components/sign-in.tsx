@@ -1,286 +1,278 @@
+// sign-in.tsx
+'use client';
+
 import React, { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { useAuth0 } from "@auth0/auth0-react";
-import { Navigate, Link } from "react-router";
+import { Navigate } from "react-router";
 
-// --- HELPER COMPONENTS (ICONS) ---
+import {
+  AppleIcon,
+  AtSignIcon,
+  ChevronLeftIcon,
+  GithubIcon,
+  Grid2x2PlusIcon,
+} from 'lucide-react';
 
-const GoogleIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 48 48">
-    <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8-6.627 0-12-5.373-12-12s12-5.373 12-12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 12.955 4 4 12.955 4 24s8.955 20 20 20 20-8.955 20-20c0-2.641-.21-5.236-.611-7.743z" />
-    <path fill="#FF3D00" d="M6.306 14.691l6.571 4.819C14.655 15.108 18.961 12 24 12c3.059 0 5.842 1.154 7.961 3.039l5.657-5.657C34.046 6.053 29.268 4 24 4 16.318 4 9.656 8.337 6.306 14.691z" />
-    <path fill="#4CAF50" d="M24 44c5.166 0 9.86-1.977 13.409-5.192l-6.19-5.238C29.211 35.091 26.715 36 24 36c-5.202 0-9.619-3.317-11.283-7.946l-6.522 5.025C9.505 39.556 16.227 44 24 44z" />
-    <path fill="#1976D2" d="M43.611 20.083H42V20H24v8h11.303c-.792 2.237-2.231 4.166-4.087 5.571l6.19 5.238C42.022 35.026 44 30.038 44 24c0-2.641-.21-5.236-.611-7.743z" />
-  </svg>
-);
-
-const FacebookIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 48 48">
-    <path fill="#1976D2" d="M24 4C12.954 4 4 12.954 4 24s8.954 20 20 20 20-8.954 20-20S35.046 4 24 4z" />
-    <path fill="#FFFFFF" d="M26.707 29.301h5.176l.813-5.58h-5.989v-2.566c0-1.554.471-2.627 2.61-2.627h2.966V11.271c-.576-.078-1.797-.248-3.684-.248-3.65 0-6.155 2.437-6.155 6.905v3.289h-4.13v5.58h4.13V36h5.263v-6.699z" />
-  </svg>
-);
-const GithubIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 48 48">
-    <path fill="#000000" d="M24 4A20 20 0 1 0 24 44A20 20 0 1 0 24 4Z" />
-    <path fill="#FFFFFF" d="M24 14.6c-5.1 0-9.3 4.2-9.3 9.3c0 4.1 2.6 7.6 6.2 8.9c.5.1.6-.2.6-.4v-1.5c-2.5.5-3.1-1.1-3.1-1.1c-.4-.9-1-1.2-1-1.2c-.8-.5.1-.5.1-.5c.9.1 1.4 1 1.4 1c.8 1.4 2.2 1 2.7.8c.1-.6.3-1 .6-1.3c-2-.2-4.1-1-4.1-4.6c0-1 .4-1.9 1-2.6c-.1-.2-.4-1.2.1-2.4c0 0 .8-.3 2.6 1c.8-.2 1.6-.3 2.4-.3s1.6.1 2.4.3c1.8-1.3 2.6-1 2.6-1c.5 1.2.2 2.2.1 2.4c.6.7 1 1.6 1 2.6c0 3.6-2.1 4.4-4.1 4.6c.3.3.6.9.6 1.8v2.6c0 .2.1.5.6.4c3.7-1.3 6.2-4.8 6.2-8.9c0-5.1-4.2-9.3-9.3-9.3z"/>
-  </svg>
-);
-
-// --- TYPE DEFINITIONS ---
-
-export interface Testimonial {
-  avatarSrc: string;
-  name: string;
-  handle: string;
-  text: string;
-}
-
-interface SignInPageProps {
-  title?: React.ReactNode;
-  description?: React.ReactNode;
-  heroImageSrc?: string;
-  testimonials?: Testimonial[];
-}
-
-// --- SUB-COMPONENTS ---
-
-const GlassInputWrapper = ({ children }: { children: React.ReactNode }) => (
-  <div className="rounded-2xl border border-border bg-foreground/5 backdrop-blur-sm transition-colors focus-within:border-violet-400/70 focus-within:bg-violet-500/10">
-    {children}
-  </div>
-);
-
-
-
-// --- MAIN COMPONENT ---
-
-export const SignInPage: React.FC<SignInPageProps> = ({
-  title = <span className="font-light text-foreground tracking-tighter">Welcome Back</span>,
-  description = "Access your account and continue your journey with us",
-  heroImageSrc = "https://images.unsplash.com/photo-1618005198919-d3d4b5a92ead?w=800&auto=format&fit=crop",
-  testimonials = [
-    {
-      avatarSrc: "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix",
-      name: "Sarah Chen",
-      handle: "@sarahchen",
-      text: "This platform transformed how I work. Absolutely amazing!"
-    },
-    {
-      avatarSrc: "https://api.dicebear.com/7.x/avataaars/svg?seed=Aneka",
-      name: "Marcus Williams",
-      handle: "@marcusw",
-      text: "Best decision I made this year. Highly recommend!"
-    },
-    {
-      avatarSrc: "https://api.dicebear.com/7.x/avataaars/svg?seed=Princess",
-      name: "Emma Thompson",
-      handle: "@emmathompson",
-      text: "The user experience is phenomenal. Love every feature!"
-    }
-  ],
-}) => {
-  const [showPassword, setShowPassword] = useState(false);
-  const [slideImage, setSlideImage] = useState(false);
+export function SignInPage() {
+  const [email, setEmail] = useState('');
   const { loginWithRedirect, isAuthenticated } = useAuth0();
 
-  // ✅ Redirect if already authenticated
   if (isAuthenticated) {
     return <Navigate to="/dashboard" />;
   }
 
-  // ✅ Auth0 Credential Login
-  const handleAuth0Login = async (e: React.FormEvent<HTMLFormElement>) => {
+  // Handle email authentication (handles both login AND signup)
+  const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    
     try {
       await loginWithRedirect({
         authorizationParams: {
           redirect_uri: `${window.location.origin}/callback`,
-          prompt: "login",
+          // Remove screen_hint to let Auth0 handle both login and signup
           connection: "Username-Password-Authentication",
+          login_hint: email,
         },
-        appState: {
-          returnTo: "/dashboard",
-          type: "login",
+        appState: { 
+          returnTo: "/dashboard"
         },
       });
     } catch (error) {
-      console.error("Login error:", error);
+      console.error("Auth error:", error);
     }
   };
 
-  // ✅ Google Login
-  const handleGoogleLogin = async () => {
+  // Handle social authentication (handles both login AND signup)
+  const handleSocialAuth = async (connection: string) => {
     try {
       await loginWithRedirect({
         authorizationParams: {
-          connection: "google-oauth2",
+          connection,
           redirect_uri: `${window.location.origin}/callback`,
-          prompt: "login",
+          // Auth0 automatically handles new users vs existing users
         },
-        appState: {
+        appState: { 
           returnTo: "/dashboard",
-          type: "login",
-          provider: "google",
+          provider: connection 
         },
       });
     } catch (error) {
-      console.error("Google login error:", error);
+      console.error(`${connection} auth error:`, error);
     }
-  };
-
-  // ✅ Facebook Login
-  const handleFacebookLogin = async () => {
-    try {
-      await loginWithRedirect({
-        authorizationParams: {
-          connection: "facebook",
-          redirect_uri: `${window.location.origin}/callback`,
-          prompt: "login",
-        },
-        appState: {
-          returnTo: "/dashboard",
-          type: "login",
-          provider: "facebook",
-        },
-      });
-    } catch (error) {
-      console.error("Facebook login error:", error);
-    }
-  };
-
-  const handleGithubLogin = async () => {
-    try {
-      await loginWithRedirect({
-        authorizationParams: {
-          connection: "github",
-          redirect_uri: `${window.location.origin}/callback`,
-          prompt: "login",
-        },
-        appState: {
-          returnTo: "/dashboard",
-          type: "login",
-          provider: "github",
-        },
-      });
-    } catch (error) {
-      console.error("GitHub login error:", error);
-    }
-  };
-
-  // ✅ Reset Password
-  const handleResetPassword = () => {
-    // Navigate to Auth0 password reset or custom page
-    window.location.href = `https://${import.meta.env.VITE_AUTH0_DOMAIN}/dbconnections/change_password`;
   };
 
   return (
-    <div className="h-[100dvh] flex flex-col md:flex-row font-geist w-[100dvw] overflow-hidden">
-      <style>{`
-        @keyframes slideImageLeft {
-          from { transform: translateX(0); }
-          to { transform: translateX(-100%); }
-        }
-        .slide-image-left {
-          animation: slideImageLeft 0.8s ease-in-out forwards;
-        }
-      `}</style>
-      {/* Left column: sign-in form */}
-      <section className="flex-1 flex items-center justify-center p-8">
-        <div className="w-full max-w-md">
-          <div className="flex flex-col gap-6">
-            <h1 className="animate-element animate-delay-100 text-4xl md:text-5xl font-semibold leading-tight">{title}</h1>
-            <p className="animate-element animate-delay-200 text-muted-foreground">{description}</p>
+    <main className="relative min-h-screen md:h-screen md:overflow-hidden lg:grid lg:grid-cols-2">
+      {/* Left Side - Auth Form */}
+      <div className="relative flex min-h-screen flex-col justify-center border-[#252525] lg:border-r-2 bg-gradient-to-l from-[#0a0a0a] via-[#000000] to-[#000000] p-4">
+        <div
+          aria-hidden
+          className="absolute inset-0 isolate contain-strict -z-10 opacity-40"
+        >
+          <div className="absolute top-0 right-0 h-80 w-56 -translate-y-22 rounded-full bg-[radial-gradient(68.54%_68.72%_at_55.02%_31.46%,rgba(255,255,255,.04)_0,rgba(255,255,255,.01)_50%,transparent_80%)]" />
+          <div className="absolute top-0 right-0 h-80 w-24 rounded-full bg-[radial-gradient(50%_50%_at_50%_50%,rgba(255,255,255,.03)_0,rgba(255,255,255,.01)_80%,transparent_100%)] [translate:5%_-50%]" />
+          <div className="absolute top-0 right-0 h-80 w-24 -translate-y-22 rounded-full bg-[radial-gradient(50%_50%_at_50%_50%,rgba(255,255,255,.03)_0,rgba(255,255,255,.01)_80%,transparent_100%)]" />
+        </div>
+        
+        <a 
+          href="/dashboard"
+          className="absolute top-7 left-5 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+        >
+          <ChevronLeftIcon className='size-4' />
+          Home
+        </a>
+        
+        <div className="mx-auto w-full space-y-6 sm:max-w-sm">
+          {/* Header */}
+          <div className="flex items-center gap-2 lg:hidden">
+            <Grid2x2PlusIcon className="size-6 text-white" />
+            <p className="text-xl font-semibold text-white">Asme</p>
+          </div>
+          
+          <div className="flex flex-col space-y-2">
+            <h1 className="text-3xl font-bold tracking-wide text-white">
+              Sign In or Join Now!
+            </h1>
+            <p className="text-base text-gray-400">
+              Login or create your asme account.
+            </p>
+          </div>
 
-            <form className="space-y-5" onSubmit={handleAuth0Login}>
-              <div className="animate-element animate-delay-300">
-                <label className="text-sm font-medium text-muted-foreground">Email Address</label>
-                <GlassInputWrapper>
-                  <input 
-                    name="email" 
-                    type="email" 
-                    placeholder="Enter your email address" 
-                    className="w-full bg-transparent text-sm p-4 rounded-2xl focus:outline-none" 
-                    required
-                  />
-                </GlassInputWrapper>
-              </div>
-
-
-
-              <button 
-                type="submit" 
-                className="animate-element animate-delay-600 w-full rounded-2xl bg-primary py-4 font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-              >
-                Sign In
-              </button>
-            </form>
-
-            <div className="animate-element animate-delay-700 relative flex items-center justify-center">
-              <span className="w-full border-t border-border"></span>
-              <span className="px-4 text-sm text-muted-foreground bg-background absolute">Or continue with</span>
-            </div>
-
+          {/* Social Auth Buttons */}
+          <div className="space-y-3">
             <button 
-              onClick={handleGoogleLogin} 
               type="button"
-              className="animate-element animate-delay-800 w-full flex items-center justify-center gap-3 border border-border rounded-2xl py-4 hover:bg-secondary transition-colors"
+              className="flex w-full items-center justify-center gap-3 rounded-lg bg-white py-3 px-4 text-sm font-medium text-[#0a0a0a] transition-colors hover:bg-gray-100"
+              onClick={() => handleSocialAuth('google-oauth2')}
             >
-              <GoogleIcon />
+              <GoogleIcon className='size-5' />
               Continue with Google
             </button>
-
             <button 
-              onClick={handleFacebookLogin} 
               type="button"
-              className="animate-element animate-delay-900 w-full flex items-center justify-center gap-3 border border-border rounded-2xl py-4 hover:bg-secondary transition-colors"
+              className="flex w-full items-center justify-center gap-3 rounded-lg bg-white py-3 px-4 text-sm font-medium text-[#0a0a0a] transition-colors hover:bg-gray-100"
+              onClick={() => handleSocialAuth('apple')}
             >
-              <FacebookIcon />
-              Continue with Facebook
+              <AppleIcon className='size-5' />
+              Continue with Apple
             </button>
             <button 
-              onClick={handleGithubLogin} 
               type="button"
-              className="animate-element animate-delay-900 w-full flex items-center justify-center gap-3 border border-border rounded-2xl py-4 hover:bg-secondary transition-colors"
+              className="flex w-full items-center justify-center gap-3 rounded-lg bg-white py-3 px-4 text-sm font-medium text-[#0a0a0a] transition-colors hover:bg-gray-100"
+              onClick={() => handleSocialAuth('github')}
             >
-              <GithubIcon />
-              Continue with Github
-            </button> 
-            <p className="animate-element animate-delay-1100 text-center text-sm text-muted-foreground">
-              New to our platform?{" "}
-              <Link to={"/signup"}
-                
-                className="text-violet-400 hover:underline transition-colors"
-              >
-                Create Account
-              </Link>
-            </p>
-
-            {/* Footer Links */}
-            <div className="animate-element animate-delay-1200 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground pt-4 border-t border-border/30">
-              <div className="flex items-center gap-1">
-                <svg className="w-4 h-4 text-green-500" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
-                </svg>
-                <span>Secured by Auth0</span>
-              </div>
-              <Link to="/terms" className="hover:text-violet-400 transition-colors">Terms</Link>
-              <Link to="/privacy" className="hover:text-violet-400 transition-colors">Privacy</Link>
-              <Link to="/refund" className="hover:text-violet-400 transition-colors">Refund Policy</Link>
-            </div>
+              <GithubIcon className='size-5' />
+              Continue with GitHub
+            </button>
           </div>
-        </div>
-      </section>
 
-      {/* Right column: hero image that slides left */}
-      {heroImageSrc && (
-        <section className="hidden md:block flex-1 relative p-4">
-          <div 
-            className={`absolute inset-4 rounded-3xl bg-cover bg-center ${slideImage ? 'slide-image-left' : ''}`}
-            style={{ backgroundImage: `url(${heroImageSrc})` }}
-          ></div>
-        </section>
-      )}
+          <AuthSeparator />
+
+          {/* Email Form */}
+          <form className="space-y-3" onSubmit={handleEmailAuth}>
+            <p className="text-xs text-gray-500">
+              Enter your email address to sign in or create an account
+            </p>
+            <div className="relative h-max">
+              <input
+                placeholder="your.email@example.com"
+                className="peer w-full rounded-lg border border-[#3a3a3a] bg-[#0a0a0a] py-3 ps-10 pr-4 text-sm text-white placeholder:text-gray-600 focus:border-gray-700 focus:outline-none"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+              />
+              <div className="pointer-events-none absolute inset-y-0 start-0 flex items-center justify-center ps-3 text-gray-600 peer-disabled:opacity-50">
+                <AtSignIcon className="size-4" aria-hidden="true" />
+              </div>
+            </div>
+
+            <button 
+              type="submit" 
+              className="w-full rounded-lg bg-white py-3 px-4 text-sm font-medium text-[#0a0a0a] transition-colors hover:bg-gray-100"
+            >
+              Continue With Email
+            </button>
+          </form>
+
+          {/* Terms */}
+          <p className="text-xs text-gray-500">
+            By clicking continue, you agree to our{' '}
+            <a
+              href="/terms"
+              className="text-gray-400 underline underline-offset-4 hover:text-white"
+            >
+              Terms of Service
+            </a>{' '}
+            and{' '}
+            <a
+              href="/privacy"
+              className="text-gray-400 underline underline-offset-4 hover:text-white"
+            >
+              Privacy Policy
+            </a>
+            .
+          </p>
+        </div>
+      </div>
+
+      {/* Right Side - Branding & Visuals */}
+      <div className="relative hidden h-full flex-col bg-gradient-to-t from-[#0a0a0a] via-[#141414] to-[#222121] p-10 lg:flex">
+        <div className="absolute inset-0 z-10 bg-gradient-to-b from-transparent to-black/10" />
+        
+        <div className="z-20 flex items-center gap-2">
+          <Grid2x2PlusIcon className="size-6 text-white" />
+          <p className="text-xl font-semibold text-white">Asme</p>
+        </div>
+        
+        <div className="z-20 mt-auto">
+          <blockquote className="space-y-2">
+            <p className="text-xl text-white">
+              &ldquo;This Platform has helped me to save time and serve my
+              clients faster than ever before.&rdquo;
+            </p>
+            <footer className="font-mono text-sm font-semibold text-white">
+              ~ Ali Hassan
+            </footer>
+          </blockquote>
+        </div>
+        
+        <div className="absolute inset-0">
+          <FloatingPaths position={1} />
+          <FloatingPaths position={-1} />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+// Floating animated paths
+function FloatingPaths({ position }: { position: number }) {
+  const paths = Array.from({ length: 36 }, (_, i) => ({
+    id: i,
+    d: `M-${380 - i * 5 * position} -${189 + i * 6}C-${
+        380 - i * 5 * position
+      } -${189 + i * 6} -${312 - i * 5 * position} ${216 - i * 6} ${
+        152 - i * 5 * position
+      } ${343 - i * 6}C${616 - i * 5 * position} ${470 - i * 6} ${
+        684 - i * 5 * position
+      } ${875 - i * 6} ${684 - i * 5 * position} ${875 - i * 6}`,
+    width: 0.5 + i * 0.03,
+  }));
+
+  return (
+    <div className="pointer-events-none absolute inset-0">
+      <svg
+        className="h-full w-full text-white"
+        viewBox="0 0 696 316"
+        fill="none"
+      >
+        <title>Background Paths</title>
+        {paths.map((path) => (
+          <motion.path
+            key={path.id}
+            d={path.d}
+            stroke="currentColor"
+            strokeWidth={path.width}
+            strokeOpacity={0.3 + path.id * 0.002}
+            initial={{ pathLength: 0.3, opacity: 0.4 }}
+            animate={{
+              pathLength: 1,
+              opacity: [1, 0.4, 0.2],
+              pathOffset: [0, 1, 0],
+            }}
+            transition={{
+              duration: 20 + Math.random() * 10,
+              repeat: Number.POSITIVE_INFINITY,
+              ease: 'linear',
+            }}
+          />
+        ))}
+      </svg>
+    </div>
+  );
+}
+
+const GoogleIcon = (props: React.ComponentProps<'svg'>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 24 24"
+    fill="currentColor"
+    {...props}
+  >
+    <g>
+      <path d="M12.479,14.265v-3.279h11.049c0.108,0.571,0.164,1.247,0.164,1.979c0,2.46-0.672,5.502-2.84,7.669   C18.744,22.829,16.051,24,12.483,24C5.869,24,0.308,18.613,0.308,12S5.869,0,12.483,0c3.659,0,6.265,1.436,8.223,3.307L18.392,5.62   c-1.404-1.317-3.307-2.341-5.913-2.341C7.65,3.279,3.873,7.171,3.873,12s3.777,8.721,8.606,8.721c3.132,0,4.916-1.258,6.059-2.401   c0.927-0.927,1.537-2.251,1.777-4.059L12.479,14.265z" />
+    </g>
+  </svg>
+);
+
+const AuthSeparator = () => {
+  return (
+    <div className="flex w-full items-center justify-center">
+      <div className="h-px w-full bg-[#2a2a2a]" />
+      <span className="px-3 text-xs text-gray-500">OR</span>
+      <div className="h-px w-full bg-[#2a2a2a]" />
     </div>
   );
 };

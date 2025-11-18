@@ -296,6 +296,12 @@ class SupabaseService:
         try:
             message_data['created_at'] = datetime.now().isoformat()
             
+            # ✅ Log the images being saved
+            images = message_data.get('images', [])
+            print(f"📸 Saving message with {len(images)} images")
+            if images:
+                print(f"   Images: {images}")
+            
             response = self.client.table('chat_messages').insert(message_data).execute()
             
             if not response.data:
@@ -321,7 +327,17 @@ class SupabaseService:
         """Get messages for a chat session"""
         try:
             response = self.client.table('chat_messages').select('*').eq('session_id', session_id).order('created_at', desc=False).execute()
-            return response.data or []
+            
+            messages = response.data or []
+            print(f"📋 Retrieved {len(messages)} messages from session {session_id}")
+            
+            # ✅ Log images from retrieved messages
+            for msg in messages:
+                images = msg.get('images', [])
+                if images:
+                    print(f"   Message {msg.get('id')}: {len(images)} images - {images}")
+            
+            return messages
             
         except Exception as e:
             print(f"Error getting messages: {str(e)}")

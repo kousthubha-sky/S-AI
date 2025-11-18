@@ -20,7 +20,7 @@ const plans = [
       { text: "Image generation", included: false },
     ],
     cta: "Get Started Free",
-    ctaLink: "/signup",
+    ctaLink: "/login",
     popular: false,
     color: "from-gray-500 to-gray-600",
     icon: Sparkles,
@@ -44,7 +44,7 @@ const plans = [
       { text: "Custom prompts", included: false },
     ],
     cta: "Start 7-Day Trial",
-    ctaLink: "/signup?plan=starter",
+    ctaLink: "/login?plan=starter",
     popular: false,
     color: "from-blue-500 to-cyan-500",
     icon: Star,
@@ -68,7 +68,7 @@ const plans = [
       { text: "API access", included: false },
     ],
     cta: "Start 7-Day Trial",
-    ctaLink: "/signup?plan=pro",
+    ctaLink: "/login?plan=pro",
     popular: true,
     color: "from-purple-500 to-pink-500",
     icon: Crown,
@@ -92,7 +92,7 @@ const plans = [
       { text: "Early access to new features", included: true },
     ],
     cta: "Start 7-Day Trial",
-    ctaLink: "/signup?plan=proplus",
+    ctaLink: "/login?plan=proplus",
     popular: false,
     color: "from-orange-500 to-red-500",
     icon: Zap,
@@ -367,7 +367,7 @@ export default function PricingPage() {
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
             <Link 
-              to="/signup"
+              to="/login"
               className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg font-semibold text-lg transition"
             >
               Start Free Trial

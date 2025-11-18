@@ -34,6 +34,9 @@ import { Sidebar, SidebarBody, SidebarLink, useSidebar } from "~/components/ui/s
 
 import "@fontsource/inter"
 
+// 🔧 SESSION STORAGE KEY
+const SESSION_STORAGE_KEY = 'skygpt_current_session';
+
 interface ChatSession {
   id: string;
   title: string;
@@ -71,7 +74,7 @@ function SidebarLogoSection() {
         }}
         className="text-lg font-bold text-neutral-800 dark:text-neutral-100 whitespace-pre"
       >
-        SkyGPT
+        SkyGPT <span className="text-[10px] bg-yellow-400 text-black px-1 py-0.5 rounded font-semibold ml-1">Beta</span>
       </motion.span>
     </div>
   );
@@ -298,7 +301,15 @@ function DashboardContent() {
   const [messageCount, setMessageCount] = useState<number>(0);
   const [nextResetTime, setNextResetTime] = useState<string>('');
   const [sessions, setSessions] = useState<ChatSession[]>([]);
-  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  
+  // 🔧 FIX: Initialize from sessionStorage
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem(SESSION_STORAGE_KEY);
+    }
+    return null;
+  });
+  
   const [user, setUser] = useState<User | null>(null);
   const [showPricingSection, setShowPricingSection] = useState(false);
   const [showProfileCard, setShowProfileCard] = useState(false);
@@ -308,6 +319,15 @@ function DashboardContent() {
   const [isLoadingSessions, setIsLoadingSessions] = useState<boolean>(true);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState<boolean>(true);
   const [open, setOpen] = useState(false);
+
+  // 🔧 FIX: Persist currentSessionId to sessionStorage
+  useEffect(() => {
+    if (currentSessionId) {
+      sessionStorage.setItem(SESSION_STORAGE_KEY, currentSessionId);
+    } else {
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+    }
+  }, [currentSessionId]);
 
   // CardNav configuration
   const cardNavItems = [
@@ -382,6 +402,7 @@ function DashboardContent() {
     };
   }, [user]);
 
+  // 🔧 FIX: Improved new chat handler
   const handleNewChatFunc = async () => {
     if (!user) {
       showToast('Session loading, please wait', 'info');
@@ -389,10 +410,14 @@ function DashboardContent() {
     }
 
     try {
-      setCurrentSessionId(null); 
+      // Clear the current session completely
+      setCurrentSessionId(null);
+      sessionStorage.removeItem(SESSION_STORAGE_KEY);
+      
       showToast('Starting new chat', 'success', 1500);
     } catch (error) {
       console.error('Failed to create new chat:', error);
+      showToast('Failed to start new chat', 'error');
     }
   };
 
@@ -443,7 +468,17 @@ function DashboardContent() {
       const userSessions = await ChatService.getUserChatSessions(dbUser.id, fetchWithAuth);
       setSessions(userSessions);
       
-      setCurrentSessionId(null);
+      // 🔧 FIX: Check if stored session still exists
+      const storedSessionId = sessionStorage.getItem(SESSION_STORAGE_KEY);
+      if (storedSessionId) {
+        const sessionExists = userSessions.some(s => s.id === storedSessionId);
+        if (!sessionExists) {
+          // Stored session doesn't exist anymore, clear it
+          sessionStorage.removeItem(SESSION_STORAGE_KEY);
+          setCurrentSessionId(null);
+        }
+      }
+      
       showToast('Welcome back!', 'success', 2000);
     } catch (error: any) {
       showToast('Failed to load user data', 'error');
@@ -514,8 +549,10 @@ function DashboardContent() {
     }
   };
 
+  // 🔧 FIX: Update session selection
   const handleSessionSelect = async (sessionId: string) => {
     setCurrentSessionId(sessionId);
+    sessionStorage.setItem(SESSION_STORAGE_KEY, sessionId);
     setOpen(false);
   };
 
@@ -531,6 +568,7 @@ function DashboardContent() {
       
       if (currentSessionId === sessionId) {
         setCurrentSessionId(null);
+        sessionStorage.removeItem(SESSION_STORAGE_KEY);
       }
       showToast('Chat deleted', 'success', 1500);
     } catch (error) {
@@ -560,14 +598,14 @@ function DashboardContent() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-sky-300 to-pink-300">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-black to-blue-950">
         <div className="text-lg">Loading...</div>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen w-full bg-gradient-to-b from-sky-300 to-pink-300 flex-col md:flex-row relative">
+    <div className="flex h-screen w-full bg-gradient-to-b from-black to-blue-950 flex-col md:flex-row relative">
       {/* CardNav - Only visible when not authenticated */}
       {!isAuthenticated && (
         <div className="fixed top-0 left-0 right-0 z-50">
@@ -645,10 +683,9 @@ function DashboardContent() {
         </Sidebar>
       )}
 
-      {/* Main Content - Add top padding for CardNav */}
+      {/* Main Content */}
       <div className={cn(
         "flex-1 flex flex-col min-w-0 relative overflow-hidden w-full md:w-auto",
-       
       )}>
         {showProfileSettings && isAuthenticated ? (
           <ProfileSettingsPage
@@ -670,7 +707,7 @@ function DashboardContent() {
             showPaymentDialog={showPricingSection}
             setShowPaymentDialog={setShowPricingSection}
             isSidebarCollapsed={!open}
-            isAuthed={isAuthenticated} // Use isAuthed to match your interface
+            isAuthed={isAuthenticated}
           />
         )}
       </div>
@@ -792,13 +829,12 @@ function DashboardContent() {
         </AnimatePresence>
       )}
       
-      {/* Pricing Section */}
       {showPricingSection && (
-        <div className="fixed inset-0 z-50 bg-white overflow-y-auto">
+        <div className="fixed inset-0 z-[9999] bg-white overflow-y-auto">
           <PricingSection4 />
           <Button
             onClick={() => setShowPricingSection(false)}
-            className="fixed top-4 right-4 z-50"
+            className="fixed top-4 right-4 z-[10000]"
             variant="outline"
           >
             Close

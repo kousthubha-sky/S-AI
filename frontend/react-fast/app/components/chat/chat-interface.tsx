@@ -1,6 +1,6 @@
 // components/chat/chat-interface.tsx
 import { useState, useRef, useEffect, type JSX } from "react"
-import { AlertCircle, Copy, Check, MessageSquare } from "lucide-react"
+import { AlertCircle, Copy, Check, MessageSquare, Brain } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { cn } from "~/lib/utils"
 import { useAuthApi } from "~/hooks/useAuthApi"
@@ -9,7 +9,10 @@ import { AI_MODELS } from "~/lib/models"
 import { ChatService } from '~/services/chatService'
 import { NewsService } from '~/services/newsService'
 import { useToast } from "~/components/ui/toast"
+import { HeroGeometric } from "../ui/shape-landing-hero"
 import { PromptInputBox } from "~/components/ai-prompt-box"
+import { TextShimmer } from "~/components/ui/text-shimmer"
+
 import React from "react"
 
 interface ChatSession {
@@ -252,6 +255,29 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
   );
 };
 
+const ThinkingIndicator = () => {
+  return (
+    <div className="flex items-center gap-2">
+      <style>{`
+        @keyframes brain-float {
+          0%, 100% { transform: translateY(0px); }
+          50% { transform: translateY(-4px); }
+        }
+        .thinking-brain {
+          animation: brain-float 3s ease-in-out infinite;
+        }
+      `}</style>
+      <Brain className="w-5 h-5 text-purple-400 thinking-brain flex-shrink-0" />
+      <TextShimmer
+        duration={1.2}
+        className="text-sm font-medium [--base-color:theme(colors.gray.300)] [--base-gradient-color:theme(colors.purple.400)] dark:[--base-color:theme(colors.gray.300)] dark:[--base-gradient-color:theme(colors.purple.300)]"
+      >
+        Thinking...
+      </TextShimmer>
+    </div>
+  );
+};
+
 const FormattedMessage = ({ content, images }: { content: string; images?: ImageData[] }) => {
   const formatContent = (text: string) => {
     const lines = text.split('\n');
@@ -404,6 +430,7 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
   );
 };
 
+// components/chat/chat-interface.tsx (updated section)
 export function ChatInterface({ 
   userTier, messageCount = 0, maxDailyMessages = 500, nextResetTime,
   currentSessionId, sessions, onSessionUpdate, onNewChat, user,
@@ -427,9 +454,7 @@ export function ChatInterface({
   const [tempMessage, setTempMessage] = useState<Message | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)
-
-  // REMOVED: Early return for auth0Loading
+  const containerRef = useRef<HTMLDivElement>(null)  // REMOVED: Early return for auth0Loading
   // REMOVED: Early return for !isAuthenticated
 
   useEffect(() => {
@@ -680,116 +705,113 @@ export function ChatInterface({
     )
   }
 
-  return (
+   return (
     <div 
       ref={containerRef}
-      className="flex flex-col h-full w-full flex-1 bg-[radial-gradient(125%_125%_at_50%_101%,rgba(245,87,2,1)_10.5%,rgba(245,120,2,1)_16%,rgba(245,140,2,1)_17.5%,rgba(245,170,100,1)_25%,rgba(238,174,202,1)_40%,rgba(202,179,214,1)_65%,rgba(148,201,233,1)_100%)]"
+      className="flex flex-col h-full w-full flex-1 pt-16 md:pt-0 bg-[radial-gradient(125%_125%_at_50%_10%,#000_40%,#63e_100%)]"
     >
       {/* CONDITIONALLY RENDER CONTENT BASED ON AUTH */}
-      {!isAuthed ? (
-        /* Welcome Screen for Unauthenticated Users */
-        <div className="flex-1 flex flex-col items-center justify-center px-4">
-          <div className="w-full max-w-3xl space-y-8">
-            <div className="text-center space-y-4 mb-12">
-              
-              <h1 className="text-5xl md:text-6xl font-bold text-white drop-shadow-lg">
-                Welcome to SkyGPT
-              </h1>
-              <p className="text-xl md:text-2xl text-white/90 drop-shadow">
-                Access Claude, ChatGPT, Gemini, and more AI models in one platform
-              </p>
-              <p className="text-lg text-white/80 drop-shadow">
-                👆 Sign in above to start chatting
-              </p>
-            </div>
-            
-            {/* Show disabled prompt input */}
-            <div className="w-full">
-              <PromptInputBox
-                onSend={handleSendMessage}
-                isLoading={false}
-                placeholder="Sign in to start chatting..."
-                selectedModel={selectedModel}
-                onModelChange={(model) => {
-                  setSelectedModel(model);
-                }}
-                userTier={userTier}
-                isAuthenticated={isAuthed}
-              />
-            </div>
+{!isAuthed ? (
+  /* HeroGeometric Welcome Screen for Unauthenticated Users */
+  <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+    <div className="absolute inset-0">
+      <HeroGeometric 
+        badge="Sky-GPT(Beta)"
+        title1="Elevate Your"
+        title2="AI experience"
+      />
+    </div>
+    
+    {/* Prompt Input positioned at bottom */}
+    <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 flex justify-center z-20">
+      <div className="w-full max-w-4xl">
+        <PromptInputBox
+          onSend={handleSendMessage}
+          isLoading={false}
+          placeholder="Sign in to start chatting..."
+          selectedModel={selectedModel}
+          onModelChange={(model) => {
+            setSelectedModel(model);
+          }}
+          userTier={userTier}
+          isAuthenticated={isAuthed}
+        />
+      </div>
+    </div>
+  </div>
+) : (
+        /* Authenticated Chat Interface - UNCHANGED */
+       /* Authenticated Chat Interface - FIXED SCROLL */
+<div className="flex flex-col h-full w-full">
+  {!hasStartedChat ? (
+    // Before chat starts - centered prompt box with motif
+    <div className="flex-1 flex flex-col items-center justify-center px-4 py-4">
+      <div className="text-center space-y-8 w-full max-w-2xl">
+        <div className="space-y-4">
+          <h2 className="text-3xl font-semibold text-white">Start a New Conversation</h2>
+          <p className="text-gray-500 text-lg">Ask me anything or describe what you need help with</p>
+        </div>
+
+        {/* Suggestions/motif lines */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div 
+            onClick={() => {
+              setSelectedModel('gpt-4o-mini');
+            }}
+            className="p-4 rounded-lg border hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
+          >
+            <p className="text-sm font-medium text-gray-500">💡 Get Ideas</p>
+            <p className="text-xs text-gray-600">Brainstorm and explore new concepts</p>
+          </div>
+          <div 
+            onClick={() => {
+              setSelectedModel('gpt-4o');
+            }}
+            className="p-4 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
+          >
+            <p className="text-sm font-medium text-gray-500">📝 Write & Edit</p>
+            <p className="text-xs text-gray-600">Create content or improve existing text</p>
+          </div>
+          <div className="p-4 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
+            <p className="text-sm font-medium text-gray-500">🔍 Analyze</p>
+            <p className="text-xs text-gray-600">Break down complex topics</p>
+          </div>
+          <div className="p-4 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
+            <p className="text-sm font-medium text-gray-500">💻 Code</p>
+            <p className="text-xs text-gray-600">Help with programming tasks</p>
           </div>
         </div>
-      ) : (
-        /* Authenticated Chat Interface */
-        <div className="flex-1 flex flex-col">
-          {!hasStartedChat ? (
-            // Before chat starts - centered prompt box with motif
-            <div className="flex-1 flex flex-col items-center justify-center px-4 py-4">
-              <div className="text-center space-y-8 w-full max-w-2xl">
-                <div className="space-y-4">
-                  <div className="w-16 h-16 mx-auto bg-gradient-to-br from-blue-500 to-purple-500 rounded-full flex items-center justify-center">
-                    <MessageSquare className="w-8 h-8 text-white" />
-                  </div>
-                  <h2 className="text-3xl font-semibold text-gray-900">Start a New Conversation</h2>
-                  <p className="text-gray-500 text-lg">Ask me anything or describe what you need help with</p>
-                </div>
 
-                {/* Suggestions/motif lines */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div 
-                    onClick={() => {
-                      setSelectedModel('gpt-4o-mini');
-                      // Focus on input if needed
-                    }}
-                    className="p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
-                  >
-                    <p className="text-sm font-medium text-gray-900">💡 Get Ideas</p>
-                    <p className="text-xs text-gray-600">Brainstorm and explore new concepts</p>
-                  </div>
-                  <div 
-                    onClick={() => {
-                      setSelectedModel('gpt-4o');
-                      // Focus on input if needed
-                    }}
-                    className="p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
-                  >
-                    <p className="text-sm font-medium text-gray-900">📝 Write & Edit</p>
-                    <p className="text-xs text-gray-600">Create content or improve existing text</p>
-                  </div>
-                  <div className="p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
-                    <p className="text-sm font-medium text-gray-900">🔍 Analyze</p>
-                    <p className="text-xs text-gray-600">Break down complex topics</p>
-                  </div>
-                  <div className="p-4 rounded-lg border border-gray-200 hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
-                    <p className="text-sm font-medium text-gray-900">💻 Code</p>
-                    <p className="text-xs text-gray-600">Help with programming tasks</p>
-                  </div>
-                </div>
-
-                {/* Prompt Box */}
-                <div className="w-full mt-8">
-                  <PromptInputBox
-                    onSend={handleSendMessage}
-                    isLoading={isLoading}
-                    placeholder="Ask me anything..."
-                    selectedModel={selectedModel}
-                    onModelChange={(model) => {
-                      setSelectedModel(model);
-                    }}
-                    userTier={userTier}
-                    isAuthenticated={isAuthed}
-                  />
-                </div>
-              </div>
-            </div>
-          ) : (
-            // After chat starts - normal layout
-            <>
-              {/* Messages Container */}
-              <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-                {messages.map((message) => (
-                  <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${message.role === 'user' ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-100'}`}>
+        {/* Prompt Box */}
+        <div className="w-full mt-8">
+          <PromptInputBox
+            onSend={handleSendMessage}
+            isLoading={isLoading}
+            placeholder="Ask me anything..."
+            selectedModel={selectedModel}
+            onModelChange={(model) => {
+              setSelectedModel(model);
+            }}
+            userTier={userTier}
+            isAuthenticated={isAuthed}
+          />
+        </div>
+      </div>
+    </div>
+  ) : (
+    // After chat starts - FIXED SCROLL LAYOUT
+    <div className="flex flex-col h-full">
+      {/* Messages Container - PROPER SCROLLING */}
+      <div className="flex-1 overflow-y-auto" style={{ height: 'calc(100vh - 200px)' }}>
+        <div className="min-h-full px-4 py-4">
+          <div className="space-y-4 max-w-4xl mx-auto w-full">
+            {messages.map((message) => (
+              <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-3 rounded-lg ${message.role === 'user' ? 'bg-gray-800 text-white' : 'text-gray-100'}`}>
+                  {message.isLoading ? (
+                    <ThinkingIndicator />
+                  ) : (
+                    <>
                       <FormattedMessage content={message.content} images={message.images} />
                       {message.attachments && message.attachments.length > 0 && (
                         <div className="mt-2 space-y-1">
@@ -798,29 +820,35 @@ export function ChatInterface({
                           ))}
                         </div>
                       )}
-                    </div>
-                  </div>
-                ))}
-                <div ref={messagesEndRef} />
+                    </>
+                  )}
+                </div>
               </div>
-
-              {/* Input Area - Bottom */}
-              <div className="px-4 py-4 border-t border-white/10">
-                <PromptInputBox
-                  onSend={handleSendMessage}
-                  isLoading={isLoading}
-                  placeholder="Type your message..."
-                  selectedModel={selectedModel}
-                  onModelChange={(model) => {
-                    setSelectedModel(model);
-                  }}
-                  userTier={userTier}
-                  isAuthenticated={isAuthed}
-                />
-              </div>
-            </>
-          )}
+            ))}
+            <div ref={messagesEndRef} />
+          </div>
         </div>
+      </div>
+
+      {/* Input Area - Fixed at bottom */}
+      <div className="flex-shrink-0 px-4 py-4 bg-gradient-to-t from-[#030303] to-transparent">
+        <div className="max-w-4xl mx-auto w-full">
+          <PromptInputBox
+            onSend={handleSendMessage}
+            isLoading={isLoading}
+            placeholder="Type your message..."
+            selectedModel={selectedModel}
+            onModelChange={(model) => {
+              setSelectedModel(model);
+            }}
+            userTier={userTier}
+            isAuthenticated={isAuthed}
+          />
+        </div>
+      </div>
+    </div>
+  )}
+</div>
       )}
     </div>
   );

@@ -1,6 +1,6 @@
 // frontend/react-fast/app/components/chat/model-selector.tsx - MULTI-TIER FIXED
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { createPortal } from "react-dom";
 import { ChevronDown, Info, Lock } from "lucide-react";
@@ -11,9 +11,10 @@ interface ModelSelectorProps {
   selectedModel: string;
   onModelChange: (modelId: string) => void;
   userTier: "free" | "starter" | "pro" | "pro_plus"; // ✅ Updated types
+  isAuthenticated?: boolean; // ✅ Authentication state
 }
 
-export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelSelectorProps) {
+export function ModelSelector({ selectedModel, onModelChange, userTier, isAuthenticated = false }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredModel, setHoveredModel] = useState<string | null>(null);
 
@@ -33,7 +34,7 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
   };
 
   // ✅ Filter models based on user's tier
-  const availableModels = AI_MODELS.filter((model) => hasAccessToModel(model.tier));
+  const availableModels = useMemo(() => AI_MODELS.filter((model) => hasAccessToModel(model.tier)), [userTier]);
   
   // ✅ All models for display (including locked ones)
   const allModels = AI_MODELS;
@@ -92,8 +93,8 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
           transition={{ duration: 0.15 }}
           className="fixed z-[9999] pointer-events-none"
           style={{
-            top: '80px',
-            left: '180px',
+            bottom: '290px',
+            left: '430px',
           }}
         >
           <div className="bg-black/90 text-white text-xs rounded-lg px-3 py-2 max-w-xs backdrop-blur-sm border border-white/10 shadow-xl">
@@ -123,23 +124,26 @@ export function ModelSelector({ selectedModel, onModelChange, userTier }: ModelS
   };
 
   // ✅ Group models by tier
-  const freeModels = allModels.filter(m => m.tier === "free");
-  const starterModels = allModels.filter(m => m.tier === "starter");
-  const proModels = allModels.filter(m => m.tier === "pro");
-  const proPlusModels = allModels.filter(m => m.tier === "pro_plus");
+  const freeModels = useMemo(() => allModels.filter(m => m.tier === "free"), []);
+  const starterModels = useMemo(() => allModels.filter(m => m.tier === "starter"), []);
+  const proModels = useMemo(() => allModels.filter(m => m.tier === "pro"), []);
+  const proPlusModels = useMemo(() => allModels.filter(m => m.tier === "pro_plus"), []);
 
   return (
     <div className="relative">
       {/* Compact Selector Trigger */}
       <motion.button
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => isAuthenticated && setIsOpen(!isOpen)}
         className={cn(
           "flex items-center gap-2 py-1.5 rounded-2xl border text-xs font-medium transition-all duration-200",
           "bg-background/80 border-border/50 hover:border-border",
-          "text-foreground hover:bg-muted/50"
+          "text-foreground hover:bg-muted/50",
+          !isAuthenticated && "cursor-not-allowed opacity-50"
         )}
-        whileHover={{ scale: 1.02 }}
-        whileTap={{ scale: 0.98 }}
+        whileHover={{ scale: isAuthenticated ? 1.02 : 1 }}
+        whileTap={{ scale: isAuthenticated ? 0.98 : 1 }}
+        disabled={!isAuthenticated}
+        title={!isAuthenticated ? "Sign in to change models" : undefined}
       >
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>

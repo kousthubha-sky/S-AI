@@ -11,13 +11,9 @@ import {
   Server,
   Crown,
   Star,
-  Sparkles,
-  CheckCircle2,
-  X,
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
-import { Button } from "~/components/ui/button";
 import { useAuthApi } from "~/hooks/useAuthApi";
 import { useToast } from "~/components/ui/toast";
 
@@ -68,6 +64,15 @@ const PLANS = {
   },
 };
 
+// Plan hierarchy definition
+const PLAN_HIERARCHY = {
+  free: 0,
+  starter: 1,
+  pro: 2,
+  pro_plus: 3,
+  enterprise: 4,
+};
+
 const PricingSwitch = ({
   onSwitch,
   className,
@@ -88,7 +93,7 @@ const PricingSwitch = ({
         <button
           onClick={() => handleSwitch("0")}
           className={cn(
-            "relative z-10 w-fit sm:h-12 cursor-pointer h-10  rounded-full sm:px-6 px-3 sm:py-2 py-1 font-medium transition-colors",
+            "relative z-10 w-fit sm:h-12 cursor-pointer h-10 rounded-full sm:px-6 px-3 sm:py-2 py-1 font-medium transition-colors",
             selected === "0"
               ? "text-black"
               : "text-muted-foreground hover:text-black",
@@ -119,7 +124,7 @@ const PricingSwitch = ({
           {selected === "1" && (
             <motion.span
               layoutId={"switch"}
-              className="absolute top-0 left-0 sm:h-12 h-10  w-full  rounded-full border-4 shadow-sm shadow-neutral-300 border-neutral-300 bg-gradient-to-t from-neutral-100 via-neutral-200 to-neutral-300"
+              className="absolute top-0 left-0 sm:h-12 h-10 w-full rounded-full border-4 shadow-sm shadow-neutral-300 border-neutral-300 bg-gradient-to-t from-neutral-100 via-neutral-200 to-neutral-300"
               transition={{ type: "spring", stiffness: 500, damping: 30 }}
             />
           )}
@@ -144,17 +149,46 @@ export default function PricingSection4() {
   const { fetchWithAuth } = useAuthApi();
   const { showToast } = useToast();
 
-  const tierToPlanMap: Record<string, keyof typeof PLANS | null> = {
+  // Tier to plan mapping
+  const tierToPlanMap: Record<string, keyof typeof PLANS | 'enterprise' | null> = {
     free: null,
     starter: 'starter',
     pro: 'pro',
     pro_plus: 'pro',
+    enterprise: 'enterprise',
   };
 
   const currentUserPlan = tierToPlanMap[userTier] || null;
+  const currentUserTierLevel = PLAN_HIERARCHY[userTier] || 0;
 
-  const isPlanDisabled = (planKey: keyof typeof PLANS): boolean => {
-    return currentUserPlan === planKey;
+  // Check if plan is disabled (user already has this or higher tier)
+  const isPlanDisabled = (planKey: keyof typeof PLANS | 'enterprise'): boolean => {
+    const planTierLevel = planKey === 'enterprise' 
+      ? PLAN_HIERARCHY.enterprise 
+      : planKey === 'starter' 
+        ? PLAN_HIERARCHY.starter 
+        : PLAN_HIERARCHY.pro;
+
+    return currentUserTierLevel >= planTierLevel;
+  };
+
+  // Get appropriate button text based on user tier
+  const getPlanButtonText = (planKey: keyof typeof PLANS | 'enterprise', defaultText: string): string => {
+    if (!isPlanDisabled(planKey)) {
+      return defaultText;
+    }
+
+    const planTierLevel = planKey === 'enterprise' 
+      ? PLAN_HIERARCHY.enterprise 
+      : planKey === 'starter' 
+        ? PLAN_HIERARCHY.starter 
+        : PLAN_HIERARCHY.pro;
+
+    if (currentUserTierLevel === planTierLevel) {
+      return '✓ Current Plan';
+    }
+    
+    return '✓ Already Subscribed';
   };
 
   const revealVariants = {
@@ -189,7 +223,7 @@ export default function PricingSection4() {
 
   const handlePayment = async (planKey: keyof typeof PLANS) => {
     if (isPlanDisabled(planKey)) {
-      showToast('You already have this plan!', 'info');
+      showToast('You already have an active subscription at this level or higher', 'info');
       return;
     }
 
@@ -197,7 +231,6 @@ export default function PricingSection4() {
     setIsLoading(true);
 
     try {
-      // Step 1: Create Order
       const orderResponse = await fetchWithAuth(
         `${import.meta.env.VITE_API_BASE_URL}/api/payment/create-order`,
         {
@@ -214,7 +247,6 @@ export default function PricingSection4() {
         throw new Error('No order ID returned from server');
       }
 
-      // Step 2: Open Razorpay Checkout
       const options = {
         key: orderResponse.key_id,
         amount: orderResponse.amount,
@@ -226,7 +258,6 @@ export default function PricingSection4() {
           try {
             console.log('💳 Payment successful, verifying:', response);
 
-            // Step 3: Verify Payment
             const verifyResponse = await fetchWithAuth(
               `${import.meta.env.VITE_API_BASE_URL}/api/payment/verify`,
               {
@@ -333,7 +364,6 @@ export default function PricingSection4() {
 
     fetchUserSubscription();
 
-    // Listen for subscription updates
     const handleSubscriptionUpdate = () => {
       fetchUserSubscription();
     };
@@ -350,7 +380,7 @@ export default function PricingSection4() {
       name: "Starter",
       description: "Great for small businesses and startups looking to get started with AI",
       price: PLANS.starter.price,
-      yearlyPrice: Math.round(PLANS.starter.price * 12 * 0.8), // 20% discount
+      yearlyPrice: Math.round(PLANS.starter.price * 12 * 0.8),
       buttonText: "Get started",
       buttonVariant: "outline" as const,
       features: [
@@ -365,7 +395,7 @@ export default function PricingSection4() {
       name: "Business",
       description: "Best value for growing businesses that need more advanced features",
       price: PLANS.pro.price,
-      yearlyPrice: Math.round(PLANS.pro.price * 12 * 0.8), // 20% discount
+      yearlyPrice: Math.round(PLANS.pro.price * 12 * 0.8),
       buttonText: "Get started",
       buttonVariant: "outline" as const,
       features: [
@@ -464,7 +494,7 @@ export default function PricingSection4() {
             customVariants={revealVariants}
           >
             <Card
-              className={`relative flex-col flex justify-between  transition-all duration-300 backdrop-blur-md ${
+              className={`relative flex-col flex justify-between transition-all duration-300 backdrop-blur-md ${
                 selectedPlan === plan.planKey
                   ? "scale-110 ring-2 ring-neutral-900 bg-gradient-to-t from-black to-neutral-900 text-white"
                   : "border-none shadow-none bg-white/10 backdrop-blur-md pt-4 text-gray-900"
@@ -550,14 +580,19 @@ export default function PricingSection4() {
                 <button
                   onClick={() => {
                     if (plan.planKey in PLANS) {
+                      if (isPlanDisabled(plan.planKey as keyof typeof PLANS)) {
+                        showToast('You already have an active subscription at this level or higher', 'info');
+                        return;
+                      }
                       setSelectedPlan(plan.planKey as keyof typeof PLANS);
-                      // Only proceed to payment if already selected, otherwise just select it
                       if (selectedPlan === plan.planKey) {
                         handlePayment(plan.planKey as keyof typeof PLANS);
                       }
+                    } else if (plan.planKey === 'enterprise') {
+                      showToast('Please contact sales for Enterprise plan', 'info');
                     }
                   }}
-                  disabled={isLoading || (plan.planKey in PLANS && isPlanDisabled(plan.planKey as keyof typeof PLANS))}
+                  disabled={isLoading || isPlanDisabled(plan.planKey as any)}
                   className={`w-full mb-6 p-4 text-xl rounded-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
                     selectedPlan === plan.planKey
                       ? "bg-gradient-to-t from-neutral-100 to-neutral-300 font-semibold shadow-lg shadow-neutral-500 border border-neutral-400 text-black hover:from-neutral-200 hover:to-neutral-400 disabled:hover:from-neutral-100 disabled:hover:to-neutral-300"
@@ -566,14 +601,19 @@ export default function PricingSection4() {
                         : "bg-gradient-to-t from-amber-500 to-orange-500 text-white hover:from-amber-600 hover:to-orange-600 disabled:hover:from-amber-500 disabled:hover:to-orange-500"
                   }`}
                 >
-                  {isLoading ? 'Processing...' : plan.planKey in PLANS && isPlanDisabled(plan.planKey as keyof typeof PLANS) ? '✓ Current Plan' : selectedPlan === plan.planKey ? 'Proceed to Payment' : plan.buttonText}
+                  {isLoading 
+                    ? 'Processing...' 
+                    : getPlanButtonText(
+                        plan.planKey as any, 
+                        selectedPlan === plan.planKey ? 'Proceed to Payment' : plan.buttonText
+                      )
+                  }
                 </button>
               </CardFooter>
             </Card>
           </TimelineContent>
         ))}
       </TimelineContent>
-
     </div>
   );
 }

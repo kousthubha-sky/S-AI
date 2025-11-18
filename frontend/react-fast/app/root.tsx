@@ -33,7 +33,7 @@ export const meta: Route.MetaFunction = () => {
   return [
     // Primary Meta Tags
     { 
-      title: "SkyGPT - Free AI Chat with Claude, ChatGPT, Gemini & More | Best AI Assistant" 
+      title: "SkyGPT (Beta) - Free AI Chat with Claude, ChatGPT, Gemini & More | Best AI Assistant" 
     },
     { 
       name: "description", 

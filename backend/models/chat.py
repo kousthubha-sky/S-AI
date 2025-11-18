@@ -10,7 +10,7 @@ class ChatMessage(BaseModel):
 class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     model: Optional[str] = "tngtech/deepseek-r1t2-chimera:free"
-    max_tokens: Optional[int] = 2000  # ✅ Increased from 1000 to support longer responses
+    max_tokens: Optional[int] = 50000  # ✅ Increased from 1000 to support longer responses
     temperature: Optional[float] = 0.7
     system_prompt: Optional[str] = None
     
@@ -20,7 +20,7 @@ class ChatRequest(BaseModel):
             "example": {
                 "messages": [{"role": "user", "content": "large code block..."}],
                 "model": "anthropic/claude-3.5-sonnet",
-                "max_tokens": 2000
+                "max_tokens": 200000
             }
         }
 

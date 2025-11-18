@@ -6,11 +6,13 @@ from typing import List, Dict
 
 # Free Tier Models (Basic models only)
 FREE_MODELS = [
+    "nvidia/nemotron-nano-12b-v2-vl:free",
     "openai/gpt-oss-20b:free",
+    "z-ai/glm-4.5-air:free",
+    "moonshotai/kimi-k2:free",
     "tngtech/deepseek-r1t2-chimera:free",
     "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-    "meta-llama/llama-3.2-3b-instruct:free",
-    "meta-llama/llama-4-maverick:free",
+    "deepseek/deepseek-chat-v3.1:free",
     "qwen/qwen3-30b-a3b:free",
     "qwen/qwen3-235b-a22b:free",
 ]

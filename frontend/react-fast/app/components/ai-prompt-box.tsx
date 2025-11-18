@@ -818,11 +818,12 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
               </AnimatePresence>
             </button>
 
-            {selectedModel && !showSearch && isAuthenticated && (
+            {selectedModel && isAuthenticated && (
               <ModelSelector
                 selectedModel={selectedModel}
                 onModelChange={onModelChange}
                 userTier={userTier}
+                isAuthenticated={isAuthenticated}
               />
             )}
           </div>

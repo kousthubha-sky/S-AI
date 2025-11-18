@@ -10,11 +10,32 @@ export interface AIModel {
 
 export const AI_MODELS: AIModel[] = [
   // ==================== FREE TIER ====================
-  {
+    {
     id: "openai/gpt-oss-20b:free",
     name: "GPT OSS 20B",
     provider: "OpenAI",
     description: "Open-source GPT model, great for basic tasks",
+    tier: "free"
+  },
+  {
+    id:"nvidia/nemotron-nano-12b-v2-vl:free",
+    name: "NemoTron Nano 12B",
+    provider: "NVIDIA",
+    description: "Lightweight model optimized for speed and efficiency",
+    tier: "free"
+  },
+  {
+    id:"z-ai/glm-4.5-air:free",
+    name: "GLM 4.5 Air",
+    provider: "Z-AI",
+    description: "Balanced model for general-purpose tasks",
+    tier: "free"
+  },
+  {
+    id: "deepseek/deepseek-chat-v3.1:free",
+    name: "DeepSeek Chat v3.1",
+    provider: "DeepSeek",
+    description: "Conversational model with enhanced context understanding",
     tier: "free"
   },
   {
@@ -32,17 +53,10 @@ export const AI_MODELS: AIModel[] = [
     tier: "free"
   },
   {
-    id: "meta-llama/llama-3.2-3b-instruct:free",
-    name: "Llama 3.2 3B",
-    provider: "Meta",
-    description: "Compact and efficient instruction-following model",
-    tier: "free"
-  },
-  {
-    id: "meta-llama/llama-4-maverick:free",
-    name: "Llama 4 Maverick",
-    provider: "Meta",
-    description: "Experimental Llama variant with enhanced capabilities",
+    id: "moonshotai/kimi-k2:free",
+    name: "Kimi K2",
+    provider: "Moonshot AI",
+    description: "Efficient model for everyday applications",
     tier: "free"
   },
   {
@@ -79,9 +93,9 @@ export const AI_MODELS: AIModel[] = [
   },
   {
     id: "google/gemini-2.5-flash-image",
-    name: "Gemini 2.5 Flash",
+    name: "Gemini 2.5 Flash Image",
     provider: "Google",
-    description: "Fast multimodal model with image generation support",
+    description: "Advanced image generation with contextual understanding",
     tier: "pro"
   },
 

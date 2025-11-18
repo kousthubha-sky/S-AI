@@ -17,18 +17,20 @@ class InputValidator:
         'throwaway.email', 'mailinator.com', 'temp-mail.org'
     ]
     
-    # ✅ SQL injection patterns
+    # ✅ SQL injection patterns - STRICT: Only flag if combined with injection indicators
     SQL_INJECTION_PATTERNS = [
-        r"(\b(SELECT|INSERT|UPDATE|DELETE|DROP|CREATE|ALTER|EXEC|EXECUTE)\b)",
-        r"(--|\;|\/\*|\*\/|xp_|sp_)",
-        r"(\bOR\b.*=.*|UNION.*SELECT)",
+        # Only flag if SQL keyword + injection attempt (not just code asking about SQL)
+        r"(\bOR\b\s+\d+\s*=\s*\d+)",  # OR 1=1 style
+        r"(\bUNION\s+.*SELECT\b)",  # UNION based injection
+        r"(--\s+|;\s*DROP|;\s*DELETE)",  # Comment-based injection
+        r"(xp_|sp_cmdshell)",  # Stored procedure injection
     ]
     
-    # ✅ XSS patterns
+    # ✅ XSS patterns - Only flag actual script injection, not HTML code discussion
     XSS_PATTERNS = [
-        r"<script[^>]*>.*?</script>",
-        r"javascript:",
-        r"on\w+\s*=",
+        r"<script[^>]*>",  # Actual script tags (not discussion about <script>)
+        r"javascript:",  # JavaScript protocol handler
+        r"on(load|error|click|change|focus|blur|submit|mouseenter|mouseleave)\s*=",  # Event handlers
     ]
     
     @staticmethod
@@ -64,6 +66,7 @@ class InputValidator:
         """
         Sanitize text input with support for large inputs
         ✅ UPDATED: Now supports up to 500KB of text (for large code blocks)
+        ✅ SMARTER: Only blocks actual injection attempts, allows legitimate code discussion
         """
         if not text:
             return ""
@@ -76,20 +79,23 @@ class InputValidator:
         # Remove HTML tags (but preserve content structure for code)
         text = bleach.clean(text, tags=[], strip=True)
         
-        # Check for SQL injection (case-insensitive for safety)
+        # ✅ Check for SQL injection ONLY if there are actual injection indicators
+        # Don't block legitimate SQL keywords (like in code review or learning questions)
         for pattern in InputValidator.SQL_INJECTION_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE):
+                print(f"⚠️ SQL Injection pattern detected: {pattern}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid input detected"
+                    detail="Invalid input detected - SQL injection attempt"
                 )
         
-        # Check for XSS attempts
+        # ✅ Check for XSS attempts ONLY for actual script injection
         for pattern in InputValidator.XSS_PATTERNS:
             if re.search(pattern, text, re.IGNORECASE):
+                print(f"⚠️ XSS pattern detected: {pattern}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid input detected"
+                    detail="Invalid input detected - XSS attempt"
                 )
         
         return text.strip()

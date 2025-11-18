@@ -154,7 +154,7 @@ export default function FeaturesPage() {
             </p>
             <div className="flex gap-4 justify-center">
               <Link 
-                to="/signup"
+                to="/login"
                 className="px-8 py-3 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg font-semibold transition"
               >
                 Get Started Free
@@ -286,7 +286,7 @@ export default function FeaturesPage() {
           </p>
           <div className="flex gap-4 justify-center">
             <Link 
-              to="/signup"
+              to="/login"
               className="px-8 py-4 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 rounded-lg font-semibold text-lg transition"
             >
               Start Free Trial
