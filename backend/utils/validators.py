@@ -22,7 +22,7 @@ class InputValidator:
         # Only flag if SQL keyword + injection attempt (not just code asking about SQL)
         r"(\bOR\b\s+\d+\s*=\s*\d+)",  # OR 1=1 style
         r"(\bUNION\s+.*SELECT\b)",  # UNION based injection
-        r"(--\s+|;\s*DROP|;\s*DELETE)",  # Comment-based injection
+        r"(;\s*DROP\s+|;\s*DELETE\s+|;\s*TRUNCATE\s+)",  # Comment-based injection (strict - must have semicolon + keyword + space)
         r"(xp_|sp_cmdshell)",  # Stored procedure injection
     ]
     
@@ -76,26 +76,30 @@ class InputValidator:
         if len(text) > max_length:
             text = text[:max_length]
         
+        # ✅ Check for XSS attempts FIRST (before bleach removes tags)
+        for pattern in InputValidator.XSS_PATTERNS:
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                print(f"⚠️ XSS pattern detected: {pattern}")
+                print(f"   Matched text: {match.group()}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid input detected - potential XSS attempt"
+                )
+        
         # Remove HTML tags (but preserve content structure for code)
         text = bleach.clean(text, tags=[], strip=True)
         
         # ✅ Check for SQL injection ONLY if there are actual injection indicators
         # Don't block legitimate SQL keywords (like in code review or learning questions)
         for pattern in InputValidator.SQL_INJECTION_PATTERNS:
-            if re.search(pattern, text, re.IGNORECASE):
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
                 print(f"⚠️ SQL Injection pattern detected: {pattern}")
+                print(f"   Matched text: {match.group()}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid input detected - SQL injection attempt"
-                )
-        
-        # ✅ Check for XSS attempts ONLY for actual script injection
-        for pattern in InputValidator.XSS_PATTERNS:
-            if re.search(pattern, text, re.IGNORECASE):
-                print(f"⚠️ XSS pattern detected: {pattern}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid input detected - XSS attempt"
+                    detail=f"Invalid input detected - potential SQL injection attempt"
                 )
         
         return text.strip()

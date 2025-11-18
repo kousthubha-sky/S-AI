@@ -197,9 +197,17 @@ async def chat(chat_request: ChatRequest, payload: dict = Depends(verify_token))
         request_body = {
             "model": chat_request.model or "tngtech/deepseek-r1t2-chimera:free",
             "messages": messages,
-            "max_tokens": chat_request.max_tokens or 1000,
+            "max_tokens": chat_request.max_tokens or 10000,
             "temperature": chat_request.temperature or 0.7
         }
+        
+        # ✅ Add thinking parameter if enabled
+        if chat_request.thinking:
+            request_body["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": 8000
+            }
+            print(f"💭 Thinking mode enabled with 8000 token budget")
         
         # ✅ Validate request body before sending
         print(f"📋 Validating OpenRouter request body...")

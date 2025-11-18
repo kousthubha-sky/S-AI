@@ -13,6 +13,7 @@ class ChatRequest(BaseModel):
     max_tokens: Optional[int] = 50000  # ✅ Increased from 1000 to support longer responses
     temperature: Optional[float] = 0.7
     system_prompt: Optional[str] = None
+    thinking: Optional[bool] = False  # ✅ Enable extended thinking mode
     
     class Config:
         # ✅ Allow larger payloads

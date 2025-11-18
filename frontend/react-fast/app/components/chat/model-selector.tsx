@@ -12,9 +12,10 @@ interface ModelSelectorProps {
   onModelChange: (modelId: string) => void;
   userTier: "free" | "starter" | "pro" | "pro_plus"; // ✅ Updated types
   isAuthenticated?: boolean; // ✅ Authentication state
+  disabled?: boolean; // ✅ Disable model changes (e.g., in thinking mode)
 }
 
-export function ModelSelector({ selectedModel, onModelChange, userTier, isAuthenticated = false }: ModelSelectorProps) {
+export function ModelSelector({ selectedModel, onModelChange, userTier, isAuthenticated = false, disabled = false }: ModelSelectorProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [hoveredModel, setHoveredModel] = useState<string | null>(null);
 
@@ -133,17 +134,17 @@ export function ModelSelector({ selectedModel, onModelChange, userTier, isAuthen
     <div className="relative">
       {/* Compact Selector Trigger */}
       <motion.button
-        onClick={() => isAuthenticated && setIsOpen(!isOpen)}
+        onClick={() => isAuthenticated && !disabled && setIsOpen(!isOpen)}
         className={cn(
           "flex items-center gap-2 py-1.5 rounded-2xl border text-xs font-medium transition-all duration-200",
           "bg-background/80 border-border/50 hover:border-border",
           "text-foreground hover:bg-muted/50",
-          !isAuthenticated && "cursor-not-allowed opacity-50"
+          (!isAuthenticated || disabled) && "cursor-not-allowed opacity-50"
         )}
-        whileHover={{ scale: isAuthenticated ? 1.02 : 1 }}
-        whileTap={{ scale: isAuthenticated ? 0.98 : 1 }}
-        disabled={!isAuthenticated}
-        title={!isAuthenticated ? "Sign in to change models" : undefined}
+        whileHover={{ scale: isAuthenticated && !disabled ? 1.02 : 1 }}
+        whileTap={{ scale: isAuthenticated && !disabled ? 0.98 : 1 }}
+        disabled={!isAuthenticated || disabled}
+        title={disabled ? "Model is locked in thinking mode" : !isAuthenticated ? "Sign in to change models" : undefined}
       >
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full bg-green-500"></div>

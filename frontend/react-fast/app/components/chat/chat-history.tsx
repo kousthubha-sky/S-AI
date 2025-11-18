@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, MessageSquare, Trash2, Calendar } from 'lucide-react'
 import { Button } from '~/components/ui/button'
+import { Skeleton } from '~/components/ui/skeleton'
 import { useAuthApi } from '~/hooks/useAuthApi'
 
 interface ChatSession {
@@ -16,9 +17,10 @@ interface ChatHistoryProps {
   currentSessionId: string | null
   onSessionSelect: (sessionId: string) => Promise<void>
   onNewChat: () => Promise<void>
+  isLoading?: boolean
 }
 
-export function ChatHistory({ sessions, currentSessionId, onSessionSelect, onNewChat }: ChatHistoryProps) {
+export function ChatHistory({ sessions, currentSessionId, onSessionSelect, onNewChat, isLoading = false }: ChatHistoryProps) {
   const [loading, setLoading] = useState(false)
   const { fetchWithAuth } = useAuthApi()
 
@@ -56,7 +58,19 @@ export function ChatHistory({ sessions, currentSessionId, onSessionSelect, onNew
       </div>
 
       <div className="flex-1 overflow-y-auto p-2">
-        {sessions.length === 0 ? (
+        {isLoading ? (
+          <div className="space-y-2">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="p-3 rounded-lg space-y-2">
+                <div className="flex items-center gap-2">
+                  <Skeleton className="w-4 h-4 rounded" />
+                  <Skeleton className="h-4 flex-1 rounded" />
+                </div>
+                <Skeleton className="h-3 w-24 rounded" />
+              </div>
+            ))}
+          </div>
+        ) : sessions.length === 0 ? (
           <div className="text-center text-muted-foreground py-8">
             <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
             <p>No chat history</p>

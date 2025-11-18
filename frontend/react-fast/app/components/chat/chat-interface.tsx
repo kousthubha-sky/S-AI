@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect, type JSX } from "react"
 import { AlertCircle, Copy, Check, MessageSquare, Brain } from "lucide-react"
 import { Button } from "~/components/ui/button"
+import { Skeleton } from "~/components/ui/skeleton"
 import { cn } from "~/lib/utils"
 import { useAuthApi } from "~/hooks/useAuthApi"
 import { useAuth0 } from "@auth0/auth0-react"
@@ -12,6 +13,7 @@ import { useToast } from "~/components/ui/toast"
 import { HeroGeometric } from "../ui/shape-landing-hero"
 import { PromptInputBox } from "~/components/ai-prompt-box"
 import { TextShimmer } from "~/components/ui/text-shimmer"
+import DigitalSerenity from "~/components/digital-serenity-animated-landing-page"
 
 import React from "react"
 
@@ -64,6 +66,20 @@ interface ChatInterfaceProps {
   isSidebarCollapsed?: boolean;
   isAuthed?: boolean;
 }
+
+// Skeleton loader for chat messages
+const ChatMessageSkeleton = () => (
+  <div className="space-y-3 max-w-4xl mx-auto w-full">
+    {[...Array(3)].map((_, i) => (
+      <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
+        <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-3 rounded-lg space-y-2 ${i % 2 === 0 ? 'bg-gray-800' : 'bg-gray-700/40'}`}>
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-4/5" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 const GeneratedImages = ({ images }: { images: ImageData[] }) => {
   const [loadingImages, setLoadingImages] = useState<Record<string, boolean>>({});
@@ -514,13 +530,15 @@ export function ChatInterface({
     let actualMessage = messageText;
     let modelToUse = selectedModel;
     let isSearchRequest = false;
+    let isThinkingRequest = false;
     
     if (messageText.startsWith('[Search:')) {
       isSearchRequest = true;
       actualMessage = messageText.replace('[Search:', '').replace(/\]$/, '').trim();
     } else if (messageText.startsWith('[Think:')) {
+      isThinkingRequest = true;
       actualMessage = messageText.replace('[Think:', '').replace(/\]$/, '').trim();
-      modelToUse = AI_MODELS.find(m => m.name.includes('Opus'))?.id || selectedModel;
+      modelToUse = 'qwen/qwen3-235b-a22b:free';
     } else if (messageText.startsWith('[Canvas:')) {
       actualMessage = messageText.replace('[Canvas:', '').replace(/\]$/, '').trim();
     }
@@ -594,7 +612,8 @@ export function ChatInterface({
               messages: apiMessages, 
               model: modelToUse, 
               temperature: 0.7, 
-              max_tokens: 1000 
+              max_tokens: 1000,
+              thinking: isThinkingRequest
             }),
             signal: abortControllerRef.current.signal
           }
@@ -708,148 +727,121 @@ export function ChatInterface({
    return (
     <div 
       ref={containerRef}
-      className="flex flex-col h-full w-full flex-1 pt-16 md:pt-0 bg-[radial-gradient(125%_125%_at_50%_10%,#000_40%,#63e_100%)]"
+      className="flex flex-col h-full w-full flex-1 pt-16 md:pt-0 relative overflow-hidden"
     >
-      {/* CONDITIONALLY RENDER CONTENT BASED ON AUTH */}
-{!isAuthed ? (
-  /* HeroGeometric Welcome Screen for Unauthenticated Users */
-  <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-    <div className="absolute inset-0">
-      <HeroGeometric 
-        badge="Sky-GPT(Beta)"
-        title1="Elevate Your"
-        title2="AI experience"
-      />
-    </div>
-    
-    {/* Prompt Input positioned at bottom */}
-    <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 flex justify-center z-20">
-      <div className="w-full max-w-4xl">
-        <PromptInputBox
-          onSend={handleSendMessage}
-          isLoading={false}
-          placeholder="Sign in to start chatting..."
-          selectedModel={selectedModel}
-          onModelChange={(model) => {
-            setSelectedModel(model);
-          }}
-          userTier={userTier}
-          isAuthenticated={isAuthed}
-        />
+      {/* Digital Serenity Background */}
+      <div className="absolute inset-0 z-10">
+        <DigitalSerenity username={auth0User?.given_name || auth0User?.name || 'there'} hasStartedChat={hasStartedChat} />
       </div>
-    </div>
-  </div>
-) : (
-        /* Authenticated Chat Interface - UNCHANGED */
-       /* Authenticated Chat Interface - FIXED SCROLL */
-<div className="flex flex-col h-full w-full">
-  {!hasStartedChat ? (
-    // Before chat starts - centered prompt box with motif
-    <div className="flex-1 flex flex-col items-center justify-center px-4 py-4">
-      <div className="text-center space-y-8 w-full max-w-2xl">
-        <div className="space-y-4">
-          <h2 className="text-3xl font-semibold text-white">Start a New Conversation</h2>
-          <p className="text-gray-500 text-lg">Ask me anything or describe what you need help with</p>
-        </div>
 
-        {/* Suggestions/motif lines */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div 
-            onClick={() => {
-              setSelectedModel('gpt-4o-mini');
-            }}
-            className="p-4 rounded-lg border hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
-          >
-            <p className="text-sm font-medium text-gray-500">💡 Get Ideas</p>
-            <p className="text-xs text-gray-600">Brainstorm and explore new concepts</p>
+      {/* Content Layer */}
+      <div className="relative z-10 flex flex-col h-full w-full">
+        {!isAuthed ? (
+          /* HeroGeometric Welcome Screen for Unauthenticated Users */
+          <div className="flex-1 flex flex-col h-full overflow-hidden relative">
+            <div className="absolute inset-0">
+              <HeroGeometric 
+                badge="Sky-GPT(Beta)"
+                title1="Elevate Your"
+                title2="AI experience"
+              />
+            </div>
+            
+            {/* Prompt Input positioned at bottom */}
+            <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 flex justify-center z-20">
+              <div className="w-full max-w-4xl">
+                <PromptInputBox
+                  onSend={handleSendMessage}
+                  isLoading={false}
+                  placeholder="Sign in to start chatting..."
+                  selectedModel={selectedModel}
+                  onModelChange={(model) => {
+                    setSelectedModel(model);
+                  }}
+                  userTier={userTier}
+                  isAuthenticated={isAuthed}
+                />
+              </div>
+            </div>
           </div>
-          <div 
-            onClick={() => {
-              setSelectedModel('gpt-4o');
-            }}
-            className="p-4 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all"
-          >
-            <p className="text-sm font-medium text-gray-500">📝 Write & Edit</p>
-            <p className="text-xs text-gray-600">Create content or improve existing text</p>
-          </div>
-          <div className="p-4 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
-            <p className="text-sm font-medium text-gray-500">🔍 Analyze</p>
-            <p className="text-xs text-gray-600">Break down complex topics</p>
-          </div>
-          <div className="p-4 rounded-lg hover:border-blue-500 hover:bg-blue-50 cursor-pointer transition-all">
-            <p className="text-sm font-medium text-gray-500">💻 Code</p>
-            <p className="text-xs text-gray-600">Help with programming tasks</p>
-          </div>
-        </div>
-
-        {/* Prompt Box */}
-        <div className="w-full mt-8">
-          <PromptInputBox
-            onSend={handleSendMessage}
-            isLoading={isLoading}
-            placeholder="Ask me anything..."
-            selectedModel={selectedModel}
-            onModelChange={(model) => {
-              setSelectedModel(model);
-            }}
-            userTier={userTier}
-            isAuthenticated={isAuthed}
-          />
-        </div>
-      </div>
-    </div>
-  ) : (
-    // After chat starts - FIXED SCROLL LAYOUT
-    <div className="flex flex-col h-full">
-      {/* Messages Container - PROPER SCROLLING */}
-      <div className="flex-1 overflow-y-auto" style={{ height: 'calc(100vh - 200px)' }}>
-        <div className="min-h-full px-4 py-4">
-          <div className="space-y-4 max-w-4xl mx-auto w-full">
-            {messages.map((message) => (
-              <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-3 rounded-lg ${message.role === 'user' ? 'bg-gray-800 text-white' : 'text-gray-100'}`}>
-                  {message.isLoading ? (
-                    <ThinkingIndicator />
+        ) : (
+                /* Authenticated Chat Interface - UNCHANGED */
+              /* Authenticated Chat Interface - FIXED SCROLL */
+        <div className="flex flex-col h-full w-full">
+          {!hasStartedChat ? (
+            // Before chat starts - just prompt box at bottom
+            <div className="flex-1 flex flex-col items-center justify-center pt-48 px-4 py-8">
+              <div className="w-full max-w-2xl">
+                <PromptInputBox
+                  onSend={handleSendMessage}
+                  isLoading={isLoading}
+                  placeholder="Ask me anything..."
+                  selectedModel={selectedModel}
+                  onModelChange={(model) => {
+                    setSelectedModel(model);
+                  }}
+                  userTier={userTier}
+                  isAuthenticated={isAuthed}
+                />
+              </div>
+            </div>
+          ) : (
+            // After chat starts - FIXED SCROLL LAYOUT
+            <div className="flex flex-col h-full">
+              {/* Messages Container - PROPER SCROLLING */}
+              <div className="flex-1 overflow-y-auto" style={{ height: 'calc(100vh - 200px)' }}>
+                <div className="min-h-full px-4 py-4">
+                  {isInitializing ? (
+                    <ChatMessageSkeleton />
                   ) : (
-                    <>
-                      <FormattedMessage content={message.content} images={message.images} />
-                      {message.attachments && message.attachments.length > 0 && (
-                        <div className="mt-2 space-y-1">
-                          {message.attachments.map(att => (
-                            <div key={att.id} className="text-xs opacity-75">{att.name}</div>
-                          ))}
+                    <div className="space-y-4 max-w-4xl mx-auto w-full">
+                      {messages.map((message) => (
+                        <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                          <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-3 rounded-lg ${message.role === 'user' ? 'bg-gray-800 text-white' : 'text-gray-100'}`}>
+                            {message.isLoading ? (
+                              <ThinkingIndicator />
+                            ) : (
+                              <>
+                                <FormattedMessage content={message.content} images={message.images} />
+                                {message.attachments && message.attachments.length > 0 && (
+                                  <div className="mt-2 space-y-1">
+                                    {message.attachments.map(att => (
+                                      <div key={att.id} className="text-xs opacity-75">{att.name}</div>
+                                    ))}
+                                  </div>
+                                )}
+                              </>
+                            )}
+                          </div>
                         </div>
-                      )}
-                    </>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </div>
                   )}
                 </div>
               </div>
-            ))}
-            <div ref={messagesEndRef} />
-          </div>
-        </div>
-      </div>
 
-      {/* Input Area - Fixed at bottom */}
-      <div className="flex-shrink-0 px-4 py-4 bg-gradient-to-t from-[#030303] to-transparent">
-        <div className="max-w-4xl mx-auto w-full">
-          <PromptInputBox
-            onSend={handleSendMessage}
-            isLoading={isLoading}
-            placeholder="Type your message..."
-            selectedModel={selectedModel}
-            onModelChange={(model) => {
-              setSelectedModel(model);
-            }}
-            userTier={userTier}
-            isAuthenticated={isAuthed}
-          />
+              {/* Input Area - Fixed at bottom */}
+              <div className="flex-shrink-0 px-4 py-4 bg-gradient-to-t from-[#030303] to-transparent">
+                <div className="max-w-4xl mx-auto w-full">
+                  <PromptInputBox
+                    onSend={handleSendMessage}
+                    isLoading={isLoading}
+                    placeholder="Type your message..."
+                    selectedModel={selectedModel}
+                    onModelChange={(model) => {
+                      setSelectedModel(model);
+                    }}
+                    userTier={userTier}
+                    isAuthenticated={isAuthed}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
         </div>
-      </div>
-    </div>
-  )}
-</div>
       )}
+      </div>
     </div>
   );
 }

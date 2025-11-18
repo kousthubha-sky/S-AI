@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth0 } from "@auth0/auth0-react";
 import { useNavigate } from "react-router";
 import { Button } from "~/components/ui/button";
+import { Skeleton } from "~/components/ui/skeleton";
 import { ChatInterface } from "~/components/chat/chat-interface";
 import { PaymentDialog } from "~/components/chat/payment-dialog";
 import { useAuthApi } from "~/hooks/useAuthApi";
@@ -128,7 +129,7 @@ function SidebarSettingsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function SidebarChatHistorySection({ sessions, currentSessionId, onSelect, onDelete, formatTime }: any) {
+function SidebarChatHistorySection({ sessions, currentSessionId, onSelect, onDelete, formatTime, isLoading = false }: any) {
   const { shouldShowText, open } = useSidebar();
   return (
     <div className="flex-1 overflow-y-auto px-2">
@@ -144,7 +145,16 @@ function SidebarChatHistorySection({ sessions, currentSessionId, onSelect, onDel
         </motion.span>
       </div>
 
-      {sessions.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-2 px-2">
+          {[...Array(4)].map((_, i) => (
+            <div key={i} className="space-y-1.5">
+              <Skeleton className="h-5 w-3/4 rounded" />
+              <Skeleton className="h-3 w-1/2 rounded" />
+            </div>
+          ))}
+        </div>
+      ) : sessions.length === 0 ? (
         <motion.div
           animate={{
             display: shouldShowText ? "block" : "none",
@@ -663,6 +673,7 @@ function DashboardContent() {
                 onSelect={handleSessionSelect}
                 onDelete={handleDeleteSession}
                 formatTime={formatRelativeTime}
+                isLoading={isLoadingSessions}
               />
 
               <div className="border-t border-neutral-300 dark:border-neutral-700 my-2 mx-2" />

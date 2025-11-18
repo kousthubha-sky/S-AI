@@ -496,7 +496,7 @@ export default function PricingSection4() {
             <Card
               className={`relative flex-col flex justify-between transition-all duration-300 backdrop-blur-md ${
                 selectedPlan === plan.planKey
-                  ? "scale-110 ring-2 ring-neutral-900 bg-gradient-to-t from-black to-neutral-900 text-white"
+                  ? "scale-105 ring-2 ring-neutral-900 bg-gradient-to-t from-black to-neutral-900 text-white"
                   : "border-none shadow-none bg-white/10 backdrop-blur-md pt-4 text-gray-900"
               }`}
             >

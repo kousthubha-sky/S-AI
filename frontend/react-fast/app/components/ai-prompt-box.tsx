@@ -820,10 +820,11 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
 
             {selectedModel && isAuthenticated && (
               <ModelSelector
-                selectedModel={selectedModel}
+                selectedModel={showThink ? 'qwen/qwen3-235b-a22b:free' : selectedModel}
                 onModelChange={onModelChange}
                 userTier={userTier}
                 isAuthenticated={isAuthenticated}
+                disabled={showThink}
               />
             )}
           </div>

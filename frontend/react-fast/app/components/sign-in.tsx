@@ -5,7 +5,7 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth0 } from "@auth0/auth0-react";
 import { Navigate } from "react-router";
-
+import { Link } from "react-router";
 import {
   AppleIcon,
   AtSignIcon,
@@ -87,7 +87,7 @@ export function SignInPage() {
           {/* Header */}
           <div className="flex items-center gap-2 lg:hidden">
             <Grid2x2PlusIcon className="size-6 text-white" />
-            <p className="text-xl font-semibold text-white">Asme</p>
+            <p className="text-xl font-semibold text-white">SKYGPT</p>
           </div>
           
           <div className="flex flex-col space-y-2">
@@ -95,7 +95,7 @@ export function SignInPage() {
               Sign In or Join Now!
             </h1>
             <p className="text-base text-gray-400">
-              Login or create your asme account.
+              Login or create your SKYGPT account.
             </p>
           </div>
 
@@ -174,6 +174,28 @@ export function SignInPage() {
             </a>
             .
           </p>
+
+          {/* Navigation Links */}
+          <div className="flex flex-wrap justify-center gap-4 text-xs text-gray-500">
+            <a
+              href="/features"
+              className="text-gray-400 underline underline-offset-4 hover:text-white"
+            >
+              Features
+            </a>
+            <a
+              href="/pricing"
+              className="text-gray-400 underline underline-offset-4 hover:text-white"
+            >
+              Pricing
+            </a>
+            <a
+              href="/about"
+              className="text-gray-400 underline underline-offset-4 hover:text-white"
+            >
+              About
+            </a>
+          </div>
         </div>
       </div>
 
@@ -183,7 +205,7 @@ export function SignInPage() {
         
         <div className="z-20 flex items-center gap-2">
           <Grid2x2PlusIcon className="size-6 text-white" />
-          <p className="text-xl font-semibold text-white">Asme</p>
+          <p className="text-xl font-semibold text-white">SKYGPT</p>
         </div>
         
         <div className="z-20 mt-auto">
@@ -202,6 +224,7 @@ export function SignInPage() {
           <FloatingPaths position={1} />
           <FloatingPaths position={-1} />
         </div>
+        
       </div>
     </main>
   );
