@@ -665,7 +665,7 @@ function DashboardContent() {
   }
 
   return (
-    <div className="flex h-screen w-full bg-gradient-to-b from-black to-blue-950 flex-col md:flex-row relative">
+    <div className="flex h-screen w-full  flex-col md:flex-row relative">
       {/* CardNav - Only visible when not authenticated */}
       {!isAuthenticated && (
         <div className="fixed top-0 left-0 right-0 z-50">
