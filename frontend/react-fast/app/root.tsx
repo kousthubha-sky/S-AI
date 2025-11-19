@@ -53,8 +53,8 @@ export const meta: Route.MetaFunction = () => {
       property: "og:description", 
       content: "Access 10+ AI models including Claude, Gemini, Llama 4, Grok 4. Free AI chat with code generation, multilingual support & more." 
     },
-    { property: "og:url", content: "https://s-ai-blush.verce.app" },
-    { property: "og:image", content: "https://s-ai-blush.verce.app/og-image.png" },
+    { property: "og:url", content: "https://xcore-ai.com" },
+    { property: "og:image", content: "https://xcore-ai.com/xcore-ai.png" },
     { property: "og:site_name", content: "Xcore-ai" },
     
     // Twitter Card

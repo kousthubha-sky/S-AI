@@ -255,7 +255,7 @@ export default function ProfileSettingsPage({
               </button>
               {!collapsed && (
                 <div className="flex items-center text-white/90 font-medium">
-                  <span className="mr-1">SkyGPT</span>
+                  <span className="mr-1">xcore-ai</span>
                   <ChevronDown className="h-4 w-4 text-white/50" />
                 </div>
               )}

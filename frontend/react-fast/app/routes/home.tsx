@@ -4,8 +4,8 @@ import { Navigate } from "react-router";
 
 export function meta({}: Route.MetaArgs) {
   return [
-    { title: "SKY-GPT Dashboard" },
-    { name: "description", content: "Welcome to our SAAS platform!" },
+    { title: "XCORE-AI Dashboard" },
+    { name: "description", content: "Welcome to our XCORE platform!" },
   ];
 }
 

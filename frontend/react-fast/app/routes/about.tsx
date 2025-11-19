@@ -36,7 +36,7 @@ export default function AboutPage() {
             </p>
             <p className="text-gray-300 mb-4">
               Whether you're a student learning new concepts, a developer building the next big thing, 
-              or a professional looking to boost productivity, SkyGPT is designed for you.
+              or a professional looking to boost productivity, xcore-ai is designed for you.
             </p>
             <p className="text-gray-300">
               We're committed to transparency, security, and putting our users first. Your data is yours, 
@@ -208,9 +208,9 @@ export default function AboutPage() {
       {/* CTA Section */}
       <div className="max-w-7xl mx-auto px-4 py-20 sm:px-6 lg:px-8">
         <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-3xl p-12 text-center border border-white/10">
-          <h2 className="text-4xl font-bold mb-4">Ready to Experience SkyGPT?</h2>
+          <h2 className="text-4xl font-bold mb-4">Ready to Experience xcore-ai?</h2>
           <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-            Join thousands of users who trust SkyGPT for their AI needs
+            Join thousands of users who trust xcore-ai for their AI needs
           </p>
           <div className="flex gap-4 justify-center">
             <Link 

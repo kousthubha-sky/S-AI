@@ -208,6 +208,30 @@ export default function PricingSection4() {
     },
   };
 
+  // ✅ CRITICAL: Fetch current user tier on component mount
+  useEffect(() => {
+    const fetchCurrentTier = async () => {
+      try {
+        const usage = await fetchWithAuth(
+          `${import.meta.env.VITE_API_BASE_URL}/api/usage`
+        );
+        
+        if (usage.is_paid === true) {
+          setUserTier(usage.tier || 'free');
+        } else {
+          setUserTier('free');
+        }
+        
+        console.log('✅ Current user tier fetched:', usage.tier);
+      } catch (error) {
+        console.error('Failed to fetch user tier:', error);
+        setUserTier('free');
+      }
+    };
+
+    fetchCurrentTier();
+  }, [fetchWithAuth]);
+
   // Load Razorpay script
   useEffect(() => {
     const script = document.createElement('script');
@@ -251,7 +275,7 @@ export default function PricingSection4() {
         key: orderResponse.key_id,
         amount: orderResponse.amount,
         currency: orderResponse.currency,
-        name: 'SkyGPT',
+        name: 'Xcore-ai',
         description: orderResponse.plan_name,
         order_id: orderResponse.order_id,
         handler: async (response: any) => {

@@ -199,6 +199,29 @@ class RedisCache:
             print(f"Redis invalidate_session error: {e}")
             return False
     
+    async def invalidate_user_tier_cache(self, user_id: str):
+        """✅ CRITICAL: Invalidate subscription tier cache for user"""
+        if not self.enabled:
+            return False
+        
+        try:
+            cache_keys = [
+                f"user:{user_id}:tier",
+                f"user:{user_id}:limits",
+                f"user:{user_id}:usage",
+                f"user:{user_id}:daily_messages",
+                f"user:{user_id}:subscription",
+            ]
+            
+            for key in cache_keys:
+                self.redis.delete(key)
+            
+            print(f"🗑️ Subscription tier cache invalidated for user {user_id}")
+            return True
+        except Exception as e:
+            print(f"Redis invalidate_user_tier_cache error: {e}")
+            return False
+    
     async def invalidate_user_sessions(self, user_id: str):
         """Invalidate user's session list cache"""
         if not self.enabled:

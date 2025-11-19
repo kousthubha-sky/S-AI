@@ -235,7 +235,7 @@ export default function FeaturesPage() {
         <div className="text-center mb-16">
           <h2 className="text-4xl font-bold mb-4">Built for Your Needs</h2>
           <p className="text-xl text-gray-400">
-            Whatever you do, SkyGPT has you covered
+            Whatever you do, xcore-ai has you covered
           </p>
         </div>
 
@@ -282,7 +282,7 @@ export default function FeaturesPage() {
         <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-3xl p-12 text-center border border-white/10">
           <h2 className="text-4xl font-bold mb-4">Ready to Get Started?</h2>
           <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-            Join thousands of users who are already using SkyGPT to boost their productivity
+            Join thousands of users who are already using xcore-ai to boost their productivity
           </p>
           <div className="flex gap-4 justify-center">
             <Link 

@@ -9,7 +9,7 @@ export default function Footer() {
         <div className="grid grid-cols-3 md:grid-cols-3 justify-between gap-8 py-5">
           {/* Brand Section */}
           <div className="grid justify-center">
-            <h3 className="text-white font-semibold text-lg mb-2">SkyGPT</h3>
+            <h3 className="text-white font-semibold text-lg mb-2">xcore-ai</h3>
             <p className="text-gray-400 text-sm mb-2">
               AI-powered chat platform.
             </p>
@@ -64,7 +64,7 @@ export default function Footer() {
         {/* Bottom Bar */}
         <div className="border-t border-white/10 pt-6 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-gray-500 text-sm text-center md:text-left">
-            © {new Date().getFullYear()} SkyGPT. All rights reserved.
+            © {new Date().getFullYear()} xcore-ai. All rights reserved.
           </p>
           <div className="flex gap-4">
             <Link to="/terms" className="text-gray-500 hover:text-white text-sm transition">

@@ -716,13 +716,16 @@ async def verify_payment(
         except Exception as usage_error:
             print(f"⚠️ Usage update error: {usage_error}")
         
-        # Invalidate caches
+        # ✅ CRITICAL: Invalidate ALL user caches (tier, limits, usage, sessions)
         try:
             from services.redis_cache import redis_cache
+            # Delete subscription tier cache (not just session cache)
+            await redis_cache.invalidate_user_tier_cache(user_id)
+            # Also clear session cache
             await redis_cache.invalidate_user_sessions(user_id)
-            print(f"✅ Cache invalidated")
-        except:
-            pass
+            print(f"✅ All caches invalidated for user {user_id}")
+        except Exception as e:
+            print(f"⚠️ Cache invalidation error: {e}")
         
         # ✅ Get plan limits for response
         plan_limits = payment_manager.get_plan_limits(tier)

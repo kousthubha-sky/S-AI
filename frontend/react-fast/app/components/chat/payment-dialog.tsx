@@ -134,7 +134,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage, use
         key: orderResponse.key_id,
         amount: orderResponse.amount,
         currency: orderResponse.currency,
-        name: 'SkyGPT',
+        name: 'Xcore-ai',
         description: orderResponse.plan_name,
         order_id: orderResponse.order_id,
         handler: async (response: any) => {
@@ -255,7 +255,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage, use
 
         {showLimitReachedMessage && (
           <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm">
-            You've reached your free tier limit. Upgrade to continue using SkyGPT!
+            You've reached your free tier limit. Upgrade to continue using Xcore-ai!
           </div>
         )}
 

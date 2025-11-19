@@ -8,7 +8,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-2xl font-semibold mb-4 text-white">1. Acceptance of Terms</h2>
             <p>
-              By accessing and using SkyGPT ("Service"), you accept and agree to be bound by the terms 
+              By accessing and using xcore-ai ("Service"), you accept and agree to be bound by the terms 
               and provision of this agreement. If you do not agree to these terms, please do not use our Service.
             </p>
           </section>
@@ -16,7 +16,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-2xl font-semibold mb-4 text-white">2. Description of Service</h2>
             <p>
-              SkyGPT provides AI-powered chat services with multiple language models. We offer both free 
+              xcore-ai provides AI-powered chat services with multiple language models. We offer both free 
               and premium subscription tiers with different features and usage limits.
             </p>
           </section>
@@ -73,7 +73,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-2xl font-semibold mb-4 text-white">7. Intellectual Property</h2>
             <p>
-              All content, features, and functionality are owned by SkyGPT and are protected by 
+              All content, features, and functionality are owned by xcore-ai and are protected by 
               international copyright, trademark, and other intellectual property laws.
             </p>
           </section>
@@ -89,7 +89,7 @@ export default function TermsOfService() {
           <section>
             <h2 className="text-2xl font-semibold mb-4 text-white">9. Limitation of Liability</h2>
             <p>
-              SkyGPT shall not be liable for any indirect, incidental, special, consequential, or punitive 
+              xcore-ai shall not be liable for any indirect, incidental, special, consequential, or punitive 
               damages resulting from your use of or inability to use the Service.
             </p>
           </section>
