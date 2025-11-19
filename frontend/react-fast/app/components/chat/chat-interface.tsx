@@ -790,7 +790,7 @@ export function ChatInterface({
         <div className="flex flex-col h-full w-full">
           {!hasStartedChat ? (
             // Before chat starts - just prompt box at bottom
-            <div className="flex-1 flex flex-col items-center justify-center pt-48 px-4 py-8">
+            <div className="flex-1 flex flex-col items-center justify-center pt-48 md:pt-64 px-4 py-8">
               <div className="w-full max-w-2xl">
                 <PromptInputBox
                   onSend={handleSendMessage}

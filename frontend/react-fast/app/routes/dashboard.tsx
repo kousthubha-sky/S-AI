@@ -521,9 +521,7 @@ function DashboardContent() {
           tier = 'pro_plus';
         }
       }
-      
-      console.log('📊 Subscription check:', { is_paid: usage.is_paid, tier_from_api: usage.tier, tier_set: tier });
-      
+        
       setUserTier(tier);
       
       if (usage.daily_message_count !== undefined) {
