@@ -75,30 +75,6 @@ const plans = [
     badge: "MOST POPULAR"
   },
   {
-    name: "Student Pro Plus",
-    price: 599,
-    period: "month",
-    description: "Unlimited power for professionals",
-    planId: "plan_RWzFoX6NgEM6MX",
-    features: [
-      { text: "Unlimited requests", included: true },
-      { text: "Unlimited tokens", included: true },
-      { text: "All premium AI models", included: true },
-      { text: "Priority support (2hr)", included: true },
-      { text: "API access", included: true },
-      { text: "Advanced analytics", included: true },
-      { text: "Custom integrations", included: true },
-      { text: "Dedicated account manager", included: true },
-      { text: "Early access to new features", included: true },
-    ],
-    cta: "Start Now",
-    ctaLink: "/login?plan=plan_RWzFoX6NgEM6MX",
-    popular: false,
-    color: "from-orange-500 to-red-500",
-    icon: Zap,
-    badge: null
-  },
-  {
     name: "Enterprise",
     price: null,
     period: "custom",
@@ -127,39 +103,39 @@ const comparisonFeatures = [
   {
     category: "Usage Limits",
     features: [
-      { name: "Daily/Monthly Requests", free: "50/day", starter: "500/month", pro: "2000/month", proPlus: "Unlimited", enterprise: "Unlimited" },
-      { name: "Token Limit", free: "50K/day", starter: "500K/month", pro: "2M/month", proPlus: "Unlimited", enterprise: "Unlimited" },
-      { name: "Chat History", free: "7 days", starter: "Forever", pro: "Forever", proPlus: "Forever", enterprise: "Forever" },
-      { name: "File Uploads", free: "❌", starter: "✅ 5MB", pro: "✅ 10MB", proPlus: "✅ 50MB", enterprise: "✅ Custom" },
+      { name: "Daily/Monthly Requests", free: "50/day", starter: "500/month", pro: "2000/month", enterprise: "Unlimited" },
+      { name: "Token Limit", free: "50K/day", starter: "500K/month", pro: "2M/month", enterprise: "Unlimited" },
+      { name: "Chat History", free: "7 days", starter: "Forever", pro: "Forever", enterprise: "Forever" },
+      { name: "File Uploads", free: "❌", starter: "✅ 5MB", pro: "✅ 10MB",  enterprise: "✅ Custom" },
     ]
   },
   {
     category: "AI Models",
     features: [
-      { name: "Basic Models", free: "✅", starter: "✅", pro: "✅", proPlus: "✅", enterprise: "✅" },
-      { name: "Llama 3.3 70B", free: "❌", starter: "✅", pro: "✅", proPlus: "✅", enterprise: "✅" },
-      { name: "Grok 4 & Gemini 2.5", free: "❌", starter: "❌", pro: "✅", proPlus: "✅", enterprise: "✅" },
-      { name: "Image Generation", free: "❌", starter: "❌", pro: "✅", proPlus: "✅", enterprise: "✅" },
+      { name: "Basic Models", free: "✅", starter: "✅", pro: "✅",  enterprise: "✅" },
+      { name: "Llama 3.3 70B", free: "❌", starter: "✅", pro: "✅",  enterprise: "✅" },
+      { name: "Grok 4 & Gemini 2.5", free: "❌", starter: "❌", pro: "✅",  enterprise: "✅" },
+      { name: "Image Generation", free: "❌", starter: "❌", pro: "✅",  enterprise: "✅" },
     ]
   },
   {
     category: "Features",
     features: [
-      { name: "Code Generation", free: "Basic", starter: "Advanced", pro: "Advanced", proPlus: "Advanced", enterprise: "Advanced" },
-      { name: "Document Analysis", free: "❌", starter: "✅", pro: "✅ Advanced", proPlus: "✅ Advanced", enterprise: "✅ Advanced" },
-      { name: "Export Chats", free: "❌", starter: "✅", pro: "✅", proPlus: "✅", enterprise: "✅" },
-      { name: "Custom Prompts", free: "❌", starter: "❌", pro: "✅", proPlus: "✅", enterprise: "✅" },
-      { name: "API Access", free: "❌", starter: "❌", pro: "❌", proPlus: "✅", enterprise: "✅ Full" },
-      { name: "Custom Integrations", free: "❌", starter: "❌", pro: "❌", proPlus: "❌", enterprise: "✅" },
+      { name: "Code Generation", free: "Basic", starter: "Advanced", pro: "Advanced",  enterprise: "Advanced" },
+      { name: "Document Analysis", free: "❌", starter: "✅", pro: "✅ Advanced",enterprise: "✅ Advanced" },
+      { name: "Export Chats", free: "❌", starter: "✅", pro: "✅",  enterprise: "✅" },
+      { name: "Custom Prompts", free: "❌", starter: "❌", pro: "✅",  enterprise: "✅" },
+      { name: "API Access", free: "❌", starter: "❌", pro: "❌",  enterprise: "✅ Full" },
+      { name: "Custom Integrations", free: "❌", starter: "❌", pro: "❌", enterprise: "✅" },
     ]
   },
   {
     category: "Support & SLA",
     features: [
-      { name: "Response Time", free: "48 hours", starter: "24 hours", pro: "24 hours", proPlus: "2 hours", enterprise: "1 hour" },
-      { name: "Support Channels", free: "Email", starter: "Email", pro: "Email", proPlus: "Email + Chat", enterprise: "Email + Chat + Phone" },
-      { name: "Dedicated Manager", free: "❌", starter: "❌", pro: "❌", proPlus: "✅", enterprise: "✅ Full" },
-      { name: "SLA Guarantee", free: "❌", starter: "❌", pro: "❌", proPlus: "❌", enterprise: "✅ 99.9%" },
+      { name: "Response Time", free: "48 hours", starter: "24 hours", pro: "24 hours",  enterprise: "1 hour" },
+      { name: "Support Channels", free: "Email", starter: "Email", pro: "Email", enterprise: "Email + Chat + Phone" },
+      { name: "Dedicated Manager", free: "❌", starter: "❌", pro: "❌", enterprise: "✅ Full" },
+      { name: "SLA Guarantee", free: "❌", starter: "❌", pro: "❌", enterprise: "✅ 99.9%" },
     ]
   }
 ];
@@ -222,7 +198,7 @@ export default function PricingPage() {
 
       {/* Pricing Cards */}
       <div className="max-w-7xl mx-auto px-4 -mt-8 sm:px-6 lg:px-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {plans.map((plan, index) => {
             const Icon = plan.icon;
             return (
@@ -316,7 +292,6 @@ export default function PricingPage() {
                 <th className="px-6 py-4 text-center font-semibold">Free</th>
                 <th className="px-6 py-4 text-center font-semibold">Starter</th>
                 <th className="px-6 py-4 text-center font-semibold">Pro</th>
-                <th className="px-6 py-4 text-center font-semibold">Pro Plus</th>
                 <th className="px-6 py-4 text-center font-semibold">Enterprise</th>
               </tr>
             </thead>
@@ -337,7 +312,7 @@ export default function PricingPage() {
                       <td className="px-6 py-4 text-center text-gray-400 text-sm">{feature.free}</td>
                       <td className="px-6 py-4 text-center text-blue-400 text-sm">{feature.starter}</td>
                       <td className="px-6 py-4 text-center text-purple-400 text-sm">{feature.pro}</td>
-                      <td className="px-6 py-4 text-center text-orange-400 text-sm">{feature.proPlus}</td>
+                      
                       <td className="px-6 py-4 text-center text-indigo-400 text-sm">{feature.enterprise}</td>
                     </tr>
                   ))}
