@@ -8,7 +8,7 @@ const plans = [
     name: "Free",
     price: 0,
     period: "forever",
-    description: "Perfect for trying out SkyGPT",
+    description: "Perfect for trying out Xcore-ai",
     features: [
       { text: "50 requests per day", included: true },
       { text: "50K tokens per day", included: true },
@@ -115,7 +115,7 @@ const plans = [
       { text: "Priority onboarding", included: true },
     ],
     cta: "Contact Sales",
-    ctaLink: "mailto:sales@skygpt.com",
+    ctaLink: "mailto:kousthubha@xcore-ai.com",
     popular: false,
     color: "from-indigo-500 to-blue-500",
     icon: Sparkles,
@@ -190,7 +190,7 @@ const faqs = [
     answer: "Yes! All paid plans come with a 7-day money-back guarantee. If you're not satisfied for any reason, contact us within 7 days for a full refund."
   },
   {
-    question: "Can I use SkyGPT for commercial projects?",
+    question: "Can I use Xcore-ai for commercial projects?",
     answer: "Free tier is for personal use only. All paid plans (Starter, Pro, Pro Plus) allow commercial use. Check our Terms of Service for specific guidelines."
   },
   {
@@ -390,7 +390,7 @@ export default function PricingPage() {
         <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 rounded-3xl p-12 text-center border border-white/10">
           <h2 className="text-4xl font-bold mb-4">Ready to Get Started?</h2>
           <p className="text-xl text-gray-300 mb-8 max-w-2xl mx-auto">
-            Join thousands of students already boosting their productivity with SkyGPT
+            Join thousands of students already boosting their productivity with Xcore-ai
           </p>
           <div className="flex gap-4 justify-center flex-wrap">
             <Link 

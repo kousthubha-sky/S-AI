@@ -87,7 +87,7 @@ export function SignInPage() {
           {/* Header */}
           <div className="flex items-center gap-2 lg:hidden">
             <Grid2x2PlusIcon className="size-6 text-white" />
-            <p className="text-xl font-semibold text-white">SKYGPT</p>
+            <p className="text-xl font-semibold text-white">XCORE-AI</p>
           </div>
           
           <div className="flex flex-col space-y-2">
@@ -95,7 +95,7 @@ export function SignInPage() {
               Sign In or Join Now!
             </h1>
             <p className="text-base text-gray-400">
-              Login or create your SKYGPT account.
+              Login or create your Xcore-ai account.
             </p>
           </div>
 
@@ -205,7 +205,7 @@ export function SignInPage() {
         
         <div className="z-20 flex items-center gap-2">
           <Grid2x2PlusIcon className="size-6 text-white" />
-          <p className="text-xl font-semibold text-white">SKYGPT</p>
+          <p className="text-xl font-semibold text-white">XCORE-AI</p>
         </div>
         
         <div className="z-20 mt-auto">

@@ -1,4 +1,4 @@
-# S-AI SAAS Platform
+# Xcore-ai SAAS Platform
 
 A comprehensive full-stack SAAS application featuring AI-powered chat functionality, user authentication, and payment processing.
 
@@ -307,4 +307,4 @@ graph TB
 
 ---
 
-Built with ❤️ by the S-AI Team
+Built with ❤️ by the Xcore-ai Team

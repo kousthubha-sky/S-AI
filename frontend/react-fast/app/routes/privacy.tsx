@@ -120,7 +120,7 @@ export default function PrivacyPolicy() {
             <h2 className="text-2xl font-semibold mb-4 text-white">10. Contact Us</h2>
             <p>
               For privacy-related questions or to exercise your rights, contact us at:<br />
-              Email: privacy@skygpt.com<br />
+              Email: privacy@xcore-ai.com<br />
               Address: Bengaluru, Karnataka, India
             </p>
           </section>

@@ -45,13 +45,13 @@ export default function Footer() {
             <h4 className="text-white font-semibold mb-3">Support</h4>
             <ul className="space-y-2">
               <li>
-                <a href="mailto:support@skygpt.com" className="text-gray-400 hover:text-white transition text-sm">
-                  support@skygpt.com
+                <a href="mailto:kousthubha@xcore-ai.com" className="text-gray-400 hover:text-white transition text-sm">
+                  support@xcore-ai.com
                 </a>
               </li>
               <li>
-                <a href="mailto:privacy@skygpt.com" className="text-gray-400 hover:text-white transition text-sm">
-                  privacy@skygpt.com
+                <a href="mailto:kousthubha@xcore-ai.com" className="text-gray-400 hover:text-white transition text-sm">
+                  privacy@xcore-ai.com
                 </a>
               </li>
               <li className="text-gray-400 text-sm">

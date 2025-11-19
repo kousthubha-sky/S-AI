@@ -98,7 +98,7 @@ export default function TermsOfService() {
             <h2 className="text-2xl font-semibold mb-4 text-white">10. Contact Information</h2>
             <p>
               For questions about these Terms, please contact us at:<br />
-              Email: support@skygpt.com<br />
+              Email: kousthubha@xcore-ai.com<br />
               Location: Bengaluru, Karnataka, India
             </p>
           </section>

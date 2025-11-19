@@ -6,6 +6,7 @@ import { Skeleton } from "~/components/ui/skeleton";
 import { ChatInterface } from "~/components/chat/chat-interface";
 import { PaymentDialog } from "~/components/chat/payment-dialog";
 import { useAuthApi } from "~/hooks/useAuthApi";
+import { useLimitWarnings } from "~/hooks/useLimitWarnings";
 import { useToast } from "~/components/ui/toast";
 import CardNav from "~/components/CardNav";
 import PricingSection4 from "~/components/chat/pricing-section-3";
@@ -36,7 +37,7 @@ import { Sidebar, SidebarBody, SidebarLink, useSidebar } from "~/components/ui/s
 import "@fontsource/inter"
 
 // 🔧 SESSION STORAGE KEY
-const SESSION_STORAGE_KEY = 'skygpt_current_session';
+const SESSION_STORAGE_KEY = 'xcore-ai_current_session';
 
 interface ChatSession {
   id: string;
@@ -75,7 +76,7 @@ function SidebarLogoSection() {
         }}
         className="text-lg font-bold text-neutral-800 dark:text-neutral-100 whitespace-pre"
       >
-        SkyGPT <span className="text-[10px] bg-yellow-400 text-black px-1 py-0.5 rounded font-semibold ml-1">Beta</span>
+        Xcore-ai <span className="text-[10px] bg-yellow-400 text-black px-1 py-0.5 rounded font-semibold ml-1">Beta</span>
       </motion.span>
     </div>
   );
@@ -330,6 +331,9 @@ function DashboardContent() {
   const [isLoadingSubscription, setIsLoadingSubscription] = useState<boolean>(true);
   const [open, setOpen] = useState(false);
 
+  // 🔧 Setup limit warnings hook - checks for limit thresholds every 60 seconds
+  useLimitWarnings(isAuthenticated, 60000);
+
   // 🔧 FIX: Persist currentSessionId to sessionStorage
   useEffect(() => {
     if (currentSessionId) {
@@ -526,9 +530,57 @@ function DashboardContent() {
         setMessageCount(usage.daily_message_count);
       }
       
-      if (tier === 'free' && usage.daily_message_count >= 20) {
-        const remaining = 25 - usage.daily_message_count;
-        showToast(`You have ${remaining} messages remaining today`, 'warning');
+      // Enhanced limit warnings
+      if (tier === 'free') {
+        const limit = 50;
+        const current = usage.daily_message_count || 0;
+        const remaining = limit - current;
+        const percentageUsed = (current / limit) * 100;
+        
+        if (current >= limit) {
+          showToast('🚫 Daily limit reached! (50 requests/day) Upgrade to continue.', 'error', 6000);
+        } else if (percentageUsed >= 90) {
+          showToast(`⚠️ You\'re almost out of requests! Only ${remaining} left today.`, 'warning', 5000);
+        } else if (percentageUsed >= 75) {
+          showToast(`💡 You have ${remaining} messages remaining today. Consider upgrading!`, 'info', 4000);
+        }
+      } else if (tier === 'starter') {
+        const limit = 500;
+        const current = usage.monthly_message_count || usage.prompt_count || 0;
+        const remaining = limit - current;
+        const percentageUsed = (current / limit) * 100;
+        
+        if (current >= limit) {
+          showToast('🚫 Monthly limit reached! (500 requests/month) Upgrade to Pro.', 'error', 6000);
+        } else if (percentageUsed >= 90) {
+          showToast(`⚠️ Almost at monthly limit! Only ${remaining} requests left.`, 'warning', 5000);
+        } else if (percentageUsed >= 75) {
+          showToast(`💡 You\'ve used ${percentageUsed.toFixed(0)}% of your monthly quota.`, 'info', 4000);
+        }
+      } else if (tier === 'pro') {
+        const limit = 2000;
+        const current = usage.monthly_message_count || usage.prompt_count || 0;
+        const remaining = limit - current;
+        const percentageUsed = (current / limit) * 100;
+        
+        if (current >= limit) {
+          showToast('🚫 Monthly limit reached! (2000 requests/month) Upgrade to Pro Plus.', 'error', 6000);
+        } else if (percentageUsed >= 90) {
+          showToast(`⚠️ Almost at monthly limit! Only ${remaining} requests left.`, 'warning', 5000);
+        } else if (percentageUsed >= 75) {
+          showToast(`💡 You\'ve used ${percentageUsed.toFixed(0)}% of your monthly quota.`, 'info', 4000);
+        }
+      }
+      // Pro Plus has no limits, no warning needed
+      
+      // Subscription expiring warning
+      if (usage.subscription && usage.subscription.days_remaining !== undefined) {
+        const daysRemaining = usage.subscription.days_remaining;
+        if (daysRemaining <= 7 && daysRemaining > 0) {
+          showToast(`⏰ Your subscription expires in ${daysRemaining} day(s). Renew now!`, 'warning', 5000);
+        } else if (daysRemaining <= 0) {
+          showToast('🔔 Your subscription has expired. Renew to continue!', 'warning', 5000);
+        }
       }
       
       if (usage.last_reset_date) {
@@ -621,7 +673,7 @@ function DashboardContent() {
         <div className="fixed top-0 left-0 right-0 z-50">
           <CardNav
             logo="/favicon.ico"
-            logoAlt="SkyGPT Logo"
+            logoAlt="Xcore-ai Logo"
             items={cardNavItems}
             baseColor="#ffffff"
             menuColor="#000000"

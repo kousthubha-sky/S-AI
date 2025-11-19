@@ -140,34 +140,51 @@ async def chat(chat_request: ChatRequest, payload: dict = Depends(verify_token))
                 )
             print(f"✅ Image generation feature enabled for {tier} tier")
         
-        # ✅ Check usage limits based on tier
+        # ✅ Check usage limits based on tier (with approaching warnings)
         if tier == "free":
             # Free tier: 50 requests per day
             FREE_TIER_DAILY_LIMIT = 50
+            usage_percent = (usage.daily_message_count / FREE_TIER_DAILY_LIMIT) * 100
+            
             if usage.daily_message_count >= FREE_TIER_DAILY_LIMIT:
                 print(f"❌ Daily limit reached")
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
                     detail="Daily limit reached (50 requests/day). Upgrade to continue."
                 )
+            elif usage_percent >= 90:
+                # Log warning but allow request
+                print(f"⚠️ Approaching daily limit: {usage.daily_message_count}/{FREE_TIER_DAILY_LIMIT} ({usage_percent:.0f}%)")
+        
         elif tier == "starter":
             # Starter tier: 500 requests per month
             STARTER_MONTHLY_LIMIT = 500
+            usage_percent = (usage.prompt_count / STARTER_MONTHLY_LIMIT) * 100
+            
             if usage.prompt_count >= STARTER_MONTHLY_LIMIT:
                 print(f"❌ Monthly limit reached")
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
                     detail="Monthly limit reached (500 requests/month). Upgrade to Pro for 2000 requests."
                 )
+            elif usage_percent >= 90:
+                # Log warning but allow request
+                print(f"⚠️ Approaching monthly limit: {usage.prompt_count}/{STARTER_MONTHLY_LIMIT} ({usage_percent:.0f}%)")
+        
         elif tier == "pro":
             # Pro tier: 2000 requests per month
             PRO_MONTHLY_LIMIT = 2000
+            usage_percent = (usage.prompt_count / PRO_MONTHLY_LIMIT) * 100
+            
             if usage.prompt_count >= PRO_MONTHLY_LIMIT:
                 print(f"❌ Monthly limit reached")
                 raise HTTPException(
                     status_code=status.HTTP_402_PAYMENT_REQUIRED,
                     detail="Monthly limit reached (2000 requests/month). Upgrade to Pro Plus for unlimited."
                 )
+            elif usage_percent >= 90:
+                # Log warning but allow request
+                print(f"⚠️ Approaching monthly limit: {usage.prompt_count}/{PRO_MONTHLY_LIMIT} ({usage_percent:.0f}%)")
         # pro_plus tier: unlimited, no check needed
         
         # Check for API key

@@ -12,7 +12,7 @@ export default function AboutPage() {
         <div className="relative max-w-7xl mx-auto px-4 py-24 sm:px-6 lg:px-8">
           <div className="text-center">
             <h1 className="text-5xl sm:text-6xl font-bold mb-6">
-              About SkyGPT
+              About Xcore-ai
               <span className="block text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">
                 AI-Powered Chat Platform
               </span>
@@ -30,7 +30,7 @@ export default function AboutPage() {
           <div>
             <h2 className="text-3xl font-bold mb-6">Our Mission</h2>
             <p className="text-gray-300 mb-4">
-              At SkyGPT, we believe that everyone should have access to cutting-edge AI technology. 
+              At Xcore-ai, we believe that everyone should have access to cutting-edge AI technology. 
               We've built a platform that brings together the best AI models from around the world 
               in one simple, affordable interface.
             </p>
@@ -59,8 +59,8 @@ export default function AboutPage() {
                   <Mail className="w-5 h-5 text-purple-400 flex-shrink-0 mt-1" />
                   <div>
                     <p className="font-medium">Business Email</p>
-                    <a href="mailto:indianthunder56@gmail.com" className="text-blue-400 hover:text-blue-300">
-                      support@skygpt.com
+                    <a href="mailto:kousthubha@xcore-ai.com" className="text-blue-400 hover:text-blue-300">
+                      support@xcore-ai.com
                     </a>
                   </div>
                 </div>
@@ -94,8 +94,8 @@ export default function AboutPage() {
                 <Mail className="w-6 h-6 text-blue-400" />
               </div>
               <h3 className="font-semibold mb-2">General Support</h3>
-              <a href="mailto:indianthunder56@gmail..com" className="text-blue-400 hover:text-blue-300">
-                support@skygpt.com
+              <a href="mailto:kousthubha@xcore-ai.com" className="text-blue-400 hover:text-blue-300">
+                support@xcore-ai.com
               </a>
               <p className="text-sm text-gray-400 mt-2">
                 For general inquiries and support
@@ -107,8 +107,8 @@ export default function AboutPage() {
                 <MessageCircle className="w-6 h-6 text-purple-400" />
               </div>
               <h3 className="font-semibold mb-2">Privacy Concerns</h3>
-              <a href="mailto:indianthunder56@gmail.com" className="text-purple-400 hover:text-purple-300">
-                privacy@skygpt.com
+              <a href="mailto:kousthubha@xcore-ai.com" className="text-purple-400 hover:text-purple-300">
+                privacy@xcore-ai.com
               </a>
               <p className="text-sm text-gray-400 mt-2">
                 For data and privacy related queries
@@ -120,8 +120,8 @@ export default function AboutPage() {
                 <Mail className="w-6 h-6 text-green-400" />
               </div>
               <h3 className="font-semibold mb-2">Billing & Refunds</h3>
-              <a href="mailto:indianthunder56@gmail.com" className="text-green-400 hover:text-green-300">
-                billing@skygpt.com
+              <a href="mailto:kousthubha@xcore-ai.com" className="text-green-400 hover:text-green-300">
+                billing@xcore-ai.com
               </a>
               <p className="text-sm text-gray-400 mt-2">
                 For payment and refund requests

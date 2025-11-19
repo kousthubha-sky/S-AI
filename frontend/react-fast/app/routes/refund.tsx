@@ -51,7 +51,7 @@ export default function RefundPolicy() {
             <h2 className="text-2xl font-semibold mb-4 text-white">3. Refund Process</h2>
             <p className="mb-4">To request a refund:</p>
             <ol className="list-decimal ml-6 space-y-2">
-              <li>Email us at support@skygpt.com with your transaction details</li>
+              <li>Email us at kousthubha@xcore-ai.com with your transaction details</li>
               <li>Include your account email and reason for refund request</li>
               <li>Provide transaction ID or payment receipt</li>
               <li>We will review your request within 2-3 business days</li>
@@ -131,7 +131,7 @@ export default function RefundPolicy() {
             <h2 className="text-2xl font-semibold mb-4 text-white">10. Contact for Refunds</h2>
             <p>
               For refund requests or questions:<br />
-              Email: support@skygpt.com<br />
+              Email: kousthubha@xcore-ai.com<br />
               Subject: Refund Request - [Your Email]<br />
               Response Time: Within 48 hours
             </p>

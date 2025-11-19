@@ -1,6 +1,6 @@
 // components/chat/chat-interface.tsx
 import { useState, useRef, useEffect, type JSX } from "react"
-import { AlertCircle, Copy, Check, MessageSquare, Brain } from "lucide-react"
+import { AlertCircle, Copy, Check, MessageSquare, Brain, AlertTriangle, Zap } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { Skeleton } from "~/components/ui/skeleton"
 import { cn } from "~/lib/utils"
@@ -695,9 +695,29 @@ export function ChatInterface({
         if (error?.message?.includes('Daily limit reached')) {
           setMessages(prev => prev.filter(msg => msg.id !== tempAssistantMessage.id));
         }
+        
+        // Show toast notifications for different limit types
+        const errorMessage = error?.message || '';
+        if (errorMessage.includes('Daily limit reached')) {
+          showToast('🚫 Daily limit reached (50 requests/day). Upgrade to continue!', 'warning', 5000);
+        } else if (errorMessage.includes('Monthly limit reached')) {
+          if (errorMessage.includes('2000')) {
+            showToast('🚫 Monthly limit reached (2000 requests). Upgrade to Pro Plus!', 'warning', 5000);
+          } else {
+            showToast('🚫 Monthly limit reached (500 requests). Upgrade to Pro for more!', 'warning', 5000);
+          }
+        } else if (errorMessage.includes('not available')) {
+          showToast('🔒 This feature requires a higher tier plan', 'warning', 5000);
+        } else {
+          showToast('💳 Upgrade required to continue using this feature', 'warning', 5000);
+        }
+        
         setShowPaymentDialog(true)
         return
       }
+      
+      // Show generic error toast
+      showToast('❌ An error occurred. Please try again.', 'error');
       
       setMessages(prev => prev.map(msg => 
         msg.id === tempAssistantMessage.id ? { ...msg, content: 'Sorry, I encountered an error. Please try again.', isLoading: false } : msg
@@ -741,7 +761,7 @@ export function ChatInterface({
           <div className="flex-1 flex flex-col h-full overflow-hidden relative">
             <div className="absolute inset-0">
               <HeroGeometric 
-                badge="Sky-GPT(Beta)"
+                badge="Xcore-ai(Beta)"
                 title1="Elevate Your"
                 title2="AI experience"
               />

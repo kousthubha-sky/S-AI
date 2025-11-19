@@ -33,7 +33,7 @@ export const meta: Route.MetaFunction = () => {
   return [
     // Primary Meta Tags
     { 
-      title: "SkyGPT (Beta) - Free AI Chat with Claude, ChatGPT, Gemini & More | Best AI Assistant" 
+      title: "Xcore-ai (Beta) - Free AI Chat with Claude, ChatGPT, Gemini & More | Best AI Assistant" 
     },
     { 
       name: "description", 
@@ -48,18 +48,18 @@ export const meta: Route.MetaFunction = () => {
     
     // Open Graph / Facebook
     { property: "og:type", content: "website" },
-    { property: "og:title", content: "SkyGPT - Free AI Chat Alternative to ChatGPT & Claude" },
+    { property: "og:title", content: "Xcore-ai - Free AI Chat Alternative to ChatGPT & Claude" },
     { 
       property: "og:description", 
       content: "Access 10+ AI models including Claude, Gemini, Llama 4, Grok 4. Free AI chat with code generation, multilingual support & more." 
     },
     { property: "og:url", content: "https://s-ai-blush.verce.app" },
     { property: "og:image", content: "https://s-ai-blush.verce.app/og-image.png" },
-    { property: "og:site_name", content: "SkyGPT" },
+    { property: "og:site_name", content: "Xcore-ai" },
     
     // Twitter Card
     { name: "twitter:card", content: "summary_large_image" },
-    { name: "twitter:title", content: "SkyGPT - Best Free Alternative to ChatGPT & Claude AI" },
+    { name: "twitter:title", content: "Xcore-ai - Best Free Alternative to ChatGPT & Claude AI" },
     { 
       name: "twitter:description", 
       content: "Free AI chat with 10+ models. Better than ChatGPT, Claude, and Gemini. Try now!" 
@@ -69,7 +69,7 @@ export const meta: Route.MetaFunction = () => {
     // Additional SEO Tags
     { name: "robots", content: "index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" },
     { name: "googlebot", content: "index, follow" },
-    { name: "author", content: "SkyGPT" },
+    { name: "author", content: "Xcore-ai" },
     { name: "language", content: "English" },
     { name: "revisit-after", content: "7 days" },
     
@@ -78,7 +78,7 @@ export const meta: Route.MetaFunction = () => {
     { name: "theme-color", content: "#0f0f0f" },
     
     // Schema.org for Google+ (JSON-LD will be added separately)
-    { itemProp: "name", content: "SkyGPT - Free AI Chat Platform" },
+    { itemProp: "name", content: "Xcore-ai - Free AI Chat Platform" },
     { itemProp: "description", content: "Access multiple AI models in one platform" },
     
     // Canonical URL
@@ -103,7 +103,7 @@ export function Layout({ children }: { children: React.ReactNode }) {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "WebApplication",
-              "name": "SkyGPT",
+              "name": "Xcore-ai",
               "applicationCategory": "BusinessApplication",
               "operatingSystem": "Web Browser",
               "description": "AI-powered chat platform with access to Claude, ChatGPT, Gemini, Llama 4, and more",
@@ -135,16 +135,16 @@ export function Layout({ children }: { children: React.ReactNode }) {
             __html: JSON.stringify({
               "@context": "https://schema.org",
               "@type": "Organization",
-              "name": "SkyGPT",
+              "name": "Xcore-ai",
               "url": "https://s-ai-blush.verce.app",
               "logo": "https://s-ai-blush.verce.app/logo.png",
               "sameAs": [
-                "https://twitter.com/skygpt",
-                "https://linkedin.com/company/skygpt"
+                "https://twitter.com/xcore-ai",
+                "https://linkedin.com/company/xcore-ai"
               ],
               "contactPoint": {
                 "@type": "ContactPoint",
-                "email": "support@skygpt.com",
+                "email": "support@xcore-ai.com",
                 "contactType": "Customer Support"
               }
             })
@@ -161,26 +161,26 @@ export function Layout({ children }: { children: React.ReactNode }) {
               "mainEntity": [
                 {
                   "@type": "Question",
-                  "name": "Is SkyGPT better than ChatGPT?",
+                  "name": "Is Xcore-ai better than ChatGPT?",
                   "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "SkyGPT gives you access to multiple AI models including Claude, ChatGPT, Gemini, and more in one platform. You can choose the best model for each task."
+                    "text": "Xcore-ai gives you access to multiple AI models including Claude, ChatGPT, Gemini, and more in one platform. You can choose the best model for each task."
                   }
                 },
                 {
                   "@type": "Question",
-                  "name": "Is SkyGPT free?",
+                  "name": "Is Xcore-ai free?",
                   "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "Yes! SkyGPT offers a free plan with 25 messages per day and access to basic AI models."
+                    "text": "Yes! Xcore-ai offers a free plan with 25 messages per day and access to basic AI models."
                   }
                 },
                 {
                   "@type": "Question",
-                  "name": "What AI models does SkyGPT support?",
+                  "name": "What AI models does Xcore-ai support?",
                   "acceptedAnswer": {
                     "@type": "Answer",
-                    "text": "SkyGPT supports 10+ AI models including Llama 4, Gemini 2.5, Grok 4, DeepSeek, Qwen 3, and more."
+                    "text": "Xcore-ai supports 10+ AI models including Llama 4, Gemini 2.5, Grok 4, DeepSeek, Qwen 3, and more."
                   }
                 }
               ]

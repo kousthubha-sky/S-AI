@@ -363,7 +363,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage, use
             <div className="border-t border-amber-200 pt-4 mt-4">
               <p className="text-xs text-amber-600 font-medium mb-3">Get in touch with our team</p>
               <a
-                href="mailto:support@skygpt.com"
+                href="mailto:kousthubha@xcore-ai.com"
                 className="inline-block w-full text-center bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white font-medium py-2 rounded-lg transition-all"
               >
                 Contact Sales

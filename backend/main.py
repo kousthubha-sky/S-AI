@@ -231,7 +231,7 @@ async def get_pricing():
         "price": 0,
         "currency": "INR",
         "period": "forever",
-        "description": "Perfect for trying out SkyGPT",
+        "description": "Perfect for trying out Xcore-ai",
         "limits": {
             "requests_per_day": 50,
             "tokens_per_day": 50000,
@@ -285,7 +285,7 @@ async def get_pricing():
             "SLA guarantee",
             "Dedicated account manager"
         ],
-        "contact_sales": "sales@skygpt.com",
+        "contact_sales": "sales@xcore-ai.com",
         "popular": False
     })
     
