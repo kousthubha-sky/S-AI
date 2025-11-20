@@ -576,9 +576,7 @@ function DashboardContent() {
         const daysRemaining = usage.subscription.days_remaining;
         if (daysRemaining <= 7 && daysRemaining > 0) {
           showToast(`⏰ Your subscription expires in ${daysRemaining} day(s). Renew now!`, 'warning', 5000);
-        } else if (daysRemaining <= 0) {
-          showToast('🔔 Your subscription has expired. Renew to continue!', 'warning', 5000);
-        }
+        } 
       }
       
       if (usage.last_reset_date) {
