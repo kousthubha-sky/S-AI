@@ -31,9 +31,9 @@ return (
       audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
       scope: 'openid profile email offline_access'
     }}
-    cacheLocation="localstorage"              // <-- MEMORY instead of localstorage
+    cacheLocation="memory"              // <-- MEMORY instead of localstorage
     useRefreshTokens={true}
-    useRefreshTokensFallback={true}    // <-- prefer real refresh tokens; fallback off
+    useRefreshTokensFallback={false}    // <-- prefer real refresh tokens; fallback off
     onRedirectCallback={onRedirectCallback}
   >
     <AuthInitializer>
