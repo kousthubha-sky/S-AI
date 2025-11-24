@@ -26,11 +26,12 @@ class InputValidator:
         r"(xp_|sp_cmdshell)",  # Stored procedure injection
     ]
     
-    # ✅ XSS patterns - Only flag actual script injection, not HTML code discussion
+    # ✅ XSS patterns - Only flag actual malicious script injection
+    # These patterns are designed to catch actual XSS attempts, not code discussions
     XSS_PATTERNS = [
-        r"<script[^>]*>",  # Actual script tags (not discussion about <script>)
-        r"javascript:",  # JavaScript protocol handler
-        r"on(load|error|click|change|focus|blur|submit|mouseenter|mouseleave)\s*=",  # Event handlers
+        r"<script[^>]*>[^<]*</script>",  # Complete script tags with content
+        r"javascript:\s*\w+",  # JavaScript protocol with actual code (e.g., javascript:alert)
+        r"<\w+[^>]*\s+on(load|error|click|change|focus|blur|submit|mouseenter|mouseleave)\s*=\s*['\"]",  # Event handlers in HTML tags with quotes
     ]
     
     @staticmethod
