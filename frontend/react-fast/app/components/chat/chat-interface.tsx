@@ -301,17 +301,60 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
     let inCodeBlock = false;
     let currentCodeBlock: string[] = [];
     let currentCodeLanguage = 'text';
+    let tableRows: string[] = [];
+    let inTable = false;
 
     const addCodeBlock = () => {
       if (currentCodeBlock.length > 0) {
         elements.push(
-          <CodeBlock 
-            key={`code-${elements.length}`} 
-            code={currentCodeBlock.join('\n')} 
+          <CodeBlock
+            key={`code-${elements.length}`}
+            code={currentCodeBlock.join('\n')}
             language={currentCodeLanguage}
           />
         );
         currentCodeBlock = [];
+      }
+    };
+
+    const addTable = () => {
+      if (tableRows.length > 0) {
+        // Filter out separator rows (rows that contain only dashes and colons)
+        const dataRows = tableRows.filter(row => {
+          const cells = row.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
+          return !cells.every(cell => /^:?-+:?$/.test(cell) || /^-+$/.test(cell));
+        });
+
+        if (dataRows.length > 0) {
+          elements.push(
+            <div key={`table-${elements.length}`} className="my-3 overflow-x-auto">
+              <table className="min-w-full border-collapse border border-gray-600 text-sm">
+                <tbody>
+                  {dataRows.map((row, rowIndex) => {
+                    const cells = row.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
+                    if (cells.length === 0) return null;
+
+                    return (
+                      <tr key={rowIndex} className={rowIndex === 0 ? 'bg-gray-700' : ''}>
+                        {cells.map((cell, cellIndex) => (
+                          <td key={cellIndex} className="border border-gray-600 px-3 py-2 text-gray-100">
+                            {rowIndex === 0 ? (
+                              <strong className="text-white">{cell}</strong>
+                            ) : (
+                              <span dangerouslySetInnerHTML={{ __html: parseMarkdown(cell) }} />
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        tableRows = [];
+        inTable = false;
       }
     };
 
@@ -340,6 +383,24 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
       if (inCodeBlock) {
         currentCodeBlock.push(line);
         return;
+      }
+
+      // Handle markdown tables
+      if (line.trim().startsWith('|') && line.includes('|')) {
+        const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
+        if (cells.length >= 2) { // Only consider it a table if there are at least 2 columns
+          if (!inTable) {
+            inTable = true;
+            tableRows = [];
+          }
+          tableRows.push(line);
+          return;
+        }
+      }
+
+      // If we were in a table but this line doesn't continue it, finish the table
+      if (inTable && (!line.trim().startsWith('|') || !line.includes('|'))) {
+        addTable();
       }
 
       if (line.match(/^#{1,6}\s/)) {
@@ -433,6 +494,12 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
     });
 
     addCodeBlock();
+
+    // Handle any remaining table
+    if (inTable) {
+      addTable();
+    }
+
     return elements;
   };
 
@@ -453,7 +520,7 @@ export function ChatInterface({
   showPaymentDialog, setShowPaymentDialog, onMenuClick, isAuthed,
   isSidebarCollapsed = false
 }: ChatInterfaceProps) {
-  const { user: auth0User, isLoading: auth0Loading, isAuthenticated } = useAuth0();
+  const { getAccessTokenSilently, user: auth0User, isLoading: auth0Loading, isAuthenticated } = useAuth0();
   const { fetchWithAuth } = useAuthApi();
   const { showToast } = useToast();
   
@@ -594,42 +661,85 @@ export function ChatInterface({
         } catch (error) {
           messageContent = `Failed to fetch news: ${error instanceof Error ? error.message : 'Unknown error'}\n\nTry searching for different keywords or check your internet connection.`;
         }
-      } else {
-        const apiMessages = [...messages, userMessage]
-          .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
-          .map(msg => ({ role: msg.role, content: msg.content }))
+       } else {
+         // Use streaming for real-time token display
+         const apiMessages = [...messages, userMessage]
+           .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
+           .map(msg => ({ role: msg.role, content: msg.content }))
 
-        if (attachments.length > 0) {
-          apiMessages[apiMessages.length - 1].content += '\n' + 
-            attachments.map(a => `[Attachment: ${a.name}]`).join('\n')
-        }
+         if (attachments.length > 0) {
+           apiMessages[apiMessages.length - 1].content += '\n' +
+             attachments.map(a => `[Attachment: ${a.name}]`).join('\n')
+         }
 
-        const response = await fetchWithAuth(
-          `${import.meta.env.VITE_API_BASE_URL}/api/chat`, 
-          {
-            method: 'POST',
-            body: JSON.stringify({ 
-              messages: apiMessages, 
-              model: modelToUse, 
-              temperature: 0.7, 
-              max_tokens: 1000,
-              thinking: isThinkingRequest
-            }),
-            signal: abortControllerRef.current.signal
-          }
-        )
+         let streamingContent = '';
+         let streamingUsage: any = null;
+         let streamingImages: ImageData[] = [];
 
-        messageContent = response.message || response.data?.message || 
-                                 response.content || response.choices?.[0]?.message?.content || 
-                                 response.result;
-        
-        if (!messageContent) {
-          throw new Error('No message content received from API');
-        }
+         const cleanup = await ChatService.streamChat(
+           apiMessages,
+           modelToUse,
+           0.7,
+           1000,
+           isThinkingRequest,
+           (token: string) => {
+             // Accumulate tokens and update the message in real-time
+             streamingContent += token;
+             setMessages(prev => prev.map(msg =>
+               msg.id === tempAssistantMessage.id
+                 ? { ...msg, content: streamingContent, isLoading: false }
+                 : msg
+             ));
+           },
+           (usage?: any, images?: ImageData[]) => {
+             // Stream completed
+             streamingUsage = usage;
+             streamingImages = images || [];
+             setMessages(prev => prev.map(msg =>
+               msg.id === tempAssistantMessage.id
+                 ? { ...msg, content: streamingContent, isLoading: false, images: streamingImages }
+                 : msg
+             ));
+           },
+           (error: string) => {
+             // Handle streaming error
+             console.error('Streaming error:', error);
+             setMessages(prev => prev.map(msg =>
+               msg.id === tempAssistantMessage.id
+                 ? { ...msg, content: `Error: ${error}`, isLoading: false }
+                 : msg
+             ));
+           },
+           async () => {
+             // Get auth token function
+             const token = await getAccessTokenSilently({
+               authorizationParams: {
+                 audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
+                 scope: 'openid profile email'
+               }
+             });
+             return token;
+           }
+         );
 
-        responseImages = response.images || [];
-        totalTokens = response.usage?.total_tokens;
-      }
+
+
+         // Wait for streaming to complete (this will be resolved when onComplete is called)
+         await new Promise<void>((resolve) => {
+           const checkComplete = () => {
+             if (!streamingContent.includes('Error:') && streamingUsage !== null) {
+               resolve();
+             } else {
+               setTimeout(checkComplete, 100);
+             }
+           };
+           checkComplete();
+         });
+
+         messageContent = streamingContent;
+         responseImages = streamingImages;
+         totalTokens = streamingUsage?.total_tokens;
+       }
 
       setMessages(prev => prev.map(msg => 
         msg.id === tempAssistantMessage.id 
@@ -818,20 +928,20 @@ export function ChatInterface({
                       {messages.map((message) => (
                         <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                           <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-3 rounded-lg ${message.role === 'user' ? 'bg-gray-800 text-white' : 'text-gray-100'}`}>
-                            {message.isLoading ? (
-                              <ThinkingIndicator />
-                            ) : (
-                              <>
-                                <FormattedMessage content={message.content} images={message.images} />
-                                {message.attachments && message.attachments.length > 0 && (
-                                  <div className="mt-2 space-y-1">
-                                    {message.attachments.map(att => (
-                                      <div key={att.id} className="text-xs opacity-75">{att.name}</div>
-                                    ))}
-                                  </div>
-                                )}
-                              </>
-                            )}
+                             {message.isLoading ? (
+                               <ThinkingIndicator />
+                             ) : (
+                               <>
+                                 <FormattedMessage content={message.content} images={message.images} />
+                                 {message.attachments && message.attachments.length > 0 && (
+                                   <div className="mt-2 space-y-1">
+                                     {message.attachments.map(att => (
+                                       <div key={att.id} className="text-xs opacity-75">{att.name}</div>
+                                     ))}
+                                   </div>
+                                 )}
+                               </>
+                             )}
                           </div>
                         </div>
                       ))}

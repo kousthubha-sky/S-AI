@@ -233,13 +233,13 @@ export class ChatService {
   ): Promise<string> {
     try {
       const messages = await this.getChatMessages(sessionId, fetchWithAuth);
-      
+
       let exportContent = '# Chat Export\n\n';
-      
+
       messages.forEach((msg, index) => {
         exportContent += `## Message ${index + 1} (${msg.role})\n`;
         exportContent += `${msg.content}\n\n`;
-        
+
         if (msg.images && msg.images.length > 0) {
           exportContent += `### Generated Images (${msg.images.length})\n`;
           msg.images.forEach((img, imgIndex) => {
@@ -253,6 +253,120 @@ export class ChatService {
     } catch (error) {
       console.error('Failed to export chat:', error);
       throw error;
+    }
+  }
+
+  // ✅ NEW: Streaming chat method
+  static async streamChat(
+    messages: Array<{ role: string; content: string }>,
+    model: string,
+    temperature: number = 0.7,
+    maxTokens: number = 1000,
+    thinking: boolean = false,
+    onToken: (token: string) => void,
+    onComplete: (usage?: any, images?: ImageData[]) => void,
+    onError: (error: string) => void,
+    getAuthToken: () => Promise<string>
+  ): Promise<() => void> {
+    try {
+      const token = await getAuthToken();
+
+      const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/chat/stream`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          messages,
+          model,
+          temperature,
+          max_tokens: maxTokens,
+          thinking
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || `HTTP ${response.status}`);
+      }
+
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('Response body is not readable');
+      }
+
+      let buffer = '';
+      let isDone = false;
+
+      const readStream = async () => {
+        try {
+          while (!isDone) {
+            const { done, value } = await reader.read();
+
+            if (done) {
+              isDone = true;
+              onComplete();
+              break;
+            }
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+
+            // Keep the last incomplete line in buffer
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(6);
+
+                if (data === '[DONE]') {
+                  isDone = true;
+                  onComplete();
+                  break;
+                }
+
+                try {
+                  const parsed = JSON.parse(data);
+
+                  if (parsed.type === 'content' && parsed.content) {
+                    onToken(parsed.content);
+                  } else if (parsed.type === 'usage') {
+                    // Usage data will be handled in onComplete
+                  } else if (parsed.type === 'done') {
+                    isDone = true;
+                    onComplete();
+                    break;
+                  } else if (parsed.type === 'error') {
+                    throw new Error(parsed.error);
+                  }
+                } catch (parseError) {
+                  // Skip invalid JSON
+                  console.warn('Failed to parse SSE data:', data);
+                }
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Stream reading error:', error);
+          onError(error instanceof Error ? error.message : 'Unknown streaming error');
+        }
+      };
+
+      readStream();
+
+      // Return cleanup function
+      return () => {
+        isDone = true;
+        reader.cancel();
+      };
+
+    } catch (error) {
+      console.error('Failed to start streaming chat:', error);
+      onError(error instanceof Error ? error.message : 'Failed to start streaming');
+      return () => {}; // Return empty cleanup function
     }
   }
 }

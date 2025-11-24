@@ -17,6 +17,381 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# ==================== STREAMING CHAT ENDPOINT ====================
+
+@router.post("/api/chat/stream", tags=["Chat"])
+async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_token)):
+    """Stream chat responses through OpenRouter with multi-tier support"""
+    user_id = payload.get("sub")
+
+    print(f"\n{'='*80}")
+    print(f"🎬 STREAMING CHAT REQUEST")
+    print(f"{'='*80}")
+    print(f"User ID: {user_id}")
+    print(f"Model: {chat_request.model}")
+    print(f"Num Messages: {len(chat_request.messages)}")
+
+    for i, msg in enumerate(chat_request.messages):
+        preview = msg.content[:100].replace('\n', ' ') if msg.content else ""
+        print(f"  Message {i}: role={msg.role}, content_length={len(msg.content) if msg.content else 0}, preview={preview}...")
+    print(f"{'='*80}\n")
+
+    try:
+        # Sanitize chat messages
+        sanitized_messages = []
+        for msg in chat_request.messages:
+            try:
+                sanitized_content = InputValidator.sanitize_string(msg.content, max_length=500000)
+                sanitized_messages.append({
+                    "role": msg.role,
+                    "content": sanitized_content
+                })
+            except Exception as sanitize_error:
+                print(f"❌ Error sanitizing message: {sanitize_error}")
+                print(f"   Message content (first 200 chars): {msg.content[:200]}")
+                raise
+        print(f"✅ Messages sanitized")
+
+        # Get user usage
+        usage = await get_user_usage(user_id)
+
+        # Check subscription status
+        if usage.subscription_end_date:
+            now_aware = datetime.now(timezone.utc)
+
+            if usage.subscription_end_date.tzinfo is None:
+                subscription_end_date = usage.subscription_end_date.replace(tzinfo=timezone.utc)
+            else:
+                subscription_end_date = usage.subscription_end_date
+
+            if subscription_end_date < now_aware:
+                print(f"⚠️ User subscription expired")
+                usage.is_paid = False
+                usage.subscription_tier = "free"
+                await update_user_subscription(user_id, "free", False, datetime.now())
+
+        # ✅ Get tier and normalize it
+        tier = usage.subscription_tier or "free"
+        tier = tier.lower()  # Ensure lowercase
+
+        # ✅ Normalize tier format (handle "student_pro" -> "pro", "Student Pro" -> "pro", etc)
+        if "pro_plus" in tier or "pro plus" in tier:
+            tier = "pro_plus"
+        elif "pro" in tier:
+            tier = "pro"
+        elif "starter" in tier or "student" in tier:
+            tier = "starter"
+        elif "free" in tier:
+            tier = "free"
+
+        # ✅ Validate tier is one of the expected values
+        valid_tiers = ["free", "starter", "pro", "pro_plus"]
+        if tier not in valid_tiers:
+            print(f"⚠️ Invalid tier '{tier}', defaulting to 'free'")
+            tier = "free"
+
+        # Debug logging
+        print(f"🔍 Chat request validation:")
+        print(f"   - Model ID: {chat_request.model}")
+        print(f"   - User tier (raw): {usage.subscription_tier}")
+        print(f"   - User tier (sanitized): {tier}")
+        print(f"   - Is paid: {usage.is_paid}")
+        print(f"   - User ID: {user_id}")
+
+        # ✅ Validate model access with new tier system
+        has_access = validate_model_access(chat_request.model, tier)
+        print(f"   - Has access: {has_access}")
+
+        if not has_access:
+            print(f"❌ Model access denied for {chat_request.model}")
+
+            # Determine required tier for this model
+            from models.ai_models import FREE_MODELS, STARTER_MODELS, PRO_MODELS, PRO_PLUS_MODELS
+
+            # Check from most restrictive to least restrictive
+            if chat_request.model in PRO_PLUS_MODELS and chat_request.model not in PRO_MODELS:
+                required_tier = "pro_plus"
+            elif chat_request.model in PRO_MODELS and chat_request.model not in STARTER_MODELS:
+                required_tier = "pro"
+            elif chat_request.model in STARTER_MODELS and chat_request.model not in FREE_MODELS:
+                required_tier = "starter"
+            else:
+                required_tier = "free"
+
+            # Get upgrade message
+            from models.ai_models import get_upgrade_message
+            message = get_upgrade_message(tier, required_tier)
+
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"{message} (Model: {chat_request.model}, Your tier: {tier})"
+            )
+
+        print(f"✅ Model access granted")
+
+        # ✅ Check if model requires image generation feature
+        from models.ai_models import TIER_FEATURES
+        if "image" in chat_request.model.lower() or "gemini" in chat_request.model.lower():
+            if not TIER_FEATURES.get(tier, {}).get("image_generation", False):
+                from models.ai_models import get_tier_name
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=f"Image generation is not available on your {get_tier_name(tier)} plan. Upgrade to Student Pro to access image generation models."
+                )
+            print(f"✅ Image generation feature enabled for {tier} tier")
+
+        # ✅ Check usage limits based on tier (with approaching warnings)
+        if tier == "free":
+            # Free tier: 50 requests per day
+            FREE_TIER_DAILY_LIMIT = 50
+            usage_percent = (usage.daily_message_count / FREE_TIER_DAILY_LIMIT) * 100
+
+            if usage.daily_message_count >= FREE_TIER_DAILY_LIMIT:
+                print(f"❌ Daily limit reached")
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Daily limit reached (50 requests/day). Upgrade to continue."
+                )
+            elif usage_percent >= 90:
+                # Log warning but allow request
+                print(f"⚠️ Approaching daily limit: {usage.daily_message_count}/{FREE_TIER_DAILY_LIMIT} ({usage_percent:.0f}%)")
+
+        elif tier == "starter":
+            # Starter tier: 500 requests per month
+            STARTER_MONTHLY_LIMIT = 500
+            usage_percent = (usage.prompt_count / STARTER_MONTHLY_LIMIT) * 100
+
+            if usage.prompt_count >= STARTER_MONTHLY_LIMIT:
+                print(f"❌ Monthly limit reached")
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Monthly limit reached (500 requests/month). Upgrade to Pro for 2000 requests."
+                )
+            elif usage_percent >= 90:
+                # Log warning but allow request
+                print(f"⚠️ Approaching monthly limit: {usage.prompt_count}/{STARTER_MONTHLY_LIMIT} ({usage_percent:.0f}%)")
+
+        elif tier == "pro":
+            # Pro tier: 2000 requests per month
+            PRO_MONTHLY_LIMIT = 2000
+            usage_percent = (usage.prompt_count / PRO_MONTHLY_LIMIT) * 100
+
+            if usage.prompt_count >= PRO_MONTHLY_LIMIT:
+                print(f"❌ Monthly limit reached")
+                raise HTTPException(
+                    status_code=status.HTTP_402_PAYMENT_REQUIRED,
+                    detail="Monthly limit reached (2000 requests/month). Upgrade to Pro Plus for unlimited."
+                )
+            elif usage_percent >= 90:
+                # Log warning but allow request
+                print(f"⚠️ Approaching monthly limit: {usage.prompt_count}/{PRO_MONTHLY_LIMIT} ({usage_percent:.0f}%)")
+        # pro_plus tier: unlimited, no check needed
+
+        # Check for API key
+        api_key = os.getenv("OPENROUTER_API_KEY")
+        if not api_key:
+            print(f"❌ OpenRouter API key not configured")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="OpenRouter API key not configured"
+            )
+        print(f"✅ API key present")
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "HTTP-Referer": os.getenv('FRONTEND_URL', 'http://localhost:5173'),
+            "X-Title": "SAAS Chat Application",
+            "Content-Type": "application/json"
+        }
+
+        messages = sanitized_messages
+
+        # Add system message if provided
+        if chat_request.system_prompt:
+            messages.insert(0, {"role": "system", "content": chat_request.system_prompt})
+
+        # Prepare request body for streaming
+        request_body = {
+            "model": chat_request.model or "tngtech/deepseek-r1t2-chimera:free",
+            "messages": messages,
+            "max_tokens": chat_request.max_tokens or 10000,
+            "temperature": chat_request.temperature or 0.7,
+            "stream": True  # Enable streaming
+        }
+
+        # ✅ Add thinking parameter if enabled
+        if chat_request.thinking:
+            request_body["thinking"] = {
+                "type": "enabled",
+                "budget_tokens": 8000
+            }
+            print(f"💭 Thinking mode enabled with 8000 token budget")
+
+        # ✅ Validate request body before sending
+        print(f"📋 Validating OpenRouter streaming request body...")
+        print(f"   - Model: {request_body['model']}")
+        print(f"   - Messages count: {len(request_body['messages'])}")
+        print(f"   - Max tokens: {request_body['max_tokens']}")
+        print(f"   - Temperature: {request_body['temperature']}")
+        print(f"   - Stream: {request_body['stream']}")
+
+        # Validate model name is not empty
+        if not request_body['model'] or not isinstance(request_body['model'], str):
+            print(f"❌ Invalid model: {request_body['model']}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid model specified: {request_body['model']}"
+            )
+
+        # Validate messages structure
+        if not request_body['messages'] or len(request_body['messages']) == 0:
+            print(f"❌ No messages in request")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="No messages provided"
+            )
+
+        # Validate each message
+        for i, msg in enumerate(request_body['messages']):
+            if not isinstance(msg, dict):
+                print(f"❌ Message {i} is not a dict: {type(msg)}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Message {i} has invalid format"
+                )
+            if 'role' not in msg or 'content' not in msg:
+                print(f"❌ Message {i} missing role or content: {msg.keys()}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Message {i} missing role or content field"
+                )
+            if not isinstance(msg['content'], str):
+                print(f"❌ Message {i} content is not string: {type(msg['content'])}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Message {i} content must be a string"
+                )
+
+        print(f"✅ Request body validated successfully")
+
+        # ✅ For image generation models, ensure we request JSON format
+        if "image" in chat_request.model.lower() or "gemini" in chat_request.model.lower():
+            # Some models like Gemini support JSON output for structured image descriptions
+            pass  # OpenRouter will handle image models appropriately
+
+        from fastapi.responses import StreamingResponse
+        import json
+
+        async def generate_stream():
+            try:
+                async with httpx.AsyncClient(timeout=60.0) as client:
+                    print(f"🚀 Sending streaming request to OpenRouter...")
+                    async with client.stream(
+                        "POST",
+                        "https://openrouter.ai/api/v1/chat/completions",
+                        headers=headers,
+                        json=request_body
+                    ) as response:
+
+                        if response.status_code != 200:
+                            error_detail = f"OpenRouter API error: {response.status_code}"
+                            try:
+                                error_data = await response.aread()
+                                error_json = json.loads(error_data.decode())
+                                error_detail = error_json.get('error', {}).get('message', error_detail)
+                                print(f"❌ OpenRouter error response: {error_json}")
+
+                                # Log the full request for debugging
+                                print(f"📤 Request body sent to OpenRouter:")
+                                print(f"   - Model: {request_body.get('model')}")
+                                print(f"   - Messages: {len(request_body.get('messages', []))} items")
+                                print(f"   - Max tokens: {request_body.get('max_tokens')}")
+                                print(f"   - Temperature: {request_body.get('temperature')}")
+
+                                # Provide more specific error messages
+                                if response.status_code == 400:
+                                    if "model" in error_detail.lower():
+                                        print(f"⚠️ Invalid model specified")
+                                    elif "message" in error_detail.lower():
+                                        print(f"⚠️ Invalid message format")
+                            except Exception as json_error:
+                                print(f"⚠️ Could not parse error response: {json_error}")
+                                print(f"Response text: {await response.aread()}")
+
+                            raise HTTPException(
+                                status_code=response.status_code,
+                                detail=error_detail
+                            )
+
+                        print(f"✅ Connected to OpenRouter stream")
+
+                        full_content = ""
+                        usage_data = None
+
+                        async for line in response.aiter_lines():
+                            if line.strip():
+                                if line.startswith('data: '):
+                                    data = line[6:]  # Remove 'data: ' prefix
+
+                                    if data == '[DONE]':
+                                        # Send final usage data if available
+                                        if usage_data:
+                                            yield f"data: {json.dumps({'type': 'usage', 'usage': usage_data})}\n\n"
+                                        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                                        break
+
+                                    try:
+                                        chunk = json.loads(data)
+                                        delta = chunk.get('choices', [{}])[0].get('delta', {})
+
+                                        if 'content' in delta and delta['content']:
+                                            content = delta['content']
+                                            full_content += content
+                                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+
+                                        # Check for usage information
+                                        if 'usage' in chunk:
+                                            usage_data = chunk['usage']
+
+                                    except json.JSONDecodeError:
+                                        continue
+
+                        print(f"📊 Stream completed: {len(full_content)} chars")
+
+                        # ✅ Increment usage counter (important!)
+                        token_count = usage_data.get("total_tokens", 0) if usage_data else 0
+                        await increment_message_count(user_id, token_count)
+
+            except Exception as stream_error:
+                print(f"❌ Streaming error: {type(stream_error).__name__}: {str(stream_error)}")
+                error_data = json.dumps({
+                    'type': 'error',
+                    'error': f"Streaming error: {str(stream_error)}"
+                })
+                yield f"data: {error_data}\n\n"
+
+        return StreamingResponse(
+            generate_stream(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Headers": "Cache-Control",
+            }
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"❌ Unexpected streaming error: {type(e).__name__}: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Chat streaming error: {str(e)}"
+        )
+
 # ==================== MAIN CHAT ENDPOINT ====================
 
 @router.post("/api/chat", response_model=ChatResponse, tags=["Chat"])
