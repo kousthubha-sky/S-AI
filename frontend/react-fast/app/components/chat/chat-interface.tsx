@@ -1,6 +1,6 @@
 // components/chat/chat-interface.tsx
-import { useState, useRef, useEffect, type JSX } from "react"
-import { AlertCircle, Copy, Check, MessageSquare, Brain, AlertTriangle, Zap } from "lucide-react"
+import { useState, useRef, useEffect, useCallback, type JSX } from "react"
+import { AlertCircle, Copy, Check, MessageSquare, Brain, AlertTriangle, Zap, ChevronDown } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { Skeleton } from "~/components/ui/skeleton"
 import { cn } from "~/lib/utils"
@@ -283,7 +283,7 @@ const ThinkingIndicator = () => {
           animation: brain-float 3s ease-in-out infinite;
         }
       `}</style>
-      <Brain className="w-5 h-5 text-purple-400 thinking-brain flex-shrink-0" />
+      <Brain className="w-5 h-5 text-white thinking-brain flex-shrink-0" />
       <TextShimmer
         duration={1.2}
         className="text-sm font-medium [--base-color:theme(colors.gray.300)] [--base-gradient-color:theme(colors.black)] dark:[--base-color:theme(colors.gray.300)] dark:[--base-gradient-color:theme(colors.black)]"
@@ -531,16 +531,43 @@ export function ChatInterface({
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
-  const [hasStartedChat, setHasStartedChat] = useState(false);
+   const [hasStartedChat, setHasStartedChat] = useState(false);
+   const [messagesLoaded, setMessagesLoaded] = useState(false); // Track if messages are loaded
+   const [userScrolledUp, setUserScrolledUp] = useState(false); // Track if user manually scrolled up
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLimitReached, setIsLimitReached] = useState(false);
   const [tempMessage, setTempMessage] = useState<Message | null>(null);
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const containerRef = useRef<HTMLDivElement>(null)  // REMOVED: Early return for auth0Loading
-  // REMOVED: Early return for !isAuthenticated
+   const abortControllerRef = useRef<AbortController | null>(null)
+   const messagesEndRef = useRef<HTMLDivElement>(null)
+   const containerRef = useRef<HTMLDivElement>(null)
+   const scrollContainerRef = useRef<HTMLDivElement>(null)  // Ref for the scrolling messages container
+   const authTokenCache = useRef<{ token: string; expires: number } | null>(null)  // Cache auth token for 5 minutes
 
-  useEffect(() => {
+   // Cached auth token function to avoid repeated token fetches
+   const getCachedAuthToken = async (): Promise<string> => {
+     const now = Date.now();
+     const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+
+     if (authTokenCache.current && authTokenCache.current.expires > now) {
+       return authTokenCache.current.token;
+     }
+
+     const token = await getAccessTokenSilently({
+       authorizationParams: {
+         audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
+         scope: 'openid profile email'
+       }
+     });
+
+     authTokenCache.current = {
+       token,
+       expires: now + cacheExpiry
+     };
+
+     return token;
+   };
+
+   useEffect(() => {
     if (currentSessionId && isAuthed) {
       loadSession(currentSessionId);
       setActiveSessionId(currentSessionId);
@@ -553,30 +580,32 @@ export function ChatInterface({
   }, [currentSessionId, isAuthed]);
 
   const loadSession = async (sessionId: string) => {
-    try {
-      setIsInitializing(true);
-      const sessionMessages = await ChatService.getChatMessages(sessionId, fetchWithAuth);
-      
-      const formattedMessages: Message[] = sessionMessages.map(msg => ({
-        id: msg.id,
-        role: msg.role as 'user' | 'assistant',
-        content: msg.content,
-        timestamp: new Date(msg.created_at),
-        images: msg.images || undefined
-      }));
-      
-      setMessages(formattedMessages);
-      setHasStartedChat(formattedMessages.length > 0);
-      setError(null);
-    } catch (error: any) {
-      console.error('Failed to load session:', error);
-      setError('Failed to load chat session');
-      setMessages([]);
-      setHasStartedChat(false);
-    } finally {
-      setIsInitializing(false);
-    }
-  }
+     try {
+       setIsInitializing(true);
+       const sessionMessages = await ChatService.getChatMessages(sessionId, fetchWithAuth);
+
+       const formattedMessages: Message[] = sessionMessages.map(msg => ({
+         id: msg.id,
+         role: msg.role as 'user' | 'assistant',
+         content: msg.content,
+         timestamp: new Date(msg.created_at),
+         images: msg.images || undefined
+       }));
+
+       setMessages(formattedMessages);
+       setHasStartedChat(formattedMessages.length > 0);
+       setMessagesLoaded(true); // Mark messages as loaded
+       setError(null);
+     } catch (error: any) {
+       console.error('Failed to load session:', error);
+       setError('Failed to load chat session');
+       setMessages([]);
+       setHasStartedChat(false);
+       setMessagesLoaded(true); // Even on error, loading is complete
+     } finally {
+       setIsInitializing(false);
+     }
+   }
 
   const handleSendMessage = async (messageText: string, files?: File[]) => {
     // Don't send if not authenticated
@@ -710,16 +739,10 @@ export function ChatInterface({
                  : msg
              ));
            },
-           async () => {
-             // Get auth token function
-             const token = await getAccessTokenSilently({
-               authorizationParams: {
-                 audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
-                 scope: 'openid profile email'
-               }
-             });
-             return token;
-           }
+            async () => {
+              // Get cached auth token to improve performance
+              return await getCachedAuthToken();
+            }
          );
 
 
@@ -838,9 +861,51 @@ export function ChatInterface({
     }
   }
 
+  // Improved scrolling logic to prevent glitches during streaming
+  const scrollToBottom = useCallback(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+    }
+  }, []);
+
+  // Handle scroll events to detect user scrolling
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    const scrollContainer = scrollContainerRef.current;
+    if (!scrollContainer) return;
+
+    let scrollTimeout: NodeJS.Timeout;
+    const handleScroll = () => {
+      // Debounce scroll events for better performance
+      clearTimeout(scrollTimeout);
+      scrollTimeout = setTimeout(() => {
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+        setUserScrolledUp(!isNearBottom);
+      }, 100);
+    };
+
+    scrollContainer.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      scrollContainer.removeEventListener('scroll', handleScroll);
+      clearTimeout(scrollTimeout);
+    };
+  }, []);
+
+  useEffect(() => {
+    // Only auto-scroll if user hasn't scrolled up and is near bottom
+    if (!userScrolledUp) {
+      const scrollContainer = scrollContainerRef.current;
+      if (scrollContainer) {
+        const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
+        const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
+
+        if (isNearBottom) {
+          // Small delay to ensure DOM has updated during streaming
+          setTimeout(scrollToBottom, 50);
+        }
+      }
+    }
+  }, [messages, scrollToBottom, userScrolledUp]);
 
   // Show loading only when authenticated and initializing
   if (auth0Loading || (isAuthed && isInitializing)) {
@@ -919,8 +984,8 @@ export function ChatInterface({
             // After chat starts - FIXED SCROLL LAYOUT
             <div className="flex flex-col h-full">
               {/* Messages Container - PROPER SCROLLING */}
-              <div className="flex-1 overflow-y-auto" style={{ height: 'calc(100vh - 200px)' }}>
-                <div className="min-h-full px-4 py-4">
+                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto relative" style={{ height: 'calc(100vh - 200px)' }}>
+                 <div className="min-h-full px-4 py-4">
                   {isInitializing ? (
                     <ChatMessageSkeleton />
                   ) : (
@@ -948,10 +1013,24 @@ export function ChatInterface({
                       <div ref={messagesEndRef} />
                     </div>
                   )}
-                </div>
-              </div>
+                 </div>
+               </div>
 
-              {/* Input Area - Fixed at bottom */}
+               {/* Scroll to Bottom Button */}
+               {userScrolledUp && (
+                 <button
+                   onClick={() => {
+                     scrollToBottom();
+                     setUserScrolledUp(false);
+                   }}
+                   className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-all duration-200 z-20"
+                   title="Scroll to bottom"
+                 >
+                   <ChevronDown className="w-5 h-5" />
+                 </button>
+               )}
+
+               {/* Input Area - Fixed at bottom */}
               <div className="flex-shrink-0 px-4 py-4 bg-gradient-to-t from-[#030303] to-transparent">
                 <div className="max-w-4xl mx-auto w-full">
                   <PromptInputBox

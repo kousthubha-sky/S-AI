@@ -4,12 +4,22 @@ from models.payment import UserUsage
 from typing import Optional, Dict
 from fastapi import HTTPException, status
 from services.supabase_database import db
+import json
+from redis_config import redis_client
 
 async def get_user_usage(user_id: str) -> UserUsage:
-    """Get or create user usage record with reset logic"""
+    """Get or create user usage record with reset logic and Redis caching"""
     try:
+        # Check Redis cache first (5 minute expiry)
+        cache_key = f"user_usage:{user_id}"
+        if redis_client:
+            cached_usage = redis_client.get(cache_key)
+            if cached_usage:
+                print(f"✅ Using cached usage for user: {user_id}")
+                return UserUsage(**json.loads(cached_usage))
+
         print(f"🔍 Getting usage for user: {user_id}")
-        
+
         # Get user from database (NO await)
         user = db.get_user_by_auth0_id(user_id)
         
@@ -106,7 +116,15 @@ async def get_user_usage(user_id: str) -> UserUsage:
             subscription_tier=subscription_tier,
             subscription_end_date=subscription_end_date
         )
-        
+
+        # Cache the result in Redis for 5 minutes
+        if redis_client:
+            try:
+                redis_client.setex(cache_key, 300, json.dumps(result.__dict__))
+                print(f"💾 Cached usage for user: {user_id}")
+            except Exception as cache_error:
+                print(f"⚠️ Failed to cache usage: {cache_error}")
+
         print(f"✅ Returning UserUsage: tier={result.subscription_tier}, is_paid={result.is_paid}")
         return result
         

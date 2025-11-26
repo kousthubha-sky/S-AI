@@ -17,6 +17,16 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
+# Global HTTP client with connection pooling for better performance
+http_client = httpx.AsyncClient(
+    timeout=httpx.Timeout(60.0, connect=10.0),
+    limits=httpx.Limits(max_keepalive_connections=20, max_connections=100),
+    headers={
+        "Connection": "keep-alive",
+        "Keep-Alive": "timeout=30, max=1000"
+    }
+)
+
 # ==================== STREAMING CHAT ENDPOINT ====================
 
 @router.post("/api/chat/stream", tags=["Chat"])
@@ -284,7 +294,8 @@ async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_
 
         async def generate_stream():
             try:
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                # Use global HTTP client with connection pooling
+                client = http_client
                     print(f"🚀 Sending streaming request to OpenRouter...")
                     async with client.stream(
                         "POST",
@@ -378,6 +389,7 @@ async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_
                 "Connection": "keep-alive",
                 "Access-Control-Allow-Origin": "*",
                 "Access-Control-Allow-Headers": "Cache-Control",
+                "Content-Encoding": "identity",  # Disable compression for streaming
             }
         )
 

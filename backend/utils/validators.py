@@ -4,6 +4,8 @@ import re
 from fastapi import HTTPException, status
 from typing import Optional
 import bleach
+import hashlib
+from redis_config import redis_client
 
 class InputValidator:
     """Validate and sanitize user inputs"""
@@ -64,6 +66,21 @@ class InputValidator:
     
     @staticmethod
     def sanitize_string(text: str, max_length: int = 1000) -> str:
+        """Sanitize text input with caching for performance"""
+        if not text:
+            return ""
+
+        # Create cache key from text hash
+        text_hash = hashlib.md5(text.encode()).hexdigest()
+        cache_key = f"sanitized_text:{text_hash}"
+
+        # Check Redis cache first
+        if redis_client:
+            cached_result = redis_client.get(cache_key)
+            if cached_result:
+                return cached_result
+
+        # Proceed with sanitization...
         """
         Sanitize text input with support for large inputs
         ✅ UPDATED: Now supports up to 500KB of text (for large code blocks)
@@ -102,8 +119,17 @@ class InputValidator:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid input detected - potential SQL injection attempt"
                 )
-        
-        return text.strip()
+
+        sanitized_text = text.strip()
+
+        # Cache the result for 1 hour
+        if redis_client:
+            try:
+                redis_client.setex(cache_key, 3600, sanitized_text)
+            except Exception as cache_error:
+                print(f"⚠️ Failed to cache sanitized text: {cache_error}")
+
+        return sanitized_text
     
     @staticmethod
     def split_large_input(text: str, chunk_size: int = 100000) -> list:
