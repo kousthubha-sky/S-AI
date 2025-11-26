@@ -329,7 +329,7 @@ const DigitalSerenity: React.FC<DigitalSerenityProps> = ({ username = 'there', h
             <div className="mt-4 w-12 sm:w-16 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent opacity-30 mx-auto"></div>
           </div>
 
-          {/* FIXED: Simplified conditional rendering */}
+          {/* Main Content - Hide after chat starts */}
           {!hasStartedChat && dynamicMessage && (
             <div className="text-center max-w-5xl mx-auto relative">
               {/* Responsive Main Heading Sizes */}
@@ -356,21 +356,19 @@ const DigitalSerenity: React.FC<DigitalSerenityProps> = ({ username = 'there', h
             </div>
           )}
 
-          {!hasStartedChat && (
-            <div className="text-center">
-              <div className="mb-4 w-12 sm:w-16 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent opacity-30 mx-auto"></div>
-              <h2 className="text-xs sm:text-sm font-mono font-light text-slate-300 uppercase tracking-[0.2em] opacity-80">
-                <span className="word-animate" data-delay="1400">Every</span>
-                <span className="word-animate" data-delay="1600">moment</span>
-                <span className="word-animate" data-delay="1800">matters.</span>
-              </h2>
-              <div className="mt-6 flex justify-center space-x-4 opacity-0" style={{ animation: 'word-appear 1s ease-out forwards', animationDelay: '4.2s' }}>
-                <div className="w-1 h-1 bg-slate-300 rounded-full opacity-40"></div>
-                <div className="w-1 h-1 bg-slate-300 rounded-full opacity-60"></div>
-                <div className="w-1 h-1 bg-slate-300 rounded-full opacity-40"></div>
-              </div>
+          <div className="text-center">
+            <div className="mb-4 w-12 sm:w-16 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent opacity-30 mx-auto"></div>
+            <h2 className="text-xs sm:text-sm font-mono font-light text-slate-300 uppercase tracking-[0.2em] opacity-80">
+              <span className="word-animate" data-delay="1400">Every</span>
+              <span className="word-animate" data-delay="1600">moment</span>
+              <span className="word-animate" data-delay="1800">matters.</span>
+            </h2>
+            <div className="mt-6 flex justify-center space-x-4 opacity-0" style={{ animation: 'word-appear 1s ease-out forwards', animationDelay: '4.2s' }}>
+              <div className="w-1 h-1 bg-slate-300 rounded-full opacity-40"></div>
+              <div className="w-1 h-1 bg-slate-300 rounded-full opacity-60"></div>
+              <div className="w-1 h-1 bg-slate-300 rounded-full opacity-40"></div>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Responsive Mouse Gradient Size & Blur */}
