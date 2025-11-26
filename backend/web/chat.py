@@ -296,13 +296,13 @@ async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_
             try:
                 # Use global HTTP client with connection pooling
                 client = http_client
-                    print(f"🚀 Sending streaming request to OpenRouter...")
-                    async with client.stream(
-                        "POST",
-                        "https://openrouter.ai/api/v1/chat/completions",
-                        headers=headers,
-                        json=request_body
-                    ) as response:
+                print(f"🚀 Sending streaming request to OpenRouter...")
+                async with client.stream(
+                    "POST",
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers=headers,
+                    json=request_body
+                ) as response:
 
                         if response.status_code != 200:
                             error_detail = f"OpenRouter API error: {response.status_code}"
