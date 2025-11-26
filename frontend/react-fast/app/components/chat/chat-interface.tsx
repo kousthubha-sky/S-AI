@@ -924,10 +924,13 @@ export function ChatInterface({
       ref={containerRef}
       className="flex flex-col h-full w-full flex-1 pt-16 md:pt-0 relative overflow-hidden"
     >
-      {/* Digital Serenity Background */}
-      <div className="absolute inset-0 z-10">
-        <DigitalSerenity username={auth0User?.given_name || auth0User?.name || 'there'} hasStartedChat={hasStartedChat} />
-      </div>
+      {/* Digital Serenity Background - Only show before chat starts */}
+      {!hasStartedChat && (
+        <div className="absolute inset-0 z-0">
+          
+          <DigitalSerenity username={auth0User?.given_name || auth0User?.name || 'there'} hasStartedChat={hasStartedChat} />
+        </div>
+      )}
 
       {/* Content Layer */}
       <div className="relative z-10 flex flex-col h-full w-full">

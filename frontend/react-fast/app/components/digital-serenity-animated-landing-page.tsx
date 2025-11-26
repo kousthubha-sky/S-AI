@@ -15,7 +15,7 @@ const DigitalSerenity: React.FC<DigitalSerenityProps> = ({ username = 'there', h
   const [scrolled, setScrolled] = useState(false);
   const [greeting, setGreeting] = useState('');
   const [dynamicMessage, setDynamicMessage] = useState('');
-  const wordsRef = useRef<HTMLElement[]>([]); // Not strictly necessary if not directly manipulating post-initial animation
+  const wordsRef = useRef<HTMLElement[]>([]);
   const floatingElementsRef = useRef<HTMLElement[]>([]);
 
   useEffect(() => {
@@ -59,7 +59,9 @@ const DigitalSerenity: React.FC<DigitalSerenityProps> = ({ username = 'there', h
     ];
 
     const timeBasedIndex = (hour % messages.length);
-    setDynamicMessage(messages[timeBasedIndex]);
+    const selectedMessage = messages[timeBasedIndex];
+    console.log('Selected message:', selectedMessage, 'Hour:', hour, 'Index:', timeBasedIndex);
+    setDynamicMessage(selectedMessage);
   }, [username]);
 
   useEffect(() => {
@@ -93,8 +95,12 @@ const DigitalSerenity: React.FC<DigitalSerenityProps> = ({ username = 'there', h
   
   useEffect(() => {
     const wordElements = document.querySelectorAll('.word-animate');
-    const handleMouseEnter = (e: MouseEvent) => { if (e.target) (e.target as HTMLElement).style.textShadow = '0 0 20px rgba(203, 213, 225, 0.5)'; };
-    const handleMouseLeave = (e: MouseEvent) => { if (e.target) (e.target as HTMLElement).style.textShadow = 'none'; };
+    const handleMouseEnter = (e: MouseEvent) => { 
+      if (e.target) (e.target as HTMLElement).style.textShadow = '0 0 20px rgba(203, 213, 225, 0.5)'; 
+    };
+    const handleMouseLeave = (e: MouseEvent) => { 
+      if (e.target) (e.target as HTMLElement).style.textShadow = 'none'; 
+    };
     wordElements.forEach(word => {
       word.addEventListener('mouseenter', handleMouseEnter as EventListener);
       word.addEventListener('mouseleave', handleMouseLeave as EventListener);
@@ -133,26 +139,141 @@ const DigitalSerenity: React.FC<DigitalSerenityProps> = ({ username = 'there', h
     #mouse-gradient-react {
       position: fixed;
       pointer-events: none;
-      border-radius: 9999px; /* rounded-full */
-      background-image: radial-gradient(circle, rgba(156, 163, 175, 0.05), rgba(107, 114, 128, 0.05), transparent 70%); /* slate-400/5, slate-500/5 */
+      border-radius: 9999px;
+      background-image: radial-gradient(circle, rgba(156, 163, 175, 0.05), rgba(107, 114, 128, 0.05), transparent 70%);
       transform: translate(-50%, -50%);
       will-change: left, top, opacity;
       transition: left 70ms linear, top 70ms linear, opacity 300ms ease-out;
     }
-    @keyframes word-appear { 0% { opacity: 0; transform: translateY(30px) scale(0.8); filter: blur(10px); } 50% { opacity: 0.8; transform: translateY(10px) scale(0.95); filter: blur(2px); } 100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); } }
-    @keyframes grid-draw { 0% { stroke-dashoffset: 1000; opacity: 0; } 50% { opacity: 0.3; } 100% { stroke-dashoffset: 0; opacity: 0.15; } }
-    @keyframes pulse-glow { 0%, 100% { opacity: 0.1; transform: scale(1); } 50% { opacity: 0.3; transform: scale(1.1); } }
-    .word-animate { display: inline-block; opacity: 0; margin: 0 0.1em; transition: color 0.3s ease, transform 0.3s ease; }
-    .word-animate:hover { color: #cbd5e1; /* slate-300 */ transform: translateY(-2px); }
-    .grid-line { stroke: #94a3b8; /* slate-400 */ stroke-width: 0.5; opacity: 0; stroke-dasharray: 5 5; stroke-dashoffset: 1000; animation: grid-draw 2s ease-out forwards; }
-    .detail-dot { fill: #cbd5e1; /* slate-300 */ opacity: 0; animation: pulse-glow 3s ease-in-out infinite; }
-    .corner-element-animate { position: absolute; width: 40px; height: 40px; border: 1px solid rgba(203, 213, 225, 0.2); opacity: 0; animation: word-appear 1s ease-out forwards; }
-    .text-decoration-animate { position: relative; }
-    .text-decoration-animate::after { content: ''; position: absolute; bottom: -4px; left: 0; width: 0; height: 1px; background: linear-gradient(90deg, transparent, #cbd5e1, transparent); animation: underline-grow 2s ease-out forwards; animation-delay: 2s; }
-    @keyframes underline-grow { to { width: 100%; } }
-    .floating-element-animate { position: absolute; width: 2px; height: 2px; background: #cbd5e1; border-radius: 50%; opacity: 0; animation: float 4s ease-in-out infinite; animation-play-state: paused; }
-    @keyframes float { 0%, 100% { transform: translateY(0) translateX(0); opacity: 0.2; } 25% { transform: translateY(-10px) translateX(5px); opacity: 0.6; } 50% { transform: translateY(-5px) translateX(-3px); opacity: 0.4; } 75% { transform: translateY(-15px) translateX(7px); opacity: 0.8; } }
-    .ripple-effect { position: fixed; width: 4px; height: 4px; background: rgba(203, 213, 225, 0.6); border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; animation: pulse-glow 1s ease-out forwards; z-index: 9999; }
+    @keyframes word-appear { 
+      0% { 
+        opacity: 0; 
+        transform: translateY(30px) scale(0.8); 
+        filter: blur(10px); 
+      } 
+      50% { 
+        opacity: 0.8; 
+        transform: translateY(10px) scale(0.95); 
+        filter: blur(2px); 
+      } 
+      100% { 
+        opacity: 1; 
+        transform: translateY(0) scale(1); 
+        filter: blur(0); 
+      } 
+    }
+    @keyframes grid-draw { 
+      0% { 
+        stroke-dashoffset: 1000; 
+        opacity: 0; 
+      } 
+      50% { 
+        opacity: 0.3; 
+      } 
+      100% { 
+        stroke-dashoffset: 0; 
+        opacity: 0.15; 
+      } 
+    }
+    @keyframes pulse-glow { 
+      0%, 100% { 
+        opacity: 0.1; 
+        transform: scale(1); 
+      } 
+      50% { 
+        opacity: 0.3; 
+        transform: scale(1.1); 
+      } 
+    }
+    .word-animate { 
+      display: inline-block; 
+      opacity: 0; 
+      margin: 0 0.1em; 
+      transition: color 0.3s ease, transform 0.3s ease; 
+    }
+    .word-animate:hover { 
+      color: #cbd5e1;
+      transform: translateY(-2px); 
+    }
+    .grid-line { 
+      stroke: #94a3b8;
+      stroke-width: 0.5; 
+      opacity: 0; 
+      stroke-dasharray: 5 5; 
+      stroke-dashoffset: 1000; 
+      animation: grid-draw 2s ease-out forwards; 
+    }
+    .detail-dot { 
+      fill: #cbd5e1;
+      opacity: 0; 
+      animation: pulse-glow 3s ease-in-out infinite; 
+    }
+    .corner-element-animate { 
+      position: absolute; 
+      width: 40px; 
+      height: 40px; 
+      border: 1px solid rgba(203, 213, 225, 0.2); 
+      opacity: 0; 
+      animation: word-appear 1s ease-out forwards; 
+    }
+    .text-decoration-animate { 
+      position: relative; 
+    }
+    .text-decoration-animate::after { 
+      content: ''; 
+      position: absolute; 
+      bottom: -4px; 
+      left: 0; 
+      width: 0; 
+      height: 1px; 
+      background: linear-gradient(90deg, transparent, #cbd5e1, transparent); 
+      animation: underline-grow 2s ease-out forwards; 
+      animation-delay: 2s; 
+    }
+    @keyframes underline-grow { 
+      to { 
+        width: 100%; 
+      } 
+    }
+    .floating-element-animate { 
+      position: absolute; 
+      width: 2px; 
+      height: 2px; 
+      background: #cbd5e1; 
+      border-radius: 50%; 
+      opacity: 0; 
+      animation: float 4s ease-in-out infinite; 
+      animation-play-state: paused; 
+    }
+    @keyframes float { 
+      0%, 100% { 
+        transform: translateY(0) translateX(0); 
+        opacity: 0.2; 
+      } 
+      25% { 
+        transform: translateY(-10px) translateX(5px); 
+        opacity: 0.6; 
+      } 
+      50% { 
+        transform: translateY(-5px) translateX(-3px); 
+        opacity: 0.4; 
+      } 
+      75% { 
+        transform: translateY(-15px) translateX(7px); 
+        opacity: 0.8; 
+      } 
+    }
+    .ripple-effect { 
+      position: fixed; 
+      width: 4px; 
+      height: 4px; 
+      background: rgba(203, 213, 225, 0.6); 
+      border-radius: 50%; 
+      transform: translate(-50%, -50%); 
+      pointer-events: none; 
+      animation: pulse-glow 1s ease-out forwards; 
+      z-index: 9999; 
+    }
   `;
 
   return (
@@ -208,7 +329,8 @@ const DigitalSerenity: React.FC<DigitalSerenityProps> = ({ username = 'there', h
             <div className="mt-4 w-12 sm:w-16 h-px bg-gradient-to-r from-transparent via-slate-300 to-transparent opacity-30 mx-auto"></div>
           </div>
 
-          {!hasStartedChat && dynamicMessage !== "Start a new conversation" && (
+          {/* FIXED: Simplified conditional rendering */}
+          {!hasStartedChat && dynamicMessage && (
             <div className="text-center max-w-5xl mx-auto relative">
               {/* Responsive Main Heading Sizes */}
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-extralight leading-tight tracking-tight text-slate-50 text-decoration-animate">
