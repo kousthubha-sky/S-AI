@@ -101,7 +101,7 @@ export const DesktopSidebar = ({
   return (
     <motion.div
       className={cn(
-        "h-full px-4 py-4 hidden md:flex md:flex-col bg-neutral-100 dark:bg-neutral-800 w-[300px] flex-shrink-0 ",
+        "h-full px-4 py-4 hidden md:flex md:flex-col bg-neutral-800 w-[300px] flex-shrink-0 ",
         className
       )}
       animate={{
@@ -162,7 +162,7 @@ export const MobileSidebar = ({
               ease: "easeInOut",
             }}
             className={cn(
-              "fixed h-full w-[60vw] max-w-sm inset-y-0 left-0 bg-neutral-100 dark:bg-neutral-900 p-6 z-[100] flex flex-col justify-between md:hidden",
+              "fixed h-full w-[60vw] max-w-sm inset-y-0 left-0 bg-neutral-900 p-6 z-[100] flex flex-col justify-between md:hidden",
               className
             )}
             onClick={(e) => e.stopPropagation()}

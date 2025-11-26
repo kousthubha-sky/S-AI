@@ -176,8 +176,8 @@ function SidebarChatHistorySection({ sessions, currentSessionId, onSelect, onDel
               className={cn(
                 "group relative flex items-center gap-2 px-2 py-2.5 rounded-lg cursor-pointer transition-all",
                 currentSessionId === session.id
-                  ? "bg-neutral-200 dark:bg-neutral-700"
-                  : "hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                  ? "bg-neutral-700"
+                  : "hover:bg-neutral-700",
                 !open && "justify-center"
               )}
             >

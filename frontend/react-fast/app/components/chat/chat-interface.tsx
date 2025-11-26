@@ -277,7 +277,7 @@ const ThinkingIndicator = () => {
       <style>{`
         @keyframes brain-float {
           0%, 100% { transform: translateY(0px); }
-          50% { transform: translateY(-4px); }
+          50% { transform: translateY(-1px); }
         }
         .thinking-brain {
           animation: brain-float 3s ease-in-out infinite;
@@ -286,7 +286,7 @@ const ThinkingIndicator = () => {
       <Brain className="w-5 h-5 text-purple-400 thinking-brain flex-shrink-0" />
       <TextShimmer
         duration={1.2}
-        className="text-sm font-medium [--base-color:theme(colors.gray.300)] [--base-gradient-color:theme(colors.purple.400)] dark:[--base-color:theme(colors.gray.300)] dark:[--base-gradient-color:theme(colors.purple.300)]"
+        className="text-sm font-medium [--base-color:theme(colors.gray.300)] [--base-gradient-color:theme(colors.black)] dark:[--base-color:theme(colors.gray.300)] dark:[--base-gradient-color:theme(colors.black)]"
       >
         Thinking...
       </TextShimmer>
@@ -927,7 +927,7 @@ export function ChatInterface({
                     <div className="space-y-4 max-w-4xl mx-auto w-full">
                       {messages.map((message) => (
                         <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-3 rounded-lg ${message.role === 'user' ? 'bg-gray-800 text-white' : 'text-gray-100'}`}>
+                          <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-1 rounded-lg ${message.role === 'user' ? 'bg-gray-950 text-white' : 'text-gray-100'}`}>
                              {message.isLoading ? (
                                <ThinkingIndicator />
                              ) : (
