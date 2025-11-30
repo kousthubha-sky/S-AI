@@ -3,6 +3,7 @@ import { useEffect } from 'react';
 import { useAuth0 } from '@auth0/auth0-react';
 import { useNavigate } from 'react-router';
 import { useToast } from '~/components/ui/toast';
+import Loader from '~/components/loader-12';
 
 export default function Callback() {
   const { isAuthenticated, error, isLoading } = useAuth0();
@@ -63,9 +64,9 @@ export default function Callback() {
   }
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen">
-      <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      <p className="mt-4 text-lg text-gray-600">Completing authentication...</p>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-black">
+      <Loader/>
+      Completing Authentication
     </div>
   );
 }

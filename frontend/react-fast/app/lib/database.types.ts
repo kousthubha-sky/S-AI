@@ -23,6 +23,7 @@ export interface ChatSession {
   model_used: string | null;
   created_at: string;
   updated_at: string;
+  starred?: boolean;
   isActive?: boolean; // UI state
 }
 

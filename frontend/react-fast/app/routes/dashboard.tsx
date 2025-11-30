@@ -10,12 +10,12 @@ import { useLimitWarnings } from "~/hooks/useLimitWarnings";
 import { useToast } from "~/components/ui/toast";
 import CardNav from "~/components/CardNav";
 import PricingSection4 from "~/components/chat/pricing-section-3";
-import { 
-  MessageSquare, 
-  Plus, 
-  User, 
-  LogOut, 
-  Crown, 
+import {
+  MessageSquare,
+  Plus,
+  User,
+  LogOut,
+  Crown,
   Trash2,
   History,
   Star,
@@ -24,7 +24,9 @@ import {
   Menu,
   X,
   HistoryIcon,
-  Pointer
+  Pointer,
+  MoreVertical,
+  Edit2
 } from "lucide-react";
 import { ChatService } from '~/services/chatService';
 import { UserService } from '~/services/userService';
@@ -33,6 +35,16 @@ import TiltedCard from "~/components/ui/TiltedCard";
 import { cn } from "~/lib/utils";
 import ProfileSettingsPage from "~/components/profile/profile-page";
 import { Sidebar, SidebarBody, SidebarLink, useSidebar } from "~/components/ui/sidebar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "~/components/ui/dropdown-menu";
+import * as Dialog from '@radix-ui/react-dialog';
+import { Input } from '~/components/ui/input';
+import { Label } from '~/components/ui/label';
 
 import "@fontsource/inter"
 
@@ -44,6 +56,7 @@ interface ChatSession {
   title: string;
   created_at: string;
   updated_at: string;
+  starred?: boolean;
 }
 
 interface Auth0User {
@@ -74,7 +87,7 @@ function SidebarLogoSection() {
           display: shouldShowText ? "inline-block" : "none",
           opacity: shouldShowText ? 1 : 0,
         }}
-        className="text-lg font-bold text-neutral-800 dark:text-neutral-100 whitespace-pre"
+        className="text-lg font-bold text-neutral-100 whitespace-pre"
       >
         Xcore-ai <span className="text-[10px] bg-yellow-400 text-black px-1 py-0.5 rounded font-semibold ml-1">Beta</span>
       </motion.span>
@@ -116,13 +129,13 @@ function SidebarSettingsButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       className="flex items-center gap-2 rounded-lg transition-colors text-left"
     >
-      <Settings className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />
+      <Settings className="h-5 w-5 text-neutral-200 flex-shrink-0" />
       <motion.span
         animate={{
           display: shouldShowText ? "inline-block" : "none",
           opacity: shouldShowText ? 1 : 0,
         }}
-        className="text-neutral-700 dark:text-neutral-200 text-sm whitespace-pre"
+        className="text-neutral-200 text-sm whitespace-pre"
       >
         Settings
       </motion.span>
@@ -130,7 +143,7 @@ function SidebarSettingsButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-function SidebarChatHistorySection({ sessions, currentSessionId, onSelect, onDelete, formatTime, isLoading = false }: any) {
+function SidebarChatHistorySection({ sessions, currentSessionId, onSelect, onDelete, onToggleStar, onRename, formatTime, isLoading = false }: any) {
   const { shouldShowText, open } = useSidebar();
   return (
     <div className="flex-1 overflow-y-auto px-2">
@@ -188,28 +201,85 @@ function SidebarChatHistorySection({ sessions, currentSessionId, onSelect, onDel
                 }}
                 className="flex-1 min-w-0 flex flex-col"
               >
-                <span className={cn(
-                  "text-sm font-medium truncate",
-                  currentSessionId === session.id
-                    ? "text-neutral-900 dark:text-neutral-100"
-                    : "text-neutral-700 dark:text-neutral-300"
-                )}>
-                  {session.title}
-                </span>
+                <div className="flex items-center gap-1 flex-1 min-w-0">
+                  <span className={cn(
+                    "text-sm font-medium truncate",
+                    currentSessionId === session.id
+                      ? "text-neutral-900 dark:text-neutral-100"
+                      : "text-neutral-300"
+                  )}>
+                    {session.title}
+                  </span>
+                  {session.starred && (
+                    <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 flex-shrink-0" />
+                  )}
+                </div>
                 <span className="text-xs text-neutral-500 dark:text-neutral-400">
                   {formatTime(session.updated_at)}
                 </span>
               </motion.div>
               
-              <motion.button
-                animate={{
-                  opacity: shouldShowText ? 1 : 0,
-                }}
-                onClick={(e) => onDelete(session.id, e)}
-                className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all"
-              >
-                <Trash2 className="h-4 w-4 text-red-500" />
-              </motion.button>
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <motion.button
+                    animate={{
+                      opacity: shouldShowText ? 1 : 0,
+                    }}
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-neutral-600 rounded transition-all"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                      e.preventDefault();
+                    }}
+                  >
+                    <MoreVertical className="h-4 w-4 text-neutral-400" />
+                  </motion.button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="w-48 bg-neutral-800 border-neutral-700"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRename(session);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="text-neutral-200 hover:bg-neutral-700 focus:bg-neutral-700"
+                  >
+                    <Edit2 className="w-4 h-4 mr-2" />
+                    Rename
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleStar(session, e);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="text-neutral-200 hover:bg-neutral-700 focus:bg-neutral-700"
+                  >
+                    <Star className={`w-4 h-4 mr-2 ${session.starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                    {session.starred ? 'Unstar' : 'Star'}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator className="bg-neutral-700" />
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(session.id, e);
+                    }}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    className="text-red-400 hover:bg-neutral-700 focus:bg-neutral-700 hover:text-red-300 focus:text-red-300"
+                  >
+                    <Trash2 className="w-4 h-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </div>
           ))}
         </div>
@@ -330,6 +400,9 @@ function DashboardContent() {
   const [isLoadingSessions, setIsLoadingSessions] = useState<boolean>(true);
   const [isLoadingSubscription, setIsLoadingSubscription] = useState<boolean>(true);
   const [open, setOpen] = useState(false);
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+  const [renamingSession, setRenamingSession] = useState<ChatSession | null>(null);
+  const [newTitle, setNewTitle] = useState('');
 
   // 🔧 Setup limit warnings hook - checks for limit thresholds every 60 seconds
   useLimitWarnings(isAuthenticated, 60000);
@@ -536,11 +609,11 @@ function DashboardContent() {
         const percentageUsed = (current / limit) * 100;
         
         if (current >= limit) {
-          showToast('🚫 Daily limit reached! (50 requests/day) Upgrade to continue.', 'error', 6000);
+          showToast(' Daily limit reached! (50 requests/day) Upgrade to continue.', 'error', 6000);
         } else if (percentageUsed >= 90) {
-          showToast(`⚠️ You\'re almost out of requests! Only ${remaining} left today.`, 'warning', 5000);
+          showToast(` You\'re almost out of requests! Only ${remaining} left today.`, 'warning', 5000);
         } else if (percentageUsed >= 75) {
-          showToast(`💡 You have ${remaining} messages remaining today. Consider upgrading!`, 'info', 4000);
+          showToast(` You have ${remaining} messages remaining today. Consider upgrading!`, 'info', 4000);
         }
       } else if (tier === 'starter') {
         const limit = 500;
@@ -549,11 +622,11 @@ function DashboardContent() {
         const percentageUsed = (current / limit) * 100;
         
         if (current >= limit) {
-          showToast('🚫 Monthly limit reached! (500 requests/month) Upgrade to Pro.', 'error', 6000);
+          showToast(' Monthly limit reached! (500 requests/month) Upgrade to Pro.', 'error', 6000);
         } else if (percentageUsed >= 90) {
-          showToast(`⚠️ Almost at monthly limit! Only ${remaining} requests left.`, 'warning', 5000);
+          showToast(` Almost at monthly limit! Only ${remaining} requests left.`, 'warning', 5000);
         } else if (percentageUsed >= 75) {
-          showToast(`💡 You\'ve used ${percentageUsed.toFixed(0)}% of your monthly quota.`, 'info', 4000);
+          showToast(` You\'ve used ${percentageUsed.toFixed(0)}% of your monthly quota.`, 'info', 4000);
         }
       } else if (tier === 'pro') {
         const limit = 2000;
@@ -562,11 +635,11 @@ function DashboardContent() {
         const percentageUsed = (current / limit) * 100;
         
         if (current >= limit) {
-          showToast('🚫 Monthly limit reached! (2000 requests/month) Upgrade to Pro Plus.', 'error', 6000);
+          showToast(' Monthly limit reached! (2000 requests/month) Upgrade to Pro Plus.', 'error', 6000);
         } else if (percentageUsed >= 90) {
-          showToast(`⚠️ Almost at monthly limit! Only ${remaining} requests left.`, 'warning', 5000);
+          showToast(` Almost at monthly limit! Only ${remaining} requests left.`, 'warning', 5000);
         } else if (percentageUsed >= 75) {
-          showToast(`💡 You\'ve used ${percentageUsed.toFixed(0)}% of your monthly quota.`, 'info', 4000);
+          showToast(` You\'ve used ${percentageUsed.toFixed(0)}% of your monthly quota.`, 'info', 4000);
         }
       }
       // Pro Plus has no limits, no warning needed
@@ -575,7 +648,7 @@ function DashboardContent() {
       if (usage.subscription && usage.subscription.days_remaining !== undefined) {
         const daysRemaining = usage.subscription.days_remaining;
         if (daysRemaining <= 7 && daysRemaining > 0) {
-          showToast(`⏰ Your subscription expires in ${daysRemaining} day(s). Renew now!`, 'warning', 5000);
+          showToast(` Your subscription expires in ${daysRemaining} day(s). Renew now!`, 'warning', 5000);
         } 
       }
       
@@ -623,7 +696,7 @@ function DashboardContent() {
     try {
       await ChatService.deleteChatSession(sessionId, fetchWithAuth);
       setSessions(prev => prev.filter(session => session.id !== sessionId));
-      
+
       if (currentSessionId === sessionId) {
         setCurrentSessionId(null);
         sessionStorage.removeItem(SESSION_STORAGE_KEY);
@@ -632,6 +705,57 @@ function DashboardContent() {
     } catch (error) {
       console.error('Failed to delete chat session:', error);
       showToast('Failed to delete chat', 'error');
+    }
+  };
+
+  const handleToggleStarSession = async (session: ChatSession, event: React.MouseEvent) => {
+    event.stopPropagation();
+    try {
+      const newStarred = !session.starred;
+      await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${session.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ starred: newStarred })
+      });
+      setSessions(prev => prev.map(s =>
+        s.id === session.id ? { ...s, starred: newStarred } : s
+      ));
+      showToast(newStarred ? 'Chat starred' : 'Chat unstarred', 'success', 1500);
+    } catch (error) {
+      console.error('Failed to toggle star:', error);
+      showToast('Failed to update chat', 'error');
+    }
+  };
+
+  const openRenameDialog = (session: ChatSession) => {
+    setRenamingSession(session);
+    setNewTitle(session.title);
+    setRenameDialogOpen(true);
+  };
+
+  const handleRenameSession = async () => {
+    if (!renamingSession || !newTitle.trim()) return;
+
+    try {
+      await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${renamingSession.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ title: newTitle.trim() })
+      });
+      setSessions(prev => prev.map(s =>
+        s.id === renamingSession.id ? { ...s, title: newTitle.trim() } : s
+      ));
+      setRenameDialogOpen(false);
+      setRenamingSession(null);
+      setNewTitle('');
+      showToast('Chat renamed', 'success', 1500);
+    } catch (error) {
+      console.error('Failed to rename session:', error);
+      showToast('Failed to rename chat', 'error');
     }
   };
 
@@ -693,14 +817,14 @@ function DashboardContent() {
                   link={{
                     label: "Starred",
                     href: "#",
-                    icon: <Star className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
+                    icon: <Star className="h-5 w-5 text-neutral-200 flex-shrink-0" />,
                   }}
                 />
                 <SidebarLink
                   link={{
                     label: "Documentation",
                     href: "#",
-                    icon: <BookOpen className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
+                    icon: <BookOpen className="h-5 w-5 text-neutral-200 flex-shrink-0" />,
                   }}
                 />
                 <SidebarSettingsButton onClick={() => setShowProfileSettings(true)} />
@@ -708,18 +832,20 @@ function DashboardContent() {
                   link={{
                     label: "History",
                     href: "#",
-                    icon: <History className="h-5 w-5 text-neutral-700 dark:text-neutral-200 flex-shrink-0" />,
+                    icon: <History className="h-5 w-5 text-neutral-200 flex-shrink-0" />,
                   }}
                 />
               </div>
 
               <div className="border-t border-neutral-300 dark:border-neutral-700 my-2 mx-2" />
 
-              <SidebarChatHistorySection 
+              <SidebarChatHistorySection
                 sessions={sessions}
                 currentSessionId={currentSessionId}
                 onSelect={handleSessionSelect}
                 onDelete={handleDeleteSession}
+                onToggleStar={handleToggleStarSession}
+                onRename={openRenameDialog}
                 formatTime={formatRelativeTime}
                 isLoading={isLoadingSessions}
               />
@@ -900,6 +1026,51 @@ function DashboardContent() {
           </Button>
         </div>
       )}
+
+      {/* Rename Dialog */}
+      <Dialog.Root open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 z-[9999]" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg p-6 w-96 max-w-[90vw] z-[10000]">
+            <Dialog.Title className="text-lg font-semibold mb-4">
+              Rename Chat
+            </Dialog.Title>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="chat-title">Chat Title</Label>
+                <Input
+                  id="chat-title"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Enter new chat title"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleRenameSession()
+                    } else if (e.key === 'Escape') {
+                      setRenameDialogOpen(false)
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setRenameDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleRenameSession}
+                  disabled={!newTitle.trim() || newTitle.trim() === renamingSession?.title}
+                >
+                  Rename
+                </Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   );
 }

@@ -1,15 +1,27 @@
 // components/chat/chat-history.tsx
 import { useState, useEffect } from 'react'
-import { Plus, MessageSquare, Trash2, Calendar } from 'lucide-react'
+import { Plus, MessageSquare, Trash2, Calendar, MoreVertical, Star, Edit2 } from 'lucide-react'
 import { Button } from '~/components/ui/button'
 import { Skeleton } from '~/components/ui/skeleton'
 import { useAuthApi } from '~/hooks/useAuthApi'
+import { useToast } from '~/components/ui/toast'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from '~/components/ui/dropdown-menu'
+import * as Dialog from '@radix-ui/react-dialog'
+import { Input } from '~/components/ui/input'
+import { Label } from '~/components/ui/label'
 
 interface ChatSession {
   id: string
   title: string
   created_at: string
   updated_at: string
+  starred?: boolean
 }
 
 interface ChatHistoryProps {
@@ -22,7 +34,11 @@ interface ChatHistoryProps {
 
 export function ChatHistory({ sessions, currentSessionId, onSessionSelect, onNewChat, isLoading = false }: ChatHistoryProps) {
   const [loading, setLoading] = useState(false)
+  const [renameDialogOpen, setRenameDialogOpen] = useState(false)
+  const [renamingSession, setRenamingSession] = useState<ChatSession | null>(null)
+  const [newTitle, setNewTitle] = useState('')
   const { fetchWithAuth } = useAuthApi()
+  const { showToast } = useToast()
 
   const deleteSession = async (sessionId: string) => {
     try {
@@ -32,8 +48,56 @@ export function ChatHistory({ sessions, currentSessionId, onSessionSelect, onNew
       if (currentSessionId === sessionId) {
         onNewChat()
       }
+      showToast('Chat deleted', 'success', 1500)
     } catch (error) {
       console.error('Failed to delete session:', error)
+      showToast('Failed to delete chat', 'error')
+    }
+  }
+
+  const toggleStarSession = async (session: ChatSession) => {
+    try {
+      const newStarred = !session.starred
+      await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${session.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ starred: newStarred })
+      })
+      showToast(newStarred ? 'Chat starred' : 'Chat unstarred', 'success', 1500)
+      // The parent component should refetch sessions to update the UI
+    } catch (error) {
+      console.error('Failed to toggle star:', error)
+      showToast('Failed to update chat', 'error')
+    }
+  }
+
+  const openRenameDialog = (session: ChatSession) => {
+    setRenamingSession(session)
+    setNewTitle(session.title)
+    setRenameDialogOpen(true)
+  }
+
+  const renameSession = async () => {
+    if (!renamingSession || !newTitle.trim()) return
+
+    try {
+      await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${renamingSession.id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ title: newTitle.trim() })
+      })
+      setRenameDialogOpen(false)
+      setRenamingSession(null)
+      setNewTitle('')
+      showToast('Chat renamed', 'success', 1500)
+      // The parent component should refetch sessions to update the UI
+    } catch (error) {
+      console.error('Failed to rename session:', error)
+      showToast('Failed to rename chat', 'error')
     }
   }
 
@@ -93,37 +157,117 @@ export function ChatHistory({ sessions, currentSessionId, onSessionSelect, onNew
                     <span className="truncate text-sm font-medium">
                       {session.title}
                     </span>
+                    {session.starred && (
+                      <Star className="w-3 h-3 fill-yellow-400 text-yellow-400 flex-shrink-0" />
+                    )}
                   </div>
                   <div className={`text-xs mt-1 flex items-center gap-1 ${
-                    currentSessionId === session.id 
-                      ? 'text-primary-foreground/80' 
+                    currentSessionId === session.id
+                      ? 'text-primary-foreground/80'
                       : 'text-muted-foreground'
                   }`}>
                     <Calendar className="w-3 h-3" />
                     {formatDate(session.updated_at)}
                   </div>
                 </div>
-                
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`opacity-0 group-hover:opacity-100 h-6 w-6 ${
-                    currentSessionId === session.id
-                      ? 'hover:bg-primary-foreground/20'
-                      : ''
-                  }`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    deleteSession(session.id)
-                  }}
-                >
-                  <Trash2 className="w-3 h-3" />
-                </Button>
+
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={`opacity-0 group-hover:opacity-100 h-6 w-6 ${
+                        currentSessionId === session.id
+                          ? 'hover:bg-primary-foreground/20'
+                          : ''
+                      }`}
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <MoreVertical className="w-3 h-3" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        openRenameDialog(session)
+                      }}
+                    >
+                      <Edit2 className="w-4 h-4 mr-2" />
+                      Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        toggleStarSession(session)
+                      }}
+                    >
+                      <Star className={`w-4 h-4 mr-2 ${session.starred ? 'fill-yellow-400 text-yellow-400' : ''}`} />
+                      {session.starred ? 'Unstar' : 'Star'}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        deleteSession(session.id)
+                      }}
+                      className="text-red-600 focus:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {/* Rename Dialog */}
+      <Dialog.Root open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/50 z-50" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg p-6 w-96 max-w-[90vw] z-50">
+            <Dialog.Title className="text-lg font-semibold mb-4">
+              Rename Chat
+            </Dialog.Title>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="chat-title">Chat Title</Label>
+                <Input
+                  id="chat-title"
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  placeholder="Enter new chat title"
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      renameSession()
+                    } else if (e.key === 'Escape') {
+                      setRenameDialogOpen(false)
+                    }
+                  }}
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => setRenameDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={renameSession}
+                  disabled={!newTitle.trim() || newTitle.trim() === renamingSession?.title}
+                >
+                  Rename
+                </Button>
+              </div>
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

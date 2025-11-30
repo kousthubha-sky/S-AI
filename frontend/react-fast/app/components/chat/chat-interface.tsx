@@ -14,6 +14,7 @@ import { HeroGeometric } from "../ui/shape-landing-hero"
 import { PromptInputBox } from "~/components/ai-prompt-box"
 import { TextShimmer } from "~/components/ui/text-shimmer"
 import DigitalSerenity from "~/components/digital-serenity-animated-landing-page"
+import Loader from "~/components/loader-12"
 
 import React from "react"
 
@@ -910,10 +911,10 @@ export function ChatInterface({
   // Show loading only when authenticated and initializing
   if (auth0Loading || (isAuthed && isInitializing)) {
     return (
-      <div className="flex h-full items-center justify-center">
+      <div className="flex h-full items-center justify-center bg-black">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-muted-foreground mx-auto mb-3"></div>
-          <p className="text-sm text-muted-foreground">Loading chat...</p>
+          <Loader />
+          <p className="text-sm text-muted-foreground mt-4">Loading chat...</p>
         </div>
       </div>
     )
