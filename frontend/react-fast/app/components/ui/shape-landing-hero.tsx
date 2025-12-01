@@ -142,7 +142,7 @@ function HeroGeometric({
                         }}
                         className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/[0.03] border border-white/[0.08] mb-8 md:mb-12"
                     >
-                        <Circle className="h-2 w-2 fill-rose-500/80" />
+                        <img src="/favicon.ico" alt="Xcore AI" className="h-6 w-6" />
                         <span className="text-sm text-white/60 tracking-wide">
                             {badge}
                         </span>

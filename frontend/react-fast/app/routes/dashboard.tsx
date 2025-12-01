@@ -11,7 +11,6 @@ import { useToast } from "~/components/ui/toast";
 import CardNav from "~/components/CardNav";
 import PricingSection4 from "~/components/chat/pricing-section-3";
 import {
-  MessageSquare,
   Plus,
   User,
   LogOut,
@@ -78,9 +77,9 @@ interface User {
 function SidebarLogoSection() {
   const { shouldShowText } = useSidebar();
   return (
-    <div className="flex items-center gap-2 px-2 py-4">
-      <div className="w-8 h-8 rounded-lg flex items-center justify-center">
-        <MessageSquare className="h-4 w-4 text-white" />
+    <div className="flex items-center gap-2 py-4">
+      <div className="w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0">
+        <img src="/favicon.ico" alt="Xcore AI" className="h-6 w-6 flex-shrink-0" />
       </div>
       <motion.span
         animate={{
@@ -828,13 +827,7 @@ function DashboardContent() {
                   }}
                 />
                 <SidebarSettingsButton onClick={() => setShowProfileSettings(true)} />
-                <SidebarLink
-                  link={{
-                    label: "History",
-                    href: "#",
-                    icon: <History className="h-5 w-5 text-neutral-200 flex-shrink-0" />,
-                  }}
-                />
+                
               </div>
 
               <div className="border-t border-neutral-300 dark:border-neutral-700 my-2 mx-2" />
@@ -1031,7 +1024,7 @@ function DashboardContent() {
       <Dialog.Root open={renameDialogOpen} onOpenChange={setRenameDialogOpen}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 bg-black/50 z-[9999]" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-lg p-6 w-96 max-w-[90vw] z-[10000]">
+          <Dialog.Content className="fixed text-white left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-[#1a1a1a] rounded-lg p-6 w-96 max-w-[90vw] z-[10000]">
             <Dialog.Title className="text-lg font-semibold mb-4">
               Rename Chat
             </Dialog.Title>
@@ -1042,6 +1035,7 @@ function DashboardContent() {
                   id="chat-title"
                   value={newTitle}
                   onChange={(e) => setNewTitle(e.target.value)}
+                  className="rounded-2xl bg-[#2a2a2a] mt-5"
                   placeholder="Enter new chat title"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -1053,7 +1047,7 @@ function DashboardContent() {
                   autoFocus
                 />
               </div>
-              <div className="flex justify-end gap-2">
+              <div className="flex justify-end gap-2 text-black">
                 <Button
                   variant="outline"
                   onClick={() => setRenameDialogOpen(false)}

@@ -1,4 +1,7 @@
-// components/chat/chat-interface.tsx
+// components/chat/chat-interface.tsx - REDESIGNED VERSION
+// Clean document-style layout with centered content, horizontal rules, and distinctive typography
+// Removed Digital Serenity background for clean, professional appearance
+
 import { useState, useRef, useEffect, useCallback, type JSX } from "react"
 import { AlertCircle, Copy, Check, MessageSquare, Brain, AlertTriangle, Zap, ChevronDown } from "lucide-react"
 import { Button } from "~/components/ui/button"
@@ -10,10 +13,8 @@ import { AI_MODELS } from "~/lib/models"
 import { ChatService } from '~/services/chatService'
 import { NewsService } from '~/services/newsService'
 import { useToast } from "~/components/ui/toast"
-import { HeroGeometric } from "../ui/shape-landing-hero"
 import { PromptInputBox } from "~/components/ai-prompt-box"
 import { TextShimmer } from "~/components/ui/text-shimmer"
-import DigitalSerenity from "~/components/digital-serenity-animated-landing-page"
 import Loader from "~/components/loader-12"
 
 import React from "react"
@@ -70,13 +71,19 @@ interface ChatInterfaceProps {
 
 // Skeleton loader for chat messages
 const ChatMessageSkeleton = () => (
-  <div className="space-y-3 max-w-4xl mx-auto w-full">
-    {[...Array(3)].map((_, i) => (
-      <div key={i} className={`flex ${i % 2 === 0 ? 'justify-end' : 'justify-start'}`}>
-        <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-3 rounded-lg space-y-2 ${i % 2 === 0 ? 'bg-gray-800' : 'bg-gray-700/40'}`}>
-          <Skeleton className="h-4 w-full" />
-          <Skeleton className="h-4 w-4/5" />
+  <div className="space-y-8 max-w-5xl mx-auto w-full">
+    {[...Array(2)].map((_, i) => (
+      <div key={i} className="space-y-4">
+        <div className="py-8 px-6">
+          <Skeleton className="h-6 w-32 mx-auto mb-4" />
+          <Skeleton className="h-8 w-3/4 mx-auto" />
         </div>
+        <div className="py-8 px-6">
+          <Skeleton className="h-4 w-full mb-3" />
+          <Skeleton className="h-4 w-5/6 mb-3" />
+          <Skeleton className="h-4 w-4/6" />
+        </div>
+        <hr className="border-gray-800 max-w-3xl mx-auto" />
       </div>
     ))}
   </div>
@@ -104,11 +111,11 @@ const GeneratedImages = ({ images }: { images: ImageData[] }) => {
   }, [images]);
 
   return (
-    <div className="flex flex-col gap-3 mt-3">
+    <div className="flex flex-col gap-4 mt-6">
       {images.map((image, index) => (
         <div 
           key={index} 
-          className="relative rounded-xl overflow-hidden border border-white/10 bg-white/5 max-w-full"
+          className="relative rounded-xl overflow-hidden border border-gray-700/50 bg-gray-900/30 max-w-full shadow-xl"
         >
           {loadingImages[image.url] && !imageErrors[image.url] && (
             <div className="absolute inset-0 flex items-center justify-center bg-gray-900/50 backdrop-blur-sm">
@@ -248,22 +255,22 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
   };
 
   return (
-    <div className="relative my-3 rounded-lg border border-gray-700 bg-gray-900 overflow-hidden max-w-full">
-      <div className="flex items-center justify-between px-3 sm:px-4 py-2 bg-gray-800 border-b border-gray-700">
-        <span className="text-xs font-mono text-gray-300 uppercase truncate flex-1 mr-2">
+    <div className="relative my-6 rounded-xl border border-gray-700/50 bg-[#0d1117] overflow-hidden shadow-2xl max-w-full">
+      <div className="flex items-center justify-between px-4 sm:px-5 py-3 bg-[#161b22] border-b border-gray-700/50">
+        <span className="text-xs font-semibold text-gray-300 uppercase tracking-wide truncate flex-1 mr-2">
           {language}
         </span>
         <button 
           onClick={handleCopy} 
-          className="flex items-center gap-1 py-1 text-xs text-gray-300 hover:text-white hover:bg-gray-700 rounded flex-shrink-0"
+          className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-gray-300 hover:text-white hover:bg-gray-700/50 rounded-lg transition-colors flex-shrink-0"
         >
-          {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+          {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
           <span className="hidden sm:inline">{copied ? 'Copied!' : 'Copy'}</span>
         </button>
       </div>
       <div className="overflow-x-auto">
-        <pre className="p-3 sm:p-4 max-w-full m-0">
-          <code className="block min-w-0 overflow-x-auto text-sm font-mono" style={{ color: '#E5E7EB' }}>
+        <pre className="p-4 sm:p-5 max-w-full m-0">
+          <code className="block min-w-0 overflow-x-auto text-sm md:text-base font-mono" style={{ color: '#E5E7EB' }}>
             {syntaxHighlight(code, language)}
           </code>
         </pre>
@@ -274,7 +281,7 @@ const CodeBlock = ({ code, language = 'text' }: { code: string; language?: strin
 
 const ThinkingIndicator = () => {
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex items-center justify-center gap-3 py-4">
       <style>{`
         @keyframes brain-float {
           0%, 100% { transform: translateY(0px); }
@@ -284,10 +291,10 @@ const ThinkingIndicator = () => {
           animation: brain-float 3s ease-in-out infinite;
         }
       `}</style>
-      <Brain className="w-5 h-5 text-white thinking-brain flex-shrink-0" />
+      <Brain className="w-6 h-6 text-white thinking-brain flex-shrink-0" />
       <TextShimmer
         duration={1.2}
-        className="text-sm font-medium [--base-color:theme(colors.gray.300)] [--base-gradient-color:theme(colors.black)] dark:[--base-color:theme(colors.gray.300)] dark:[--base-gradient-color:theme(colors.black)]"
+        className="text-base font-medium [--base-color:theme(colors.gray.300)] [--base-gradient-color:theme(colors.black)] dark:[--base-color:theme(colors.gray.300)] dark:[--base-gradient-color:theme(colors.black)]"
       >
         Thinking...
       </TextShimmer>
@@ -328,19 +335,19 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
 
         if (dataRows.length > 0) {
           elements.push(
-            <div key={`table-${elements.length}`} className="my-3 overflow-x-auto">
-              <table className="min-w-full border-collapse border border-gray-600 text-sm">
+            <div key={`table-${elements.length}`} className="my-6 overflow-x-auto rounded-lg border border-gray-700">
+              <table className="min-w-full border-collapse text-sm md:text-base">
                 <tbody>
                   {dataRows.map((row, rowIndex) => {
                     const cells = row.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
                     if (cells.length === 0) return null;
 
                     return (
-                      <tr key={rowIndex} className={rowIndex === 0 ? 'bg-gray-700' : ''}>
+                      <tr key={rowIndex} className={rowIndex === 0 ? 'bg-gray-800' : 'bg-gray-900/30'}>
                         {cells.map((cell, cellIndex) => (
-                          <td key={cellIndex} className="border border-gray-600 px-3 py-2 text-gray-100">
+                          <td key={cellIndex} className="border border-gray-700 px-4 py-3 text-gray-200">
                             {rowIndex === 0 ? (
-                              <strong className="text-white">{cell}</strong>
+                              <strong className="text-white font-semibold">{cell}</strong>
                             ) : (
                               <span dangerouslySetInnerHTML={{ __html: parseMarkdown(cell) }} />
                             )}
@@ -360,12 +367,12 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
     };
 
     const parseMarkdown = (line: string) => {
-      line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline cursor-pointer">$1</a>');
-      line = line.replace(/`([^`]+)`/g, '<code class="bg-gray-800 px-1.5 py-0.5 rounded text-sm font-mono">$1</code>');
-      line = line.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-      line = line.replace(/__([^_]+)__/g, '<strong>$1</strong>');
-      line = line.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-      line = line.replace(/_([^_]+)_/g, '<em>$1</em>');
+      line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline underline-offset-2 cursor-pointer transition-colors">$1</a>');
+      line = line.replace(/`([^`]+)`/g, '<code class="bg-gray-800/60 px-2 py-0.5 rounded text-sm font-mono text-blue-300 border border-gray-700/30">$1</code>');
+      line = line.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
+      line = line.replace(/__([^_]+)__/g, '<strong class="font-semibold text-white">$1</strong>');
+      line = line.replace(/\*([^*]+)\*/g, '<em class="italic">$1</em>');
+      line = line.replace(/_([^_]+)_/g, '<em class="italic">$1</em>');
       return line;
     };
 
@@ -389,7 +396,7 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
       // Handle markdown tables
       if (line.trim().startsWith('|') && line.includes('|')) {
         const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
-        if (cells.length >= 2) { // Only consider it a table if there are at least 2 columns
+        if (cells.length >= 2) {
           if (!inTable) {
             inTable = true;
             tableRows = [];
@@ -399,7 +406,6 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         }
       }
 
-      // If we were in a table but this line doesn't continue it, finish the table
       if (inTable && (!line.trim().startsWith('|') || !line.includes('|'))) {
         addTable();
       }
@@ -409,12 +415,12 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         const level = levelMatch ? levelMatch[0].length : 3;
         const headerText = line.replace(/^#+\s/, '').trim();
         const headingClasses: Record<number, string> = {
-          1: "text-2xl font-bold mt-4 mb-2",
-          2: "text-xl font-bold mt-3 mb-2",
-          3: "text-lg font-bold mt-2 mb-1",
-          4: "text-base font-bold mt-2 mb-1",
-          5: "text-sm font-bold mt-1 mb-1",
-          6: "text-sm font-bold mt-1 mb-1"
+          1: "text-3xl md:text-4xl font-bold mt-8 mb-4 text-white tracking-tight",
+          2: "text-2xl md:text-3xl font-semibold mt-6 mb-3 text-gray-100",
+          3: "text-xl md:text-2xl font-semibold mt-5 mb-2 text-gray-200",
+          4: "text-lg md:text-xl font-medium mt-4 mb-2 text-gray-300",
+          5: "text-base md:text-lg font-medium mt-3 mb-2 text-gray-400",
+          6: "text-sm md:text-base font-medium mt-2 mb-1 text-gray-400"
         };
         
         elements.push(
@@ -437,10 +443,10 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         elements.push(
           <div 
             key={`list-${idx}`} 
-            className="ml-4 my-1 flex gap-2 text-gray-100"
-            style={{ marginLeft: `${indent + 16}px` }}
+            className="ml-6 my-2 flex gap-3 text-base md:text-lg text-gray-300 font-light"
+            style={{ marginLeft: `${indent + 24}px` }}
           >
-            <span className="text-gray-400">•</span>
+            <span className="text-blue-400 font-semibold">•</span>
             <span dangerouslySetInnerHTML={{ __html: parseMarkdown(listText) }} />
           </div>
         );
@@ -457,10 +463,10 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
           elements.push(
             <div 
               key={`ordered-list-${idx}`} 
-              className="ml-4 my-1 flex gap-2 text-gray-100"
-              style={{ marginLeft: `${indent + 16}px` }}
+              className="ml-6 my-2 flex gap-3 text-base md:text-lg text-gray-300 font-light"
+              style={{ marginLeft: `${indent + 24}px` }}
             >
-              <span className="text-gray-400">{number}.</span>
+              <span className="text-blue-400 font-semibold min-w-[1.5rem]">{number}.</span>
               <span dangerouslySetInnerHTML={{ __html: parseMarkdown(listText) }} />
             </div>
           );
@@ -473,7 +479,7 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         elements.push(
           <div 
             key={`quote-${idx}`} 
-            className="border-l-4 border-gray-600 pl-3 py-1 my-2 text-gray-300 italic"
+            className="border-l-4 border-blue-500 pl-6 py-3 my-4 text-gray-300 italic text-base md:text-lg bg-gray-900/30 rounded-r-lg"
           >
             <span dangerouslySetInnerHTML={{ __html: parseMarkdown(quoteText) }} />
           </div>
@@ -485,18 +491,17 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
         elements.push(
           <p 
             key={`p-${idx}`} 
-            className="my-2 leading-relaxed break-words text-gray-100"
+            className="my-3 leading-loose text-base md:text-lg text-gray-300 font-light"
             dangerouslySetInnerHTML={{ __html: parseMarkdown(line) }}
           />
         );
       } else {
-        elements.push(<br key={`br-${idx}`} />);
+        elements.push(<div key={`br-${idx}`} className="h-4" />);
       }
     });
 
     addCodeBlock();
 
-    // Handle any remaining table
     if (inTable) {
       addTable();
     }
@@ -514,7 +519,6 @@ const FormattedMessage = ({ content, images }: { content: string; images?: Image
   );
 };
 
-// components/chat/chat-interface.tsx (updated section)
 export function ChatInterface({ 
   userTier, messageCount = 0, maxDailyMessages = 500, nextResetTime,
   currentSessionId, sessions, onSessionUpdate, onNewChat, user,
@@ -532,43 +536,42 @@ export function ChatInterface({
   const [messages, setMessages] = useState<Message[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
-   const [hasStartedChat, setHasStartedChat] = useState(false);
-   const [messagesLoaded, setMessagesLoaded] = useState(false); // Track if messages are loaded
-   const [userScrolledUp, setUserScrolledUp] = useState(false); // Track if user manually scrolled up
+  const [hasStartedChat, setHasStartedChat] = useState(false);
+  const [messagesLoaded, setMessagesLoaded] = useState(false);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [isLimitReached, setIsLimitReached] = useState(false);
   const [tempMessage, setTempMessage] = useState<Message | null>(null);
-   const abortControllerRef = useRef<AbortController | null>(null)
-   const messagesEndRef = useRef<HTMLDivElement>(null)
-   const containerRef = useRef<HTMLDivElement>(null)
-   const scrollContainerRef = useRef<HTMLDivElement>(null)  // Ref for the scrolling messages container
-   const authTokenCache = useRef<{ token: string; expires: number } | null>(null)  // Cache auth token for 5 minutes
+  const abortControllerRef = useRef<AbortController | null>(null)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const authTokenCache = useRef<{ token: string; expires: number } | null>(null)
 
-   // Cached auth token function to avoid repeated token fetches
-   const getCachedAuthToken = async (): Promise<string> => {
-     const now = Date.now();
-     const cacheExpiry = 5 * 60 * 1000; // 5 minutes
+  const getCachedAuthToken = async (): Promise<string> => {
+    const now = Date.now();
+    const cacheExpiry = 5 * 60 * 1000;
 
-     if (authTokenCache.current && authTokenCache.current.expires > now) {
-       return authTokenCache.current.token;
-     }
+    if (authTokenCache.current && authTokenCache.current.expires > now) {
+      return authTokenCache.current.token;
+    }
 
-     const token = await getAccessTokenSilently({
-       authorizationParams: {
-         audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
-         scope: 'openid profile email'
-       }
-     });
+    const token = await getAccessTokenSilently({
+      authorizationParams: {
+        audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
+        scope: 'openid profile email'
+      }
+    });
 
-     authTokenCache.current = {
-       token,
-       expires: now + cacheExpiry
-     };
+    authTokenCache.current = {
+      token,
+      expires: now + cacheExpiry
+    };
 
-     return token;
-   };
+    return token;
+  };
 
-   useEffect(() => {
+  useEffect(() => {
     if (currentSessionId && isAuthed) {
       loadSession(currentSessionId);
       setActiveSessionId(currentSessionId);
@@ -581,39 +584,37 @@ export function ChatInterface({
   }, [currentSessionId, isAuthed]);
 
   const loadSession = async (sessionId: string) => {
-     try {
-       setIsInitializing(true);
-       const sessionMessages = await ChatService.getChatMessages(sessionId, fetchWithAuth);
+    try {
+      setIsInitializing(true);
+      const sessionMessages = await ChatService.getChatMessages(sessionId, fetchWithAuth);
 
-       const formattedMessages: Message[] = sessionMessages.map(msg => ({
-         id: msg.id,
-         role: msg.role as 'user' | 'assistant',
-         content: msg.content,
-         timestamp: new Date(msg.created_at),
-         images: msg.images || undefined
-       }));
+      const formattedMessages: Message[] = sessionMessages.map(msg => ({
+        id: msg.id,
+        role: msg.role as 'user' | 'assistant',
+        content: msg.content,
+        timestamp: new Date(msg.created_at),
+        images: msg.images || undefined
+      }));
 
-       setMessages(formattedMessages);
-       setHasStartedChat(formattedMessages.length > 0);
-       setMessagesLoaded(true); // Mark messages as loaded
-       setError(null);
-     } catch (error: any) {
-       console.error('Failed to load session:', error);
-       setError('Failed to load chat session');
-       setMessages([]);
-       setHasStartedChat(false);
-       setMessagesLoaded(true); // Even on error, loading is complete
-     } finally {
-       setIsInitializing(false);
-     }
-   }
+      setMessages(formattedMessages);
+      setHasStartedChat(formattedMessages.length > 0);
+      setMessagesLoaded(true);
+      setError(null);
+    } catch (error: any) {
+      console.error('Failed to load session:', error);
+      setError('Failed to load chat session');
+      setMessages([]);
+      setHasStartedChat(false);
+      setMessagesLoaded(true);
+    } finally {
+      setIsInitializing(false);
+    }
+  }
 
   const handleSendMessage = async (messageText: string, files?: File[]) => {
-    // Don't send if not authenticated
     if (!isAuthed || (!messageText.trim() && (!files || files.length === 0)) || isLoading) return;
 
     setHasStartedChat(true);
-
     abortControllerRef.current = new AbortController();
 
     const attachments: Attachment[] = files ? files.map(file => ({
@@ -691,79 +692,71 @@ export function ChatInterface({
         } catch (error) {
           messageContent = `Failed to fetch news: ${error instanceof Error ? error.message : 'Unknown error'}\n\nTry searching for different keywords or check your internet connection.`;
         }
-       } else {
-         // Use streaming for real-time token display
-         const apiMessages = [...messages, userMessage]
-           .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
-           .map(msg => ({ role: msg.role, content: msg.content }))
+      } else {
+        const apiMessages = [...messages, userMessage]
+          .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
+          .map(msg => ({ role: msg.role, content: msg.content }))
 
-         if (attachments.length > 0) {
-           apiMessages[apiMessages.length - 1].content += '\n' +
-             attachments.map(a => `[Attachment: ${a.name}]`).join('\n')
-         }
+        if (attachments.length > 0) {
+          apiMessages[apiMessages.length - 1].content += '\n' +
+            attachments.map(a => `[Attachment: ${a.name}]`).join('\n')
+        }
 
-         let streamingContent = '';
-         let streamingUsage: any = null;
-         let streamingImages: ImageData[] = [];
+        let streamingContent = '';
+        let streamingUsage: any = null;
+        let streamingImages: ImageData[] = [];
 
-         const cleanup = await ChatService.streamChat(
-           apiMessages,
-           modelToUse,
-           0.7,
-           1000,
-           isThinkingRequest,
-           (token: string) => {
-             // Accumulate tokens and update the message in real-time
-             streamingContent += token;
-             setMessages(prev => prev.map(msg =>
-               msg.id === tempAssistantMessage.id
-                 ? { ...msg, content: streamingContent, isLoading: false }
-                 : msg
-             ));
-           },
-           (usage?: any, images?: ImageData[]) => {
-             // Stream completed
-             streamingUsage = usage;
-             streamingImages = images || [];
-             setMessages(prev => prev.map(msg =>
-               msg.id === tempAssistantMessage.id
-                 ? { ...msg, content: streamingContent, isLoading: false, images: streamingImages }
-                 : msg
-             ));
-           },
-           (error: string) => {
-             // Handle streaming error
-             console.error('Streaming error:', error);
-             setMessages(prev => prev.map(msg =>
-               msg.id === tempAssistantMessage.id
-                 ? { ...msg, content: `Error: ${error}`, isLoading: false }
-                 : msg
-             ));
-           },
-            async () => {
-              // Get cached auth token to improve performance
-              return await getCachedAuthToken();
+        const cleanup = await ChatService.streamChat(
+          apiMessages,
+          modelToUse,
+          0.7,
+          1000,
+          isThinkingRequest,
+          (token: string) => {
+            streamingContent += token;
+            setMessages(prev => prev.map(msg =>
+              msg.id === tempAssistantMessage.id
+                ? { ...msg, content: streamingContent, isLoading: false }
+                : msg
+            ));
+          },
+          (usage?: any, images?: ImageData[]) => {
+            streamingUsage = usage;
+            streamingImages = images || [];
+            setMessages(prev => prev.map(msg =>
+              msg.id === tempAssistantMessage.id
+                ? { ...msg, content: streamingContent, isLoading: false, images: streamingImages }
+                : msg
+            ));
+          },
+          (error: string) => {
+            console.error('Streaming error:', error);
+            setMessages(prev => prev.map(msg =>
+              msg.id === tempAssistantMessage.id
+                ? { ...msg, content: `Error: ${error}`, isLoading: false }
+                : msg
+            ));
+          },
+          async () => {
+            return await getCachedAuthToken();
+          }
+        );
+
+        await new Promise<void>((resolve) => {
+          const checkComplete = () => {
+            if (!streamingContent.includes('Error:') && streamingUsage !== null) {
+              resolve();
+            } else {
+              setTimeout(checkComplete, 100);
             }
-         );
+          };
+          checkComplete();
+        });
 
-
-
-         // Wait for streaming to complete (this will be resolved when onComplete is called)
-         await new Promise<void>((resolve) => {
-           const checkComplete = () => {
-             if (!streamingContent.includes('Error:') && streamingUsage !== null) {
-               resolve();
-             } else {
-               setTimeout(checkComplete, 100);
-             }
-           };
-           checkComplete();
-         });
-
-         messageContent = streamingContent;
-         responseImages = streamingImages;
-         totalTokens = streamingUsage?.total_tokens;
-       }
+        messageContent = streamingContent;
+        responseImages = streamingImages;
+        totalTokens = streamingUsage?.total_tokens;
+      }
 
       setMessages(prev => prev.map(msg => 
         msg.id === tempAssistantMessage.id 
@@ -830,7 +823,6 @@ export function ChatInterface({
           setMessages(prev => prev.filter(msg => msg.id !== tempAssistantMessage.id));
         }
         
-        // Show toast notifications for different limit types
         const errorMessage = error?.message || '';
         if (errorMessage.includes('Daily limit reached')) {
           showToast('🚫 Daily limit reached (50 requests/day). Upgrade to continue!', 'warning', 5000);
@@ -850,7 +842,6 @@ export function ChatInterface({
         return
       }
       
-      // Show generic error toast
       showToast('❌ An error occurred. Please try again.', 'error');
       
       setMessages(prev => prev.map(msg => 
@@ -862,21 +853,18 @@ export function ChatInterface({
     }
   }
 
-  // Improved scrolling logic to prevent glitches during streaming
   const scrollToBottom = useCallback(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, []);
 
-  // Handle scroll events to detect user scrolling
   useEffect(() => {
     const scrollContainer = scrollContainerRef.current;
     if (!scrollContainer) return;
 
     let scrollTimeout: NodeJS.Timeout;
     const handleScroll = () => {
-      // Debounce scroll events for better performance
       clearTimeout(scrollTimeout);
       scrollTimeout = setTimeout(() => {
         const { scrollTop, scrollHeight, clientHeight } = scrollContainer;
@@ -893,7 +881,6 @@ export function ChatInterface({
   }, []);
 
   useEffect(() => {
-    // Only auto-scroll if user hasn't scrolled up and is near bottom
     if (!userScrolledUp) {
       const scrollContainer = scrollContainerRef.current;
       if (scrollContainer) {
@@ -901,51 +888,49 @@ export function ChatInterface({
         const isNearBottom = scrollHeight - scrollTop - clientHeight < 100;
 
         if (isNearBottom) {
-          // Small delay to ensure DOM has updated during streaming
           setTimeout(scrollToBottom, 50);
         }
       }
     }
   }, [messages, scrollToBottom, userScrolledUp]);
 
-  // Show loading only when authenticated and initializing
   if (auth0Loading || (isAuthed && isInitializing)) {
     return (
-      <div className="flex h-full items-center justify-center bg-black">
+      <div className="flex h-full items-center justify-center bg-[#1a1a1a]">
         <div className="text-center">
           <Loader />
-          <p className="text-sm text-muted-foreground mt-4">Loading chat...</p>
+          <p className="text-sm text-gray-400 mt-4">Loading chat...</p>
         </div>
       </div>
     )
   }
 
-   return (
+  return (
     <div 
       ref={containerRef}
-      className="flex flex-col h-full w-full flex-1 pt-16 md:pt-0 relative overflow-hidden"
+      className="flex flex-col h-full w-full flex-1 pt-16 md:pt-0 relative overflow-hidden bg-[#1a1a1a]"
     >
-      {/* Digital Serenity Background */}
-      <div className="absolute inset-0 z-0">
-
-        <DigitalSerenity username={auth0User?.given_name || auth0User?.name || 'there'} hasStartedChat={hasStartedChat} />
-      </div>
-
-      {/* Content Layer */}
       <div className="relative z-10 flex flex-col h-full w-full">
         {!isAuthed ? (
-          /* HeroGeometric Welcome Screen for Unauthenticated Users */
-          <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-            <div className="absolute inset-0">
-              <HeroGeometric 
-                badge="Xcore-ai(Beta)"
-                title1="Elevate Your"
-                title2="AI experience"
-              />
+          <div className="flex-1 flex flex-col h-full overflow-hidden relative bg-[#0a0a0a]">
+            <div className="flex-1 flex items-center justify-center px-4">
+              <div className="text-center space-y-6 max-w-3xl">
+                <div className="inline-block px-4 py-1.5 bg-gray-800/50 rounded-full border border-gray-700/50 mb-4">
+                  <span className="text-sm font-medium text-gray-400">Xcore-ai (Beta)</span>
+                </div>
+                <h1 className="text-4xl md:text-6xl font-bold text-white tracking-tight">
+                  Elevate Your<br />
+                  <span className="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                    AI Experience
+                  </span>
+                </h1>
+                <p className="text-lg md:text-xl text-gray-400 max-w-2xl mx-auto">
+                  Sign in to unlock powerful AI capabilities and start meaningful conversations
+                </p>
+              </div>
             </div>
             
-            {/* Prompt Input positioned at bottom */}
-            <div className="absolute bottom-0 left-0 right-0 px-4 pb-6 flex justify-center z-20">
+            <div className="px-4 pb-8 flex justify-center">
               <div className="w-full max-w-4xl">
                 <PromptInputBox
                   onSend={handleSendMessage}
@@ -962,83 +947,25 @@ export function ChatInterface({
             </div>
           </div>
         ) : (
-                /* Authenticated Chat Interface - UNCHANGED */
-              /* Authenticated Chat Interface - FIXED SCROLL */
-        <div className="flex flex-col h-full w-full">
-          {!hasStartedChat ? (
-            // Before chat starts - just prompt box at bottom
-            <div className="flex-1 flex flex-col items-center justify-center pt-48 md:pt-64 px-4 py-8">
-              <div className="w-full max-w-2xl">
-                <PromptInputBox
-                  onSend={handleSendMessage}
-                  isLoading={isLoading}
-                  placeholder="Ask me anything..."
-                  selectedModel={selectedModel}
-                  onModelChange={(model) => {
-                    setSelectedModel(model);
-                  }}
-                  userTier={userTier}
-                  isAuthenticated={isAuthed}
-                />
-              </div>
-            </div>
-          ) : (
-            // After chat starts - FIXED SCROLL LAYOUT
-            <div className="flex flex-col h-full">
-              {/* Messages Container - PROPER SCROLLING */}
-                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto relative" style={{ height: 'calc(100vh - 200px)' }}>
-                 <div className="min-h-full px-4 py-4">
-                  {isInitializing ? (
-                    <ChatMessageSkeleton />
-                  ) : (
-                    <div className="space-y-4 max-w-4xl mx-auto w-full">
-                      {messages.map((message) => (
-                        <div key={message.id} className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                          <div className={`max-w-xs sm:max-w-sm md:max-w-md lg:max-w-2xl px-4 py-1 rounded-lg ${message.role === 'user' ? 'bg-gray-950 text-white' : 'text-gray-100'}`}>
-                             {message.isLoading ? (
-                               <ThinkingIndicator />
-                             ) : (
-                               <>
-                                 <FormattedMessage content={message.content} images={message.images} />
-                                 {message.attachments && message.attachments.length > 0 && (
-                                   <div className="mt-2 space-y-1">
-                                     {message.attachments.map(att => (
-                                       <div key={att.id} className="text-xs opacity-75">{att.name}</div>
-                                     ))}
-                                   </div>
-                                 )}
-                               </>
-                             )}
-                          </div>
-                        </div>
-                      ))}
-                      <div ref={messagesEndRef} />
-                    </div>
-                  )}
-                 </div>
-               </div>
+          <div className="flex flex-col h-full w-full bg-[#1a1a1a]">
+            {!hasStartedChat ? (
+              <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
+                 <img src="/favicon.ico" alt="Xcore AI" className="h-60 w-60 flex-shrink-0" />
 
-               {/* Scroll to Bottom Button */}
-               {userScrolledUp && (
-                 <button
-                   onClick={() => {
-                     scrollToBottom();
-                     setUserScrolledUp(false);
-                   }}
-                   className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-all duration-200 z-20"
-                   title="Scroll to bottom"
-                 >
-                   <ChevronDown className="w-5 h-5" />
-                 </button>
-               )}
-
-               {/* Input Area - Fixed at bottom */}
-              <div className="flex-shrink-0 px-4 py-4 bg-gradient-to-t from-[#030303] to-transparent">
-                <div className="max-w-4xl mx-auto w-full">
+                <div className="w-full max-w-2xl text-center space-y-8">
+                  <div className="space-y-4">
+                    <h2 className="text-3xl md:text-4xl font-bold text-white tracking-tight">
+                      How can I help you today?
+                    </h2>
+                    <p className="text-lg text-gray-400">
+                      Ask me anything - from creative writing to code assistance
+                    </p>
+                  </div>
+                  
                   <PromptInputBox
                     onSend={handleSendMessage}
                     isLoading={isLoading}
-                    placeholder="Type your message..."
+                    placeholder="Ask me anything..."
                     selectedModel={selectedModel}
                     onModelChange={(model) => {
                       setSelectedModel(model);
@@ -1048,10 +975,92 @@ export function ChatInterface({
                   />
                 </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            ) : (
+              <div className="flex flex-col h-full">
+                <div ref={scrollContainerRef} className="flex-1 overflow-y-auto relative" style={{ height: 'calc(100vh - 200px)' }}>
+                  <div className="min-h-full px-4 py-8">
+                    {isInitializing ? (
+                      <ChatMessageSkeleton />
+                    ) : (
+                      <div className="space-y-0 max-w-5xl mx-auto w-full">
+                        {messages.map((message, index) => (
+                          <div key={message.id} className="w-full">
+                            {message.role === 'user' && (
+                              <div className="px-6">
+                                <div className="text-center space-y-2">
+                                  <p className="text-xl md:text-3xl border-[#2a2a2a] border-t-1 ml-0 md:ml-10 slide-in-from-bottom-translate-full text-gray-200 leading-relaxed max-w-4xl flex justify-start">
+                                    {message.content}
+                                  </p>
+                                  {message.attachments && message.attachments.length > 0 && (
+                                    <div className="mt-4 flex flex-wrap gap-2 justify-center">
+                                      {message.attachments.map(att => (
+                                        <span key={att.id} className="text-xs px-3 py-1 bg-gray-800 rounded-full text-gray-400">
+                                          📎 {att.name}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {message.role === 'assistant' && (
+                              <div className="py-2 px-6 bg-gradient-to-b from-transparent via-gray-900/20 to-transparent">
+                                <div className="max-w-4xl mx-auto">
+                                  {message.isLoading ? (
+                                    <div className="flex justify-start">
+                                      <ThinkingIndicator />
+                                    </div>
+                                  ) : (
+                                    <div className="prose prose-invert prose-lg max-w-none">
+                                      <FormattedMessage content={message.content} images={message.images} />
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+
+                          </div>
+                        ))}
+                        <div ref={messagesEndRef} />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {userScrolledUp && (
+                  <button
+                    onClick={() => {
+                      scrollToBottom();
+                      setUserScrolledUp(false);
+                    }}
+                    className="absolute bottom-24 right-8 bg-gray-800 hover:bg-gray-700 text-white p-3 rounded-full shadow-2xl transition-all duration-200 z-20 border border-gray-700"
+                    title="Scroll to bottom"
+                  >
+                    <ChevronDown className="w-5 h-5" />
+                  </button>
+                )}
+
+                <div className="flex-shrink-0 px-4 py-6">
+                  <div className="max-w-4xl mx-auto">
+                    <PromptInputBox
+                      onSend={handleSendMessage}
+                      isLoading={isLoading}
+                      placeholder="Type your message..."
+                      selectedModel={selectedModel}
+                      onModelChange={(model) => {
+                        setSelectedModel(model);
+                      }}
+                      userTier={userTier}
+                      isAuthenticated={isAuthed}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
