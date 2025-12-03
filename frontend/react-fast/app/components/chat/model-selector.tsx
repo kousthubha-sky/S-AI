@@ -301,7 +301,7 @@ export function ModelSelector({ selectedModel, onModelChange, userTier, isAuthen
         )}
       </AnimatePresence>
 
-      <Tooltip />
+  
     </div>
   );
 }
