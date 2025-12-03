@@ -308,38 +308,44 @@ const ThinkingIndicator = () => {
   );
 };
 
-interface FormattedMessageProps {
-  content: string;
-  images?: ImageData[];
-}
-
-const FormattedMessage = ({ content, images }: FormattedMessageProps) => {
+const FormattedMessage = ({ content, images }: { content: string; images?: ImageData[] }) => {
+  // Custom components for ReactMarkdown
   const components = {
     // Headings
     h1: ({ children }: any) => (
-      <h1 className="text-2xl md:text-3xl font-semibold mt-6 mb-3 text-white">
+      <h1 className="text-3xl md:text-4xl font-bold mt-8 mb-4 text-white tracking-tight">
         {children}
       </h1>
     ),
     h2: ({ children }: any) => (
-      <h2 className="text-xl md:text-2xl font-semibold mt-5 mb-2.5 text-gray-100">
+      <h2 className="text-2xl md:text-3xl font-semibold mt-6 mb-3 text-gray-100">
         {children}
       </h2>
     ),
     h3: ({ children }: any) => (
-      <h3 className="text-lg md:text-xl font-semibold mt-4 mb-2 text-gray-200">
+      <h3 className="text-xl md:text-2xl font-semibold mt-5 mb-2 text-gray-200">
         {children}
       </h3>
     ),
     h4: ({ children }: any) => (
-      <h4 className="text-base md:text-lg font-medium mt-3 mb-1.5 text-gray-300">
+      <h4 className="text-lg md:text-xl font-medium mt-4 mb-2 text-gray-300">
         {children}
       </h4>
     ),
+    h5: ({ children }: any) => (
+      <h5 className="text-base md:text-lg font-medium mt-3 mb-2 text-gray-400">
+        {children}
+      </h5>
+    ),
+    h6: ({ children }: any) => (
+      <h6 className="text-sm md:text-base font-medium mt-2 mb-1 text-gray-400">
+        {children}
+      </h6>
+    ),
 
-    // Paragraphs - CRITICAL FIX
+    // Paragraphs
     p: ({ children }: any) => (
-      <p className="mb-4 last:mb-0 leading-7 text-[15px] text-gray-200">
+      <p className="my-3 leading-loose text-base md:text-lg text-gray-300 font-light">
         {children}
       </p>
     ),
@@ -350,21 +356,18 @@ const FormattedMessage = ({ content, images }: FormattedMessageProps) => {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/50 underline-offset-2 transition-colors"
+        className="text-blue-400 hover:text-blue-300 underline underline-offset-2 cursor-pointer transition-colors"
       >
         {children}
       </a>
     ),
 
-    // Code - MOST IMPORTANT FIX
+    // Code blocks
     code: ({ node, inline, className, children, ...props }: any) => {
       const match = /language-(\w+)/.exec(className || '');
       const language = match ? match[1] : 'text';
 
-      // Block code - let your existing CodeBlock component handle it
       if (!inline) {
-        // This is where "TEXT" blocks were appearing
-        // Make sure CodeBlock component is imported
         return (
           <CodeBlock
             code={String(children).replace(/\n$/, '')}
@@ -373,23 +376,15 @@ const FormattedMessage = ({ content, images }: FormattedMessageProps) => {
         );
       }
 
-      // Inline code (like `backend/main.py`)
       return (
         <code
-          className="bg-gray-800/70 px-2 py-0.5 rounded text-[13px] font-mono text-pink-300 border border-gray-700/50"
+          className="bg-gray-800/60 px-2 py-0.5 rounded text-sm font-mono text-blue-300 border border-gray-700/30"
           {...props}
         >
           {children}
         </code>
       );
     },
-
-    // Pre wrapper - CRITICAL for code blocks
-    pre: ({ children }: any) => (
-      <div className="not-prose my-4">
-        {children}
-      </div>
-    ),
 
     // Strong/bold
     strong: ({ children }: any) => (
@@ -398,91 +393,84 @@ const FormattedMessage = ({ content, images }: FormattedMessageProps) => {
       </strong>
     ),
 
-    // Emphasis
+    // Emphasis/italic
     em: ({ children }: any) => (
-      <em className="italic text-gray-300">
+      <em className="italic">
         {children}
       </em>
     ),
 
-    // Unordered lists
+    // Lists
     ul: ({ children }: any) => (
       <ul className="my-4 space-y-2">
         {children}
       </ul>
     ),
 
-    // Ordered lists
     ol: ({ children }: any) => (
-      <ol className="my-4 space-y-2 list-decimal list-inside">
+      <ol className="my-4 space-y-2">
         {children}
       </ol>
     ),
 
-    // List items - Fixed bullet styling
     li: ({ children }: any) => (
-      <li className="ml-4 flex gap-2.5 text-[15px] text-gray-200 leading-7">
-        <span className="text-blue-400 font-bold select-none flex-shrink-0 mt-0.5">•</span>
-        <span className="flex-1">{children}</span>
+      <li className="ml-6 flex gap-3 text-base md:text-lg text-gray-300 font-light">
+        <span className="text-blue-400 font-semibold">•</span>
+        <span>{children}</span>
       </li>
     ),
 
     // Blockquotes
     blockquote: ({ children }: any) => (
-      <blockquote className="border-l-[3px] border-blue-500/70 pl-4 py-2 my-4 text-gray-300 italic text-[15px] bg-gray-800/30 rounded-r">
+      <div className="border-l-4 border-blue-500 pl-6 py-3 my-4 text-gray-300 italic text-base md:text-lg bg-gray-900/30 rounded-r-lg">
         {children}
-      </blockquote>
+      </div>
     ),
 
-    // Horizontal rule
-    hr: () => (
-      <hr className="my-6 border-t border-gray-700/50" />
-    ),
-
-    // Tables - FIXED styling to match your images
+    // Tables
     table: ({ children }: any) => (
-      <div className="my-6 overflow-x-auto rounded-lg border border-gray-700/50 bg-gray-900/30">
-        <table className="min-w-full border-collapse">
+      <div className="my-6 overflow-x-auto rounded-lg border border-gray-700">
+        <table className="min-w-full border-collapse text-sm md:text-base">
           {children}
         </table>
       </div>
     ),
 
     thead: ({ children }: any) => (
-      <thead className="bg-gray-800/60 border-b border-gray-700">
+      <thead>
         {children}
       </thead>
     ),
 
     tbody: ({ children }: any) => (
-      <tbody className="divide-y divide-gray-700/40">
+      <tbody>
         {children}
       </tbody>
     ),
 
     tr: ({ children }: any) => (
-      <tr className="hover:bg-gray-800/20 transition-colors">
+      <tr>
         {children}
       </tr>
     ),
 
     th: ({ children }: any) => (
-      <th className="px-4 py-3 text-left border-r border-gray-700/40 last:border-r-0">
-        <span className="text-white font-semibold text-[14px]">
+      <th className="border border-gray-700 px-4 py-3 text-left">
+        <strong className="text-white font-semibold">
           {children}
-        </span>
+        </strong>
       </th>
     ),
 
     td: ({ children }: any) => (
-      <td className="px-4 py-3 text-gray-200 text-[14px] border-r border-gray-700/40 last:border-r-0">
+      <td className="border border-gray-700 px-4 py-3 text-gray-200">
         {children}
       </td>
     ),
   };
 
   return (
-    <div className="w-full max-w-none">
+    <div className="space-y-1 break-words">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={components}
@@ -1060,7 +1048,7 @@ export function ChatInterface({
                             {message.role === 'user' && (
                               <div className="px-6">
                                 <div className="text-center space-y-2">
-                                  <p className="text-xl md:text-3xl border-[#2a2a2a] border-t-1 ml-0 md:ml-10 slide-in-from-bottom-translate-full text-gray-200 leading-relaxed max-w-4xl flex justify-start">
+                                  <p className="text-xl font-mono md:text-3xl ml-0 md:ml-10 slide-in-from-bottom-translate-full text-gray-200 leading-relaxed max-w-4xl flex justify-start">
                                     {message.content}
                                   </p>
                                   
@@ -1110,8 +1098,8 @@ export function ChatInterface({
                             )}
 
                             {message.role === 'assistant' && (
-                              <div className="py-2 px-6 bg-gradient-to-b from-transparent via-gray-900/20 to-transparent">
-                                <div className="max-w-4xl mx-auto">
+                              <div className="py-2  px-6 bg-gradient-to-b from-transparent via-gray-900/20 to-transparent">
+                                <div className="border-[#2a2a2a] border-b-2 max-w-4xl mx-auto">
                                    {message.isLoading ? (
                                      <div className="flex justify-start">
                                        <ThinkingIndicator />

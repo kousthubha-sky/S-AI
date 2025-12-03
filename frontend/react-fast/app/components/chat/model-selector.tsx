@@ -166,7 +166,7 @@ export function ModelSelector({ selectedModel, onModelChange, userTier, isAuthen
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -8, scale: 0.95 }}
             transition={{ duration: 0.15 }}
-            className="absolute bottom-full mb-2 right-0 bg-background/95 backdrop-blur-xl border border-border/50 rounded-lg shadow-2xl min-w-[280px] max-h-[400px] overflow-hidden"
+            className="absolute bottom-full mb-2 -left-40 bg-background/95 backdrop-blur-xl border border-border/50 rounded-lg shadow-2xl min-w-[280px] max-h-[400px] overflow-hidden"
             onMouseLeave={() => {
               setIsOpen(false);
               handleModelSelect();

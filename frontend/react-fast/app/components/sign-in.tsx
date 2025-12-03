@@ -77,7 +77,7 @@ export function SignInPage() {
         
         <a 
           href="/dashboard"
-          className="absolute top-7 left-5 flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+          className="absolute top-2 left-1 flex items-center rounded-lg px-3 py-2 text-sm text-gray-400 hover:text-white transition-colors"
         >
           <ChevronLeftIcon className='size-4' />
           Home
@@ -203,9 +203,9 @@ export function SignInPage() {
       <div className="relative hidden h-full flex-col bg-gradient-to-t from-[#0a0a0a] via-[#141414] to-[#222121] p-10 lg:flex">
         <div className="absolute inset-0 z-10 bg-gradient-to-b from-transparent to-black/10" />
         
-        <div className="z-20 flex items-center gap-2">
-          <Grid2x2PlusIcon className="size-6 text-white" />
-          <p className="text-xl font-semibold text-white">XCORE-AI</p>
+        <div className="z-20 flex items-center ">
+          <img src="/favicon.ico" alt="Xcore AI" className="h-10 w-10 flex-shrink-0" />
+          <p className="text-xl font-semibold text-white">CORE-AI</p>
         </div>
         
         <div className="z-20 mt-auto">
@@ -215,7 +215,7 @@ export function SignInPage() {
               clients faster than ever before.&rdquo;
             </p>
             <footer className="font-mono text-sm font-semibold text-white">
-              ~ Ali Hassan
+              ~ Creator
             </footer>
           </blockquote>
         </div>
