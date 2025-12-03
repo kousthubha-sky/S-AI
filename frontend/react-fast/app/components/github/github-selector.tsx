@@ -379,22 +379,30 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
   };
 
   const handleFileToggle = (file: GitHubFile) => {
-    const key = `${selectedRepo?.full_name}/${file.path}`;
-    const selectedFile: SelectedFile = {
-      repo: selectedRepo!.name,
-      owner: selectedRepo!.owner,
-      path: file.path,
-      name: file.name,
-      size: file.size
-    };
+    if (!selectedRepo) return;
 
-    const newSelected = new Map(selectedFiles);
-    if (newSelected.has(key)) {
-      newSelected.delete(key);
-    } else {
-      newSelected.set(key, selectedFile);
-    }
-    setSelectedFiles(newSelected);
+    const key = `${selectedRepo.full_name}/${file.path}`;
+    console.log('Toggling file:', key);
+
+    setSelectedFiles(prev => {
+      const newSelected = new Map(prev);
+      if (newSelected.has(key)) {
+        newSelected.delete(key);
+        console.log('Deselected file:', key);
+      } else {
+        const selectedFile: SelectedFile = {
+          repo: selectedRepo.name,
+          owner: selectedRepo.owner,
+          path: file.path,
+          name: file.name,
+          size: file.size
+        };
+        newSelected.set(key, selectedFile);
+        console.log('Selected file:', key);
+      }
+      console.log('Total selected files:', newSelected.size);
+      return newSelected;
+    });
   };
 
   const handleSelectFiles = () => {
@@ -421,13 +429,21 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
             <div>
               <h2 className="text-[18px] font-semibold text-white mb-1">Add content from GitHub</h2>
               <p className="text-[13px] text-[#9ca3af]">Select the files you would like to add to this chat</p>
-              {!connected ? (
-                <button
-                  onClick={() => setShowConnectionDialog(true)}
-                  className="mt-2 px-4 py-2 bg-[#60a5fa] text-white rounded hover:bg-[#3b82f6] transition-colors text-[14px]"
-                >
-                  Connect GitHub
-                </button>
+              {isCheckingConnection ? (
+                <div className="flex items-center gap-2 mt-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-[#60a5fa]" />
+                  <span className="text-[14px] text-[#9ca3af]">Checking connection...</span>
+                </div>
+              ) : !connected ? (
+                <div className="mt-2">
+                  <p className="text-[12px] text-red-400 mb-2">Not connected to GitHub</p>
+                  <button
+                    onClick={() => setShowConnectionDialog(true)}
+                    className="px-4 py-2 bg-[#60a5fa] text-white rounded hover:bg-[#3b82f6] transition-colors text-[14px]"
+                  >
+                    Connect GitHub
+                  </button>
+                </div>
               ) : (
                 <div className="flex items-center gap-2 mt-2">
                   <span className="text-[12px] text-[#6b7280]">
@@ -586,27 +602,36 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
             ) : (
               <div className="h-full overflow-y-auto">
                 {files.map((file, index) => {
-                  const fileKey = `${selectedRepo.full_name}/${file.path}`;
+                  const fileKey = `${selectedRepo?.full_name}/${file.path}`;
                   const isSelected = selectedFiles.has(fileKey);
 
                   return (
                     <div
                       key={index}
-                      className={`flex items-center gap-3 px-3 py-3 hover:bg-[#3d3d3d] rounded-lg cursor-pointer transition-colors group ${
-                        file.type === 'dir' ? 'cursor-pointer' : ''
-                      }`}
-                      onClick={file.type === 'dir' ? () => handleFolderClick(file.path) : undefined}
+                      className={`flex items-center gap-3 px-3 py-3 hover:bg-[#3d3d3d] rounded-lg transition-colors group ${
+                        file.type === 'dir' ? 'cursor-pointer' : 'cursor-pointer'
+                      } ${isSelected ? 'bg-[#4d4d4d]' : ''}`}
+                      onClick={file.type === 'dir' ? () => handleFolderClick(file.path) : () => handleFileToggle(file)}
                     >
                       {/* Checkbox or Folder indicator */}
                       {file.type === 'file' ? (
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() => handleFileToggle(file)}
-                          className="w-4 h-4 rounded border-2 border-[#4b5563] bg-transparent checked:bg-transparent checked:border-[#4b5563] appearance-none cursor-pointer relative
-                            before:content-[''] before:absolute before:inset-0 before:bg-transparent
-                            checked:before:bg-[url('data:image/svg+xml;base64)] before:bg-center before:bg-no-repeat"
-                        />
+                        <div
+                          className={`w-4 h-4 rounded border-2 flex items-center justify-center cursor-pointer transition-colors ${
+                            isSelected
+                              ? 'bg-blue-600 border-blue-600'
+                              : 'border-[#4b5563] hover:border-[#6b7280]'
+                          }`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleFileToggle(file);
+                          }}
+                        >
+                          {isSelected && (
+                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                              <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                            </svg>
+                          )}
+                        </div>
                       ) : (
                         <div className="w-4 h-4 flex items-center justify-center">
                           <ChevronRight className="w-3 h-3 text-[#9ca3af]" />
@@ -622,7 +647,9 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
 
                       {/* File Info */}
                       <div className="flex-1 min-w-0 flex items-center justify-between">
-                        <span className="text-[14px] text-white">{file.name}</span>
+                        <span className={`text-[14px] ${isSelected ? 'text-blue-400 font-medium' : 'text-white'}`}>
+                          {file.name}
+                        </span>
                         {file.capacity !== undefined && file.capacity > 0 && (
                           <span className="text-[13px] text-[#6b7280]">{file.capacity}%</span>
                         )}
