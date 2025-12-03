@@ -6,6 +6,7 @@ from auth.management import auth0_management
 import httpx
 from typing import List, Dict, Optional
 from utils.github_processor import GitHubContentProcessor
+from utils.validators import InputValidator
 import base64
 from datetime import datetime
 import os
@@ -146,7 +147,12 @@ async def get_repo_contents(
 ):
     """Get contents of a repository path"""
     user_id = payload.get("sub")
-    
+
+    # Validate and sanitize GitHub identifiers
+    owner = InputValidator.sanitize_string(owner, max_length=100)
+    repo = InputValidator.sanitize_string(repo, max_length=100)
+    path = InputValidator.sanitize_string(path, max_length=500)
+
     github_token = await get_github_token(user_id)
     if not github_token:
         raise HTTPException(
@@ -397,6 +403,9 @@ async def connect_github_account(token_data: dict, payload: dict = Depends(verif
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="GitHub token is required"
         )
+
+    # Sanitize the GitHub token
+    github_token = InputValidator.sanitize_string(github_token, max_length=200)
 
     try:
         # Verify token

@@ -79,19 +79,19 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
     """
     try:
         token = credentials.credentials
-        
+
         # Check if required environment variables are set
         auth0_domain = os.getenv("AUTH0_DOMAIN")
         auth0_audience = os.getenv("AUTH0_API_AUDIENCE")
-        
+
         if not auth0_domain or not auth0_audience:
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Auth0 configuration missing"
             )
-        
+
         rsa_key = get_rsa_key(token)
-        
+
         # Use jose.jwt.decode with the RSA key directly
         payload = jwt.decode(
             token,
@@ -100,12 +100,12 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
             audience=auth0_audience,
             issuer=f"https://{auth0_domain}/"
         )
-        
+
         # Ensure user exists in Supabase database
         user_id = payload.get("sub")
         if user_id:
-            ensure_user_in_database(payload)
-        
+            await ensure_user_in_database(payload)
+
         return payload
         
     except ExpiredSignatureError:
@@ -124,7 +124,7 @@ async def verify_token(credentials: HTTPAuthorizationCredentials = Depends(secur
             detail=f"Token verification failed: {str(e)}"
         )
 
-def ensure_user_in_database(payload: dict):
+async def ensure_user_in_database(payload: dict):
     """
     Ensure user exists in Supabase database, create if not exists
     """
@@ -132,15 +132,15 @@ def ensure_user_in_database(payload: dict):
         user_id = payload.get("sub")
         email = payload.get("email")
         name = payload.get("name")
-        
+
         if not user_id:
             return
-        
+
         # Check if user exists in database
         existing_user = db.get_user_by_auth0_id(user_id)
         if existing_user:
             return existing_user
-        
+
         # Create new user if doesn't exist
         user_data = {
             "auth0_id": user_id,
@@ -152,10 +152,10 @@ def ensure_user_in_database(payload: dict):
             "created_at": datetime.now().isoformat(),
             "updated_at": datetime.now().isoformat()
         }
-        
+
         new_user = db.create_user(user_data)
         return new_user
-        
+
     except Exception as e:
         print(f"Error ensuring user in database: {str(e)}")
         # Don't raise exception here to avoid breaking auth flow
@@ -189,10 +189,10 @@ async def get_user_id(payload: dict = Depends(verify_token)) -> str:
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User ID not found in token"
         )
-    
+
     # Ensure user exists in database
-    ensure_user_in_database(payload)
-    
+    await ensure_user_in_database(payload)
+
     return user_id
 
 async def get_user_permissions(payload: dict = Depends(verify_token)) -> List[str]:
@@ -212,14 +212,14 @@ async def get_current_user(payload: dict = Depends(verify_token)) -> dict:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User ID not found in token"
             )
-        
+
         user_data = db.get_user_by_auth0_id(user_id)
         if not user_data:
             # Create user if doesn't exist
-            user_data = ensure_user_in_database(payload)
-        
+            user_data = await ensure_user_in_database(payload)
+
         return user_data
-        
+
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

@@ -221,8 +221,6 @@ export default function PricingSection4() {
         } else {
           setUserTier('free');
         }
-        
-        console.log('✅ Current user tier fetched:', usage.tier);
       } catch (error) {
         console.error('Failed to fetch user tier:', error);
         setUserTier('free');
@@ -265,8 +263,6 @@ export default function PricingSection4() {
         }
       );
 
-      console.log('✅ Order created:', orderResponse);
-
       if (!orderResponse.order_id) {
         throw new Error('No order ID returned from server');
       }
@@ -280,8 +276,6 @@ export default function PricingSection4() {
         order_id: orderResponse.order_id,
         handler: async (response: any) => {
           try {
-            console.log('💳 Payment successful, verifying:', response);
-
             const verifyResponse = await fetchWithAuth(
               `${import.meta.env.VITE_API_BASE_URL}/api/payment/verify`,
               {
@@ -294,8 +288,6 @@ export default function PricingSection4() {
               }
             );
 
-            console.log('✅ Verification response:', verifyResponse);
-
             if (verifyResponse.status === 'success') {
               showToast('Payment successful! Subscription activated. 🎉', 'success');
 
@@ -306,10 +298,7 @@ export default function PricingSection4() {
                   `${import.meta.env.VITE_API_BASE_URL}/api/usage`
                 );
 
-                console.log('📊 Updated usage:', updatedUsage);
-
                 if (updatedUsage.is_paid) {
-                  console.log('✅ Subscription status confirmed');
                   showToast(`${plan.name} activated! Enjoy your benefits! 🚀`, 'success');
                   setUserTier(updatedUsage.tier || 'free');
                 } else {

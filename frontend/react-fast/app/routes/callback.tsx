@@ -37,7 +37,6 @@ export default function Callback() {
         console.warn('Could not parse state, using default redirect');
       }
 
-      console.log('Redirecting to:', returnTo);
       navigate(returnTo, { replace: true });
     }
 

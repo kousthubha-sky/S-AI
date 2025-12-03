@@ -57,24 +57,7 @@ const Loader = () => {
         <svg width={60} height={36} viewBox="0 0 60 36" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path d="M1.96545 19.4296C0.643777 18.6484 0.658726 16.7309 1.99242 15.9705L28.0186 1.12982C29.2467 0.429534 30.7533 0.429533 31.9814 1.12982L58.0076 15.9704C59.3413 16.7309 59.3562 18.6484 58.0346 19.4296L32.5442 34.4962C30.9749 35.4238 29.0251 35.4238 27.4558 34.4962L1.96545 19.4296Z" fill="#3C4F6D" />
         </svg>
-      </div>
-      <style jsx>{`
-        @keyframes strobe {
-          0%, 50%, 100% { opacity: 1; }
-          25%, 75% { opacity: 0; }
-        }
-        @keyframes strobe1 {
-          0%, 50%, 100% { fill: #FF715E; }
-          25%, 75% { fill: #103573; }
-        }
-        @keyframes strobe2 {
-          0%, 50%, 100% { fill: #17e300; }
-          25%, 75% { fill: #17e300b4; }
-        }
-        #strobe_led1 { animation: strobe 0.5s infinite; }
-        #strobe_color1 { animation: strobe2 0.8s infinite; }
-        #strobe_color3 { animation: strobe1 0.8s infinite; animation-delay: 3s; }
-      `}</style>
+       </div>
     </div>
   );
 };

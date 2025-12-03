@@ -125,7 +125,7 @@ export default function ShortcutProvider({ children }: ShortcutProviderProps) {
         sidebar.setAttribute('aria-hidden', 'true');
       }
     } else {
-      console.log('No sidebar found for toggling');
+      // No sidebar found for toggling
     }
   };
 

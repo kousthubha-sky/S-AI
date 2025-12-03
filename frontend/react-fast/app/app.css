@@ -130,10 +130,30 @@
     background: rgba(255, 255, 255, 0.5);
   }
 
-  div::-webkit-scrollbar {
-    width: 8px;
-  } 
-  div::-webkit-scrollbar-track {
-    background: transparent;
-  }
+   div::-webkit-scrollbar {
+     width: 8px;
+   }
+   div::-webkit-scrollbar-track {
+     background: transparent;
+   }
+
+/* Loader animations */
+@keyframes strobe {
+  0%, 50%, 100% { opacity: 1; }
+  25%, 75% { opacity: 0; }
+}
+
+@keyframes strobe1 {
+  0%, 50%, 100% { fill: #FF715E; }
+  25%, 75% { fill: #103573; }
+}
+
+@keyframes strobe2 {
+  0%, 50%, 100% { fill: #17e300; }
+  25%, 75% { fill: #17e300b4; }
+}
+
+#strobe_led1 { animation: strobe 0.5s infinite; }
+#strobe_color1 { animation: strobe2 0.8s infinite; }
+#strobe_color3 { animation: strobe1 0.8s infinite; animation-delay: 3s; }
   

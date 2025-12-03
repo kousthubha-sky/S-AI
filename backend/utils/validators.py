@@ -10,9 +10,9 @@ import hashlib
 # Import redis_client safely
 try:
     from redis_config import redis_client
-except ImportError:
+except (ImportError, Exception):
     redis_client = None
-    print("⚠️ Redis not available, caching disabled")
+    print("Warning: Redis not available, caching disabled")
 
 class InputValidator:
     """Production-grade input validation and sanitization"""
@@ -28,18 +28,28 @@ class InputValidator:
     
     # SQL injection patterns
     SQL_INJECTION_PATTERNS = [
-        r"(?i)\b(?:union\s+select|select\s+union)\b.*?\bfrom\b",
-        r"(?i)\b(?:insert\s+into|update\s+.*?\s+set|delete\s+from)\b.*?\bwhere\b",
-        r"(?i)\bdrop\s+table\b|\btruncate\s+table\b",
+        r"(?i)\bunion\s+select\b",
+        r"(?i)\bselect\s+union\b",
+        r"(?i)\binsert\s+into\b",
+        r"(?i)\bupdate\s+.*?\s+set\b",
+        r"(?i)\bdelete\s+from\b",
+        r"(?i)\bdrop\s+table\b",
+        r"(?i)\btruncate\s+table\b",
         r"(?i)\b(?:xp_cmdshell|sp_oacreate|sp_executesql)\b",
+        r"(?i)\bor\s+1\s*=\s*1\b",
+        r"(?i)\b--\s*$",
     ]
     
     # XSS patterns - RELAXED for code contexts
     XSS_PATTERNS = [
-        # Only catch ACTUAL executable XSS, not code examples
-        r"<script[^>]*>\s*(?:document\.cookie|window\.location|fetch\(|XMLHttpRequest)",
-        r"on(?:load|error)=['\"]?\s*(?:document\.|window\.|location\.)",
-        r"javascript:\s*(?:document\.|window\.|location\.)\s*\(",
+        # Script tags
+        r"(?i)<script[^>]*>.*?</script>",
+        # Event handlers
+        r"(?i)on\w+\s*=\s*['\"]?[^'\"]*?(?:javascript:|alert\(|eval\()",
+        # JavaScript URLs
+        r"(?i)javascript:\s*[^'\"\s]*",
+        # Dangerous HTML elements
+        r"(?i)<iframe[^>]*>|<object[^>]*>|<embed[^>]*>",
     ]
     
     @staticmethod
@@ -77,110 +87,101 @@ class InputValidator:
     
     @staticmethod
     def sanitize_string(
-        text: str, 
+        text: str,
         max_length: int = 500000,
         context: Dict[str, Any] = None
     ) -> str:
         """
         Production-grade sanitization with context awareness.
-        
+
         Args:
             text: The text to sanitize
             max_length: Maximum allowed length
             context: Additional context (e.g., {'is_code_context': True})
-        
+
         Returns:
             Sanitized text
         """
         if not text:
             return ""
-        
-        # ✅ FIX: Create cache key safely
+
+        # Create cache key safely
         context_str = json.dumps(context or {}, sort_keys=True)
         text_sample = text[:1000]  # Only hash first 1KB for performance
         cache_key = f"sanitized:{hashlib.md5((context_str + text_sample).encode()).hexdigest()}"
-        
-        # ✅ FIX: Check Redis cache properly
+
+        # Check Redis cache properly
         if redis_client:
             try:
                 cached = redis_client.get(cache_key)
                 if cached:
-                    # ✅ FIX: Handle both bytes and str
+                    # Handle both bytes and str
                     if isinstance(cached, bytes):
                         return cached.decode('utf-8')
                     return str(cached)
             except Exception as e:
-                print(f"⚠️ Cache read error: {e}")
-        
+                print(f"Cache read error: {e}")
+
         # Apply length limit
         original_length = len(text)
         if original_length > max_length:
-            print(f"⚠️ Text truncated: {original_length} -> {max_length}")
             text = text[:max_length]
-        
+
         # Extract context information
         is_code_context = context and context.get('is_code_context', False)
-        
+
         # Determine if this is code content
         if not is_code_context:
             is_code, code_confidence = InputValidator._is_likely_code_content(text)
             if is_code and code_confidence > 0.3:
                 is_code_context = True
-                print(f"🔍 Auto-detected code: {code_confidence:.2f}")
-        
+
         if is_code_context:
-            print(f"✅ Processing as code content (skipping XSS checks)")
-            
             # For code content, apply minimal sanitization
             # Only remove truly dangerous executable patterns
             dangerous_patterns = [
                 r"<script[^>]*>\s*(?:eval|document\.cookie|window\.location)\s*\(",
                 r"javascript:\s*(?:document\.cookie|window\.location|eval)\s*\(",
             ]
-            
+
             for pattern in dangerous_patterns:
                 if re.search(pattern, text, re.IGNORECASE):
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Dangerous executable code detected"
                     )
-            
+
             # Don't strip HTML for code - just clean whitespace
             sanitized = text.strip()
-            
+
         else:
             # Non-code content: apply strict sanitization
-            print(f"✅ Processing as regular text")
-            
-            # Check for XSS
+            # Check for XSS BEFORE sanitization
             for pattern in InputValidator.XSS_PATTERNS:
                 if re.search(pattern, text, re.IGNORECASE):
-                    print(f"⚠️ XSS pattern detected")
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Invalid input detected - potential XSS attempt"
                     )
-            
+
             # Check for SQL injection
             for pattern in InputValidator.SQL_INJECTION_PATTERNS:
                 if re.search(pattern, text, re.IGNORECASE):
-                    print(f"⚠️ SQL injection pattern detected")
                     raise HTTPException(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail="Invalid input detected - potential SQL injection"
                     )
-            
-            # Apply HTML sanitization
+
+            # Apply HTML sanitization AFTER security checks
             sanitized = bleach.clean(text, tags=[], strip=True).strip()
-        
-        # ✅ FIX: Cache result safely (only cache strings)
+
+        # Cache result safely (only cache strings)
         if redis_client and len(sanitized) < 100000:  # Don't cache huge strings
             try:
                 redis_client.setex(cache_key, 3600, sanitized)
             except Exception as e:
-                print(f"⚠️ Cache write error: {e}")
-        
-        print(f"✅ Sanitization complete: {original_length} -> {len(sanitized)} chars")
+                print(f"Cache write error: {e}")
+
         return sanitized
     
     @staticmethod

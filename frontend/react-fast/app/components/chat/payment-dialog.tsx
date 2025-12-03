@@ -109,9 +109,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage, use
       setIsLoading(true);
       
       const plan = PLANS[selectedPlan];
-      
-      console.log('🔵 Creating order for:', plan.id);
-      
+
       // Step 1: Create Order
       const orderResponse = await fetchWithAuth(
         `${import.meta.env.VITE_API_BASE_URL}/api/payment/create-order`,
@@ -122,8 +120,6 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage, use
           })
         }
       );
-
-      console.log('✅ Order created:', orderResponse);
 
       if (!orderResponse.order_id) {
         throw new Error('No order ID returned from server');
@@ -139,8 +135,6 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage, use
         order_id: orderResponse.order_id,
         handler: async (response: any) => {
           try {
-            console.log('💳 Payment successful, verifying:', response);
-            
             // Step 3: Verify Payment
             const verifyResponse = await fetchWithAuth(
               `${import.meta.env.VITE_API_BASE_URL}/api/payment/verify`,
@@ -154,8 +148,6 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage, use
               }
             );
             
-            console.log('✅ Verification response:', verifyResponse);
-            
             if (verifyResponse.status === 'success') {
               showToast('Payment successful! Subscription activated. 🎉', 'success');
               
@@ -166,10 +158,7 @@ export function PaymentDialog({ onClose, onSuccess, showLimitReachedMessage, use
                   `${import.meta.env.VITE_API_BASE_URL}/api/usage`
                 );
                 
-                console.log('📊 Updated usage:', updatedUsage);
-                
                 if (updatedUsage.is_paid) {
-                  console.log('✅ Subscription status confirmed');
                   showToast(`${plan.name} activated! Enjoy your benefits! 🚀`, 'success');
                 } else {
                   console.warn('⚠️ Subscription status not updated yet');

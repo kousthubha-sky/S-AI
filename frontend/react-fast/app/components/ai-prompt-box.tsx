@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowUp, Paperclip, Square, X, StopCircle, Mic, Globe, BrainCog, FolderCode, Github } from "lucide-react";
+import { ArrowUp, Paperclip, Square, X, Globe, BrainCog, FolderCode, Github } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ModelSelector } from "./chat/model-selector";
 import { useNavigate } from "react-router";
@@ -174,72 +174,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
 );
 Button.displayName = "Button";
 
-// VoiceRecorder Component
-interface VoiceRecorderProps {
-  isRecording: boolean;
-  onStartRecording: () => void;
-  onStopRecording: (duration: number) => void;
-  visualizerBars?: number;
-}
-const VoiceRecorder: React.FC<VoiceRecorderProps> = ({
-  isRecording,
-  onStartRecording,
-  onStopRecording,
-  visualizerBars = 32,
-}) => {
-  const [time, setTime] = React.useState(0);
-  const timerRef = React.useRef<NodeJS.Timeout | null>(null);
 
-  React.useEffect(() => {
-    if (isRecording) {
-      onStartRecording();
-      timerRef.current = setInterval(() => setTime((t) => t + 1), 1000);
-    } else {
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-        timerRef.current = null;
-      }
-      onStopRecording(time);
-      setTime(0);
-    }
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [isRecording, time, onStartRecording, onStopRecording]);
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
-  };
-
-  return (
-    <div
-      className={cn(
-        "flex flex-col items-center justify-center w-full transition-all duration-300 py-3",
-        isRecording ? "opacity-100" : "opacity-0 h-0"
-      )}
-    >
-      <div className="flex items-center gap-2 mb-3">
-        <div className="h-2 w-2 rounded-full bg-red-500 animate-pulse" />
-        <span className="font-mono text-sm text-white/80">{formatTime(time)}</span>
-      </div>
-      <div className="w-full h-10 flex items-center justify-center gap-0.5 px-4">
-        {[...Array(visualizerBars)].map((_, i) => (
-          <div
-            key={i}
-            className="w-0.5 rounded-full bg-white/50 animate-pulse"
-            style={{
-              height: `${Math.max(15, Math.random() * 100)}%`,
-              animationDelay: `${i * 0.05}s`,
-              animationDuration: `${0.5 + Math.random() * 0.5}s`,
-            }}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
 
 // ImageViewDialog Component
 interface ImageViewDialogProps {
@@ -471,9 +406,9 @@ interface PromptInputBoxProps {
 }
 
 export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref: React.Ref<HTMLDivElement>) => {
-  const { 
-    onSend = () => {}, 
-    isLoading = false, 
+  const {
+    onSend = () => {},
+    isLoading = false,
     placeholder = "Type your message here...", 
     className,
     selectedModel = "",
@@ -489,7 +424,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   const [files, setFiles] = React.useState<File[]>([]);
   const [filePreviews, setFilePreviews] = React.useState<{ [key: string]: string }>({});
   const [selectedImage, setSelectedImage] = React.useState<string | null>(null);
-  const [isRecording, setIsRecording] = React.useState(false);
+
   const [showSearch, setShowSearch] = React.useState(false);
   const [showThink, setShowThink] = React.useState(false);
   const [showCanvas, setShowCanvas] = React.useState(false);
@@ -532,11 +467,9 @@ const [githubFiles, setGithubFiles] = useState<Array<{
 
   const processFile = (file: File) => {
     if (!isImageFile(file)) {
-      console.log("Only image files are allowed");
       return;
     }
     if (file.size > 10 * 1024 * 1024) {
-      console.log("File too large (max 10MB)");
       return;
     }
     setFiles([file]);
@@ -622,13 +555,7 @@ const handleSubmit = () => {
   }
 };
 
-  const handleStartRecording = () => console.log("Started recording");
 
-  const handleStopRecording = (duration: number) => {
-    console.log(`Stopped recording after ${duration} seconds`);
-    setIsRecording(false);
-    onSend(`[Voice message - ${duration} seconds]`, []);
-  };
 
 const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length > 0;
 
@@ -640,18 +567,18 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
       onSubmit={handleSubmit}
       className={cn(
         "w-full bg-[#1F2023] border-[#444444] shadow-[0_8px_30px_rgba(0,0,0,0.24)] transition-all duration-300 ease-in-out",
-        isRecording && "border-red-500/70",
+
         !isAuthenticated && "cursor-pointer",
         className
       )}
-      disabled={isLoading || isRecording || !isAuthenticated}
+      disabled={!isAuthenticated}
       ref={ref || promptBoxRef}
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       {/* Image Files Preview */}
-      {files.length > 0 && !isRecording && isAuthenticated && (
+      {files.length > 0 && isAuthenticated && (
         <div className="flex flex-wrap gap-2 p-0 pb-1 transition-all duration-300">
           {files.map((file, index) => (
             <div key={index} className="relative group">
@@ -683,7 +610,7 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
 
       {/* GitHub Files Preview */}
       {/* // REPLACE WITH: */}
-      {githubFiles.length > 0 && !isRecording && isAuthenticated && (
+      {githubFiles.length > 0 && isAuthenticated && (
         <div className="flex flex-wrap gap-2 p-0 pb-1 transition-all duration-300">
           {githubFiles.map((file, index) => (
             <div
@@ -716,7 +643,7 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
       <div
         className={cn(
           "transition-all duration-300",
-          isRecording ? "h-0 overflow-hidden opacity-0" : "opacity-100"
+          "opacity-100"
         )}
       >
         <PromptInputTextarea
@@ -735,19 +662,13 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
         />
       </div>
 
-      {isRecording && isAuthenticated && (
-        <VoiceRecorder
-          isRecording={isRecording}
-          onStartRecording={handleStartRecording}
-          onStopRecording={handleStopRecording}
-        />
-      )}
+
 
       <PromptInputActions className="flex items-center justify-between gap-2 p-0 pt-2">
         <div
           className={cn(
             "flex items-center gap-1 transition-opacity duration-300",
-            isRecording || !isAuthenticated ? "opacity-0 invisible h-0" : "opacity-100 visible"
+            !isAuthenticated ? "opacity-0 invisible h-0" : "opacity-100 visible"
           )}
         >
           <PromptInputAction tooltip="Upload image">
@@ -757,7 +678,7 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
                 "flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB]",
                 showSearch && "opacity-40 cursor-not-allowed hover:bg-transparent"
               )}
-              disabled={isRecording || showSearch || !isAuthenticated}
+              disabled={showSearch || !isAuthenticated}
             >
               <Paperclip className="h-5 w-5 transition-colors" />
               <input
@@ -783,7 +704,7 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
                   ? "bg-[#1EAEDB]/15 border-[#1EAEDB] text-[#1EAEDB]"
                   : "bg-transparent border-transparent text-[#9CA3AF] hover:text-[#D1D5DB]"
               )}
-              disabled={!isAuthenticated}
+            disabled={!isAuthenticated}
             >
               <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
                 <motion.div
@@ -852,7 +773,6 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
             <PromptInputAction tooltip="Add from GitHub">
               <button
                 onClick={() => {
-                  console.log('GitHub button clicked');
                   setShowGithubSelector(true);
                 }}
                 className={cn(
@@ -860,7 +780,7 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
                   !isAuthenticated && "opacity-40 cursor-not-allowed hover:bg-transparent",
                   githubFiles.length > 0 && "text-blue-400 bg-blue-900/20"
                 )}
-                disabled={!isAuthenticated}
+            disabled={(isLoading && !hasContent) && isAuthenticated}
               >
                 <Github className="h-5 w-5 transition-colors" />
               </button>
@@ -868,41 +788,7 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
 
             <CustomDivider />
 
-            <button
-              type="button"
-              onClick={handleCanvasToggle}
-              className={cn(
-                "rounded-full transition-all flex items-center gap-1 px-2 py-1 border h-8",
-                showCanvas
-                  ? "bg-[#F97316]/15 border-[#F97316] text-[#F97316]"
-                  : "bg-transparent border-transparent text-[#9CA3AF] hover:text-[#D1D5DB]",
-                showSearch && "opacity-40 cursor-not-allowed hover:text-[#9CA3AF]"
-              )}
-              disabled={showSearch || !isAuthenticated}
-            >
-              <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
-                <motion.div
-                  animate={{ rotate: showCanvas ? 360 : 0, scale: showCanvas ? 1.1 : 1 }}
-                  whileHover={{ rotate: showCanvas ? 360 : 15, scale: 1.1, transition: { type: "spring", stiffness: 300, damping: 10 } }}
-                  transition={{ type: "spring", stiffness: 260, damping: 25 }}
-                >
-                  <FolderCode className={cn("w-4 h-4", showCanvas ? "text-[#F97316]" : "text-inherit")} />
-                </motion.div>
-              </div>
-              <AnimatePresence>
-                {showCanvas && (
-                  <motion.span
-                    initial={{ width: 0, opacity: 0 }}
-                    animate={{ width: "auto", opacity: 1 }}
-                    exit={{ width: 0, opacity: 0 }}
-                    transition={{ duration: 0.2 }}
-                    className="text-xs overflow-hidden whitespace-nowrap text-[#F97316] flex-shrink-0"
-                  >
-                    Canvas
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </button>
+            
 
             {selectedModel && isAuthenticated && (
               <ModelSelector
@@ -921,12 +807,10 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
             !isAuthenticated
               ? "Sign in to send messages"
               : isLoading
-              ? "Stop generation"
-              : isRecording
-              ? "Stop recording"
+              ? "Generating response..."
               : hasContent
               ? "Send message"
-              : "Voice message"
+              : "Type a message"
           }
         >
           <Button
@@ -935,31 +819,21 @@ const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length
             className={cn(
               "h-8 w-8 rounded-full transition-all duration-200",
               !isAuthenticated && "opacity-50 cursor-not-allowed",
-              isRecording
-                ? "bg-transparent hover:bg-gray-600/30 text-red-500 hover:text-red-400"
-                : hasContent
-                ? "bg-white hover:bg-white/80 text-black"
-                : "bg-transparent hover:bg-gray-600/30 text-[#9CA3AF] hover:text-[#D1D5DB]"
+              "bg-white hover:bg-white/80 text-black"
             )}
             onClick={() => {
               if (!isAuthenticated) {
                 handleDisabledClick();
                 return;
               }
-              if (isRecording) setIsRecording(false);
-              else if (hasContent) handleSubmit();
-              else setIsRecording(true);
+              if (hasContent) handleSubmit();
             }}
-            disabled={(isLoading && !hasContent) && isAuthenticated}
+            disabled={!isAuthenticated}
           >
             {isLoading && isAuthenticated ? (
               <Square className="h-4 w-4 fill-black animate-pulse" />
-            ) : isRecording ? (
-              <StopCircle className="h-5 w-5 text-red-500" />
-            ) : hasContent ? (
-              <ArrowUp className="h-4 w-4 text-black" />
             ) : (
-              <Mic className="h-5 w-5 text-[#9CA3AF] transition-colors" />
+              <ArrowUp className="h-4 w-4 text-black" />
             )}
           </Button>
         </PromptInputAction>

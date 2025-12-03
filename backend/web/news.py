@@ -4,6 +4,7 @@ from auth.dependencies import verify_token
 import httpx
 import os
 from typing import Optional
+from utils.validators import InputValidator
 
 router = APIRouter()
 
@@ -102,7 +103,10 @@ async def search_news(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Search query is required"
             )
-        
+
+        # Sanitize the search query
+        query = InputValidator.sanitize_string(query, max_length=200)
+
         if len(query) < 2:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,

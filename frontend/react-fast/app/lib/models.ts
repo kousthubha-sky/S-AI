@@ -11,15 +11,22 @@ export interface AIModel {
 export const AI_MODELS: AIModel[] = [
   // ==================== FREE TIER ====================
     {
+    id: "x-ai/grok-4.1-fast:free",
+    name: "xAI",
+    provider: "xAI",
+    description: "Grok 4.1 Fast is xAI's best agentic tool calling model that shines in real-world use cases like customer support and deep research. 2M context window.",
+    tier: "free"
+  },
+    {
     id: "openai/gpt-oss-20b:free",
-    name: "GPT OSS 20B",
+    name: "GPT OSS",
     provider: "OpenAI",
     description: "Open-source GPT model, great for basic tasks",
     tier: "free"
   },
   {
     id:"nvidia/nemotron-nano-12b-v2-vl:free",
-    name: "NemoTron Nano 12B",
+    name: "NemoTron",
     provider: "NVIDIA",
     description: "Lightweight model optimized for speed and efficiency",
     tier: "free"
@@ -31,13 +38,7 @@ export const AI_MODELS: AIModel[] = [
     description: "Balanced model for general-purpose tasks",
     tier: "free"
   },
-  {
-    id: "deepseek/deepseek-chat-v3.1:free",
-    name: "DeepSeek Chat v3.1",
-    provider: "DeepSeek",
-    description: "Conversational model with enhanced context understanding",
-    tier: "free"
-  },
+
   {
     id: "tngtech/deepseek-r1t2-chimera:free",
     name: "DeepSeek R1T2",
@@ -47,7 +48,7 @@ export const AI_MODELS: AIModel[] = [
   },
   {
     id: "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-    name: "Dolphin Mistral 24B",
+    name: "Mistral 24B",
     provider: "Cognitive",
     description: "Versatile model for creative and analytical tasks",
     tier: "free"
@@ -77,7 +78,7 @@ export const AI_MODELS: AIModel[] = [
   // ==================== STARTER TIER ====================
   {
     id: "meta-llama/llama-3.3-70b-instruct:free",
-    name: "Llama 3.3 70B",
+    name: "Llama 3.3",
     provider: "Meta",
     description: "Powerful instruction-following model with 70B parameters",
     tier: "starter"

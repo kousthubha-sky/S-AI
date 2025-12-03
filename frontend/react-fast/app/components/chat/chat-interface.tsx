@@ -1,7 +1,7 @@
 // components/chat/chat-interface.tsx - UPDATED VERSION
 // Added GitHub files integration for code context
 
-import { useState, useRef, useEffect, useCallback, type JSX } from "react"
+import React, { useState, useRef, useEffect, useCallback, type JSX } from "react"
 import { AlertCircle, Copy, Check, MessageSquare, Brain, AlertTriangle, Zap, ChevronDown, Github } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { Skeleton } from "~/components/ui/skeleton"
@@ -15,8 +15,8 @@ import { useToast } from "~/components/ui/toast"
 import { PromptInputBox } from "~/components/ai-prompt-box"
 import { TextShimmer } from "~/components/ui/text-shimmer"
 import Loader from "~/components/loader-12"
-
-import React from "react"
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 
 interface ChatSession {
   id: string
@@ -308,216 +308,187 @@ const ThinkingIndicator = () => {
   );
 };
 
-const FormattedMessage = ({ content, images }: { content: string; images?: ImageData[] }) => {
-  const formatContent = (text: string) => {
-    const lines = text.split('\n');
-    const elements: JSX.Element[] = [];
-    let inCodeBlock = false;
-    let currentCodeBlock: string[] = [];
-    let currentCodeLanguage = 'text';
-    let tableRows: string[] = [];
-    let inTable = false;
+interface FormattedMessageProps {
+  content: string;
+  images?: ImageData[];
+}
 
-    const addCodeBlock = () => {
-      if (currentCodeBlock.length > 0) {
-        elements.push(
+const FormattedMessage = ({ content, images }: FormattedMessageProps) => {
+  const components = {
+    // Headings
+    h1: ({ children }: any) => (
+      <h1 className="text-2xl md:text-3xl font-semibold mt-6 mb-3 text-white">
+        {children}
+      </h1>
+    ),
+    h2: ({ children }: any) => (
+      <h2 className="text-xl md:text-2xl font-semibold mt-5 mb-2.5 text-gray-100">
+        {children}
+      </h2>
+    ),
+    h3: ({ children }: any) => (
+      <h3 className="text-lg md:text-xl font-semibold mt-4 mb-2 text-gray-200">
+        {children}
+      </h3>
+    ),
+    h4: ({ children }: any) => (
+      <h4 className="text-base md:text-lg font-medium mt-3 mb-1.5 text-gray-300">
+        {children}
+      </h4>
+    ),
+
+    // Paragraphs - CRITICAL FIX
+    p: ({ children }: any) => (
+      <p className="mb-4 last:mb-0 leading-7 text-[15px] text-gray-200">
+        {children}
+      </p>
+    ),
+
+    // Links
+    a: ({ href, children }: any) => (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-blue-400 hover:text-blue-300 underline decoration-blue-400/50 underline-offset-2 transition-colors"
+      >
+        {children}
+      </a>
+    ),
+
+    // Code - MOST IMPORTANT FIX
+    code: ({ node, inline, className, children, ...props }: any) => {
+      const match = /language-(\w+)/.exec(className || '');
+      const language = match ? match[1] : 'text';
+
+      // Block code - let your existing CodeBlock component handle it
+      if (!inline) {
+        // This is where "TEXT" blocks were appearing
+        // Make sure CodeBlock component is imported
+        return (
           <CodeBlock
-            key={`code-${elements.length}`}
-            code={currentCodeBlock.join('\n')}
-            language={currentCodeLanguage}
+            code={String(children).replace(/\n$/, '')}
+            language={language}
           />
         );
-        currentCodeBlock = [];
-      }
-    };
-
-    const addTable = () => {
-      if (tableRows.length > 0) {
-        // Filter out separator rows (rows that contain only dashes and colons)
-        const dataRows = tableRows.filter(row => {
-          const cells = row.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
-          return !cells.every(cell => /^:?-+:?$/.test(cell) || /^-+$/.test(cell));
-        });
-
-        if (dataRows.length > 0) {
-          elements.push(
-            <div key={`table-${elements.length}`} className="my-6 overflow-x-auto rounded-lg border border-gray-700">
-              <table className="min-w-full border-collapse text-sm md:text-base">
-                <tbody>
-                  {dataRows.map((row, rowIndex) => {
-                    const cells = row.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
-                    if (cells.length === 0) return null;
-
-                    return (
-                      <tr key={rowIndex} className={rowIndex === 0 ? 'bg-gray-800' : 'bg-gray-900/30'}>
-                        {cells.map((cell, cellIndex) => (
-                          <td key={cellIndex} className="border border-gray-700 px-4 py-3 text-gray-200">
-                            {rowIndex === 0 ? (
-                              <strong className="text-white font-semibold">{cell}</strong>
-                            ) : (
-                              <span dangerouslySetInnerHTML={{ __html: parseMarkdown(cell) }} />
-                            )}
-                          </td>
-                        ))}
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          );
-        }
-        tableRows = [];
-        inTable = false;
-      }
-    };
-
-    const parseMarkdown = (line: string) => {
-      line = line.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-blue-400 hover:text-blue-300 underline underline-offset-2 cursor-pointer transition-colors">$1</a>');
-      line = line.replace(/`([^`]+)`/g, '<code class="bg-gray-800/60 px-2 py-0.5 rounded text-sm font-mono text-blue-300 border border-gray-700/30">$1</code>');
-      line = line.replace(/\*\*([^*]+)\*\*/g, '<strong class="font-semibold text-white">$1</strong>');
-      line = line.replace(/__([^_]+)__/g, '<strong class="font-semibold text-white">$1</strong>');
-      line = line.replace(/\*([^*]+)\*/g, '<em class="italic">$1</em>');
-      line = line.replace(/_([^_]+)_/g, '<em class="italic">$1</em>');
-      return line;
-    };
-
-    lines.forEach((line, idx) => {
-      if (line.trim().startsWith('```')) {
-        if (inCodeBlock) {
-          addCodeBlock();
-          inCodeBlock = false;
-        } else {
-          inCodeBlock = true;
-          currentCodeLanguage = line.replace(/```/g, '').trim() || 'text';
-        }
-        return;
       }
 
-      if (inCodeBlock) {
-        currentCodeBlock.push(line);
-        return;
-      }
+      // Inline code (like `backend/main.py`)
+      return (
+        <code
+          className="bg-gray-800/70 px-2 py-0.5 rounded text-[13px] font-mono text-pink-300 border border-gray-700/50"
+          {...props}
+        >
+          {children}
+        </code>
+      );
+    },
 
-      // Handle markdown tables
-      if (line.trim().startsWith('|') && line.includes('|')) {
-        const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell !== '');
-        if (cells.length >= 2) {
-          if (!inTable) {
-            inTable = true;
-            tableRows = [];
-          }
-          tableRows.push(line);
-          return;
-        }
-      }
+    // Pre wrapper - CRITICAL for code blocks
+    pre: ({ children }: any) => (
+      <div className="not-prose my-4">
+        {children}
+      </div>
+    ),
 
-      if (inTable && (!line.trim().startsWith('|') || !line.includes('|'))) {
-        addTable();
-      }
+    // Strong/bold
+    strong: ({ children }: any) => (
+      <strong className="font-semibold text-white">
+        {children}
+      </strong>
+    ),
 
-      if (line.match(/^#{1,6}\s/)) {
-        const levelMatch = line.match(/^#+/);
-        const level = levelMatch ? levelMatch[0].length : 3;
-        const headerText = line.replace(/^#+\s/, '').trim();
-        const headingClasses: Record<number, string> = {
-          1: "text-3xl md:text-4xl font-bold mt-8 mb-4 text-white tracking-tight",
-          2: "text-2xl md:text-3xl font-semibold mt-6 mb-3 text-gray-100",
-          3: "text-xl md:text-2xl font-semibold mt-5 mb-2 text-gray-200",
-          4: "text-lg md:text-xl font-medium mt-4 mb-2 text-gray-300",
-          5: "text-base md:text-lg font-medium mt-3 mb-2 text-gray-400",
-          6: "text-sm md:text-base font-medium mt-2 mb-1 text-gray-400"
-        };
-        
-        elements.push(
-          React.createElement(
-            `h${level}` as any,
-            { 
-              key: `header-${idx}`, 
-              className: `${headingClasses[level]} text-white`,
-              dangerouslySetInnerHTML: { __html: parseMarkdown(headerText) }
-            }
-          )
-        );
-        return;
-      }
+    // Emphasis
+    em: ({ children }: any) => (
+      <em className="italic text-gray-300">
+        {children}
+      </em>
+    ),
 
-      if (line.match(/^[\s]*[-*+]\s/)) {
-        const indentMatch = line.match(/^[\s]*/);
-        const indent = indentMatch ? indentMatch[0].length : 0;
-        const listText = line.replace(/^[\s]*[-*+]\s/, '').trim();
-        elements.push(
-          <div 
-            key={`list-${idx}`} 
-            className="ml-6 my-2 flex gap-3 text-base md:text-lg text-gray-300 font-light"
-            style={{ marginLeft: `${indent + 24}px` }}
-          >
-            <span className="text-blue-400 font-semibold">•</span>
-            <span dangerouslySetInnerHTML={{ __html: parseMarkdown(listText) }} />
-          </div>
-        );
-        return;
-      }
+    // Unordered lists
+    ul: ({ children }: any) => (
+      <ul className="my-4 space-y-2">
+        {children}
+      </ul>
+    ),
 
-      if (line.match(/^[\s]*\d+\.\s/)) {
-        const indentMatch = line.match(/^[\s]*/);
-        const indent = indentMatch ? indentMatch[0].length : 0;
-        const match = line.match(/^[\s]*(\d+)\.\s(.+)$/);
-        if (match) {
-          const number = match[1];
-          const listText = match[2].trim();
-          elements.push(
-            <div 
-              key={`ordered-list-${idx}`} 
-              className="ml-6 my-2 flex gap-3 text-base md:text-lg text-gray-300 font-light"
-              style={{ marginLeft: `${indent + 24}px` }}
-            >
-              <span className="text-blue-400 font-semibold min-w-[1.5rem]">{number}.</span>
-              <span dangerouslySetInnerHTML={{ __html: parseMarkdown(listText) }} />
-            </div>
-          );
-          return;
-        }
-      }
+    // Ordered lists
+    ol: ({ children }: any) => (
+      <ol className="my-4 space-y-2 list-decimal list-inside">
+        {children}
+      </ol>
+    ),
 
-      if (line.trim().startsWith('>')) {
-        const quoteText = line.replace(/^>\s?/, '').trim();
-        elements.push(
-          <div 
-            key={`quote-${idx}`} 
-            className="border-l-4 border-blue-500 pl-6 py-3 my-4 text-gray-300 italic text-base md:text-lg bg-gray-900/30 rounded-r-lg"
-          >
-            <span dangerouslySetInnerHTML={{ __html: parseMarkdown(quoteText) }} />
-          </div>
-        );
-        return;
-      }
+    // List items - Fixed bullet styling
+    li: ({ children }: any) => (
+      <li className="ml-4 flex gap-2.5 text-[15px] text-gray-200 leading-7">
+        <span className="text-blue-400 font-bold select-none flex-shrink-0 mt-0.5">•</span>
+        <span className="flex-1">{children}</span>
+      </li>
+    ),
 
-      if (line.trim()) {
-        elements.push(
-          <p 
-            key={`p-${idx}`} 
-            className="my-3 leading-loose text-base md:text-lg text-gray-300 font-light"
-            dangerouslySetInnerHTML={{ __html: parseMarkdown(line) }}
-          />
-        );
-      } else {
-        elements.push(<div key={`br-${idx}`} className="h-4" />);
-      }
-    });
+    // Blockquotes
+    blockquote: ({ children }: any) => (
+      <blockquote className="border-l-[3px] border-blue-500/70 pl-4 py-2 my-4 text-gray-300 italic text-[15px] bg-gray-800/30 rounded-r">
+        {children}
+      </blockquote>
+    ),
 
-    addCodeBlock();
+    // Horizontal rule
+    hr: () => (
+      <hr className="my-6 border-t border-gray-700/50" />
+    ),
 
-    if (inTable) {
-      addTable();
-    }
+    // Tables - FIXED styling to match your images
+    table: ({ children }: any) => (
+      <div className="my-6 overflow-x-auto rounded-lg border border-gray-700/50 bg-gray-900/30">
+        <table className="min-w-full border-collapse">
+          {children}
+        </table>
+      </div>
+    ),
 
-    return elements;
+    thead: ({ children }: any) => (
+      <thead className="bg-gray-800/60 border-b border-gray-700">
+        {children}
+      </thead>
+    ),
+
+    tbody: ({ children }: any) => (
+      <tbody className="divide-y divide-gray-700/40">
+        {children}
+      </tbody>
+    ),
+
+    tr: ({ children }: any) => (
+      <tr className="hover:bg-gray-800/20 transition-colors">
+        {children}
+      </tr>
+    ),
+
+    th: ({ children }: any) => (
+      <th className="px-4 py-3 text-left border-r border-gray-700/40 last:border-r-0">
+        <span className="text-white font-semibold text-[14px]">
+          {children}
+        </span>
+      </th>
+    ),
+
+    td: ({ children }: any) => (
+      <td className="px-4 py-3 text-gray-200 text-[14px] border-r border-gray-700/40 last:border-r-0">
+        {children}
+      </td>
+    ),
   };
 
   return (
-    <div className="space-y-1 break-words">
-      {formatContent(content)}
+    <div className="w-full max-w-none">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={components}
+      >
+        {content}
+      </ReactMarkdown>
       {images && images.length > 0 && (
         <GeneratedImages images={images} />
       )}
@@ -794,11 +765,15 @@ export function ChatInterface({
         let streamingUsage: any = null;
         let streamingImages: ImageData[] = [];
 
+        // Allow unlimited tokens for current response - usage limits apply to future requests
+        // Example: User with 4K limit gets full 6K response, but next request is blocked
+        const maxTokens = 100000; // High limit to allow full responses
+
         const cleanup = await ChatService.streamChat(
           apiMessages,
           modelToUse,
           0.7,
-          1000,
+          maxTokens,
           isThinkingRequest,
           (token: string) => {
             streamingContent += token;
@@ -825,9 +800,9 @@ export function ChatInterface({
                 : msg
             ));
           },
-          async () => {
-            return await getCachedAuthToken();
-          }
+           async () => {
+             return await getCachedAuthToken();
+           }
         );
 
         await new Promise<void>((resolve) => {
@@ -1137,11 +1112,11 @@ export function ChatInterface({
                             {message.role === 'assistant' && (
                               <div className="py-2 px-6 bg-gradient-to-b from-transparent via-gray-900/20 to-transparent">
                                 <div className="max-w-4xl mx-auto">
-                                  {message.isLoading ? (
-                                    <div className="flex justify-start">
-                                      <ThinkingIndicator />
-                                    </div>
-                                  ) : (
+                                   {message.isLoading ? (
+                                     <div className="flex justify-start">
+                                       <ThinkingIndicator />
+                                     </div>
+                                   ) : (
                                     <div className="prose prose-invert prose-lg max-w-none">
                                       <FormattedMessage content={message.content} images={message.images} />
                                     </div>
@@ -1173,17 +1148,17 @@ export function ChatInterface({
 
                 <div className="flex-shrink-0 px-4 py-6">
                   <div className="max-w-4xl mx-auto">
-                    <PromptInputBox
-                      onSend={handleSendMessage}
-                      isLoading={isLoading}
-                      placeholder="Type your message..."
-                      selectedModel={selectedModel}
-                      onModelChange={(model) => {
-                        setSelectedModel(model);
-                      }}
-                      userTier={userTier}
-                      isAuthenticated={isAuthed}
-                    />
+                     <PromptInputBox
+                       onSend={handleSendMessage}
+                       isLoading={isLoading}
+                       placeholder="Type your message..."
+                       selectedModel={selectedModel}
+                       onModelChange={(model) => {
+                         setSelectedModel(model);
+                       }}
+                       userTier={userTier}
+                       isAuthenticated={isAuthed}
+                     />
                   </div>
                 </div>
               </div>

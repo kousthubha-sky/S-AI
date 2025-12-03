@@ -35,8 +35,6 @@ export const NewsService = {
     fetchWithAuth: (url: string, options?: RequestInit) => Promise<any>
   ): Promise<FormattedNewsResponse> {
     try {
-      console.log('[NewsService] Fetching news for query:', query);
-      
       let response: any;
       
       try {
@@ -63,13 +61,6 @@ export const NewsService = {
         );
       }
 
-      console.log('[NewsService] Response received:', {
-        ok: response?.ok,
-        status: response?.status,
-        statusText: response?.statusText,
-        hasData: !!response?.data
-      });
-
       // Check if response exists
       if (!response) {
         throw new Error('No response received from news service');
@@ -84,8 +75,7 @@ export const NewsService = {
         
         try {
           const errorData = typeof response.json === 'function' ? await response.json() : response;
-          console.log('[NewsService] Error response data:', errorData);
-          
+
           // Try to extract meaningful error message from response
           if (errorData.detail) {
             errorMessage = errorData.detail;
@@ -105,12 +95,6 @@ export const NewsService = {
       // fetchWithAuth already returns parsed JSON from backend
       // The backend returns: { data: [...articles...], pagination: {...} }
       const newsData: NewsResponse = response;
-      
-      console.log('[NewsService] Data received:', {
-        articlesCount: newsData.data?.length || 0,
-        hasData: !!newsData.data,
-        responseKeys: Object.keys(response),
-      });
 
       // Check if we got articles
       if (!newsData.data || newsData.data.length === 0) {
@@ -121,8 +105,6 @@ export const NewsService = {
           sourceType: 'live_news_api',
         };
       }
-
-      console.log('[NewsService] Processing', newsData.data.length, 'articles');
 
       // Format the response similar to AI assistant response
       const formattedArticles = newsData.data
@@ -145,7 +127,6 @@ export const NewsService = {
 
       const message = `## 📰 Live News Results for "${query}"\n\n${formattedArticles}`;
 
-      console.log('[NewsService] Returning', newsData.data.length, 'formatted articles');
       return {
         message,
         data: newsData.data,

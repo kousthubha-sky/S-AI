@@ -60,7 +60,6 @@ const DigitalSerenity: React.FC<DigitalSerenityProps> = ({ username = 'there', h
 
     const timeBasedIndex = (hour % messages.length);
     const selectedMessage = messages[timeBasedIndex];
-    console.log('Selected message:', selectedMessage, 'Hour:', hour, 'Index:', timeBasedIndex);
     setDynamicMessage(selectedMessage);
   }, [username]);
 

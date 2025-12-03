@@ -100,7 +100,6 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
   // Check connection immediately when dialog opens
   useEffect(() => {
     if (isOpen) {
-      console.log('📂 GitHub selector opened, checking connection...');
       checkConnection();
     }
   }, [isOpen]);
@@ -108,7 +107,6 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
   // Auto-load repos if connected
   useEffect(() => {
     if (isOpen && connected && repos.length === 0) {
-      console.log('✅ Connected detected, loading repos...');
       loadRepos();
     }
   }, [isOpen, connected]);
@@ -116,18 +114,14 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
   const checkConnection = async () => {
     setIsCheckingConnection(true);
     try {
-      console.log('🔍 Checking GitHub connection status...');
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/github/oauth/status`);
-      console.log('📊 GitHub status response:', response);
 
       setConnectionStatus(response);
       setConnected(response.connected);
 
       if (!response.connected) {
-        console.log('❌ Not connected');
         setError('GitHub not connected. Please connect your account.');
       } else {
-        console.log('✅ Connected as:', response.username);
         setError(null);
 
         // Auto-load repos if connected
@@ -151,7 +145,6 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
       if (event.origin !== window.location.origin) return;
       
       if (event.data === 'github_connected') {
-        console.log('✅ OAuth success message received');
         showToast('✅ GitHub connected successfully!', 'success', 3000);
         
         // Refresh connection status and repos
@@ -163,7 +156,6 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
         
         setShowConnectionDialog(false);
       } else if (event.data === 'github_error') {
-        console.log('❌ OAuth error message received');
         showToast('❌ Failed to connect GitHub. Please try again.', 'error', 3000);
         setShowConnectionDialog(false);
       }
@@ -176,7 +168,6 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
   const handleConnectGitHub = async () => {
     setIsConnecting(true);
     try {
-      console.log('🔗 Initiating GitHub OAuth...');
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/github/oauth/authorize`);
       
       if (response.authorization_url) {
@@ -254,12 +245,9 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
   };
 
   const loadRepos = async () => {
-    console.log('📚 Loading repos...');
-
     // Check cache first
     const cachedRepos = getCache('repos');
     if (cachedRepos) {
-      console.log('✅ Loaded repos from cache');
       setRepos(cachedRepos);
       setReposLoading(false);
       return;
@@ -269,11 +257,9 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
     setError(null);
     try {
       const response = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/github/repos?per_page=100`);
-      console.log('📊 Repos response:', response);
       const reposData = response.repos || [];
       setRepos(reposData);
       setCache('repos', reposData);
-      console.log(`✅ Loaded ${reposData.length} repos`);
     } catch (err: any) {
       console.error('❌ Error loading repos:', err);
       setError(err.message || 'Failed to load repositories');
@@ -288,7 +274,6 @@ export function GitHubSelector({ isOpen, onClose, onFilesSelected }: GitHubSelec
     // Check cache first
     const cachedFiles = getCache(cacheKey);
     if (cachedFiles) {
-      console.log('✅ Loaded files from cache');
       setFiles(cachedFiles);
       setFilesLoading(false);
       return;

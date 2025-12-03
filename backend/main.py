@@ -1038,6 +1038,7 @@ async def get_cache_stats(payload: dict = Depends(verify_token)):
     return stats
 
 @app.get("/api/debug/subscription-status", tags=["Debug"])
+@has_permissions(["admin:access"])
 def debug_subscription_status(payload: dict = Depends(verify_token)):
     """
     Diagnostic endpoint to check subscription status across all tables
@@ -1109,6 +1110,7 @@ def debug_subscription_status(payload: dict = Depends(verify_token)):
 
 
 @app.post("/api/debug/fix-subscription-status", tags=["Debug"])
+@has_permissions(["admin:access"])
 def fix_subscription_status(payload: dict = Depends(verify_token)):
     """
     Force-fix subscription status based on active subscription

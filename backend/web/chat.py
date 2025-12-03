@@ -180,14 +180,16 @@ async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_
             from models.ai_models import FREE_MODELS, STARTER_MODELS, PRO_MODELS, PRO_PLUS_MODELS
 
             # Check from most restrictive to least restrictive
-            if chat_request.model in PRO_PLUS_MODELS and chat_request.model not in PRO_MODELS:
+            if chat_request.model in PRO_PLUS_MODELS:
                 required_tier = "pro_plus"
-            elif chat_request.model in PRO_MODELS and chat_request.model not in STARTER_MODELS:
+            elif chat_request.model in PRO_MODELS:
                 required_tier = "pro"
-            elif chat_request.model in STARTER_MODELS and chat_request.model not in FREE_MODELS:
+            elif chat_request.model in STARTER_MODELS:
                 required_tier = "starter"
-            else:
+            elif chat_request.model in FREE_MODELS:
                 required_tier = "free"
+            else:
+                required_tier = "unknown"
 
             # Get upgrade message
             from models.ai_models import get_upgrade_message
@@ -281,11 +283,17 @@ async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_
         if chat_request.system_prompt:
             messages.insert(0, {"role": "system", "content": chat_request.system_prompt})
 
-        # Prepare request body for streaming
+        # Allow unlimited tokens for current response - restrict based on usage limits instead
+        # This gives users full responses but enforces limits on subsequent requests
+
+        print(f"🎯 Allowing unlimited tokens for current response (usage limits apply to future requests)")
+        print(f"📝 User tier: {tier} - full response allowed, limits checked on next request")
+
+        # Prepare request body for streaming - no max_tokens limit for current response
         request_body = {
             "model": chat_request.model or "tngtech/deepseek-r1t2-chimera:free",
             "messages": messages,
-            "max_tokens": chat_request.max_tokens or 10000,
+            # Remove max_tokens to allow full responses
             "temperature": chat_request.temperature or 0.7,
             "stream": True  # Enable streaming
         }
@@ -302,7 +310,6 @@ async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_
         print(f"📋 Validating OpenRouter streaming request body...")
         print(f"   - Model: {request_body['model']}")
         print(f"   - Messages count: {len(request_body['messages'])}")
-        print(f"   - Max tokens: {request_body['max_tokens']}")
         print(f"   - Temperature: {request_body['temperature']}")
         print(f"   - Stream: {request_body['stream']}")
 
@@ -365,74 +372,80 @@ async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_
                     json=request_body
                 ) as response:
 
-                        if response.status_code != 200:
-                            error_detail = f"OpenRouter API error: {response.status_code}"
-                            try:
-                                error_data = await response.aread()
-                                error_json = json.loads(error_data.decode())
-                                error_detail = error_json.get('error', {}).get('message', error_detail)
-                                print(f"❌ OpenRouter error response: {error_json}")
+                    if response.status_code != 200:
+                        error_detail = f"OpenRouter API error: {response.status_code}"
+                        try:
+                            error_data = await response.aread()
+                            error_json = json.loads(error_data.decode())
+                            error_detail = error_json.get('error', {}).get('message', error_detail)
+                            print(f"❌ OpenRouter error response: {error_json}")
 
-                                # Log the full request for debugging
-                                print(f"📤 Request body sent to OpenRouter:")
-                                print(f"   - Model: {request_body.get('model')}")
-                                print(f"   - Messages: {len(request_body.get('messages', []))} items")
-                                print(f"   - Max tokens: {request_body.get('max_tokens')}")
-                                print(f"   - Temperature: {request_body.get('temperature')}")
+                            # Log the full request for debugging
+                            print(f"📤 Request body sent to OpenRouter:")
+                            print(f"   - Model: {request_body.get('model')}")
+                            print(f"   - Messages: {len(request_body.get('messages', []))} items")
+                            print(f"   - Temperature: {request_body.get('temperature')}")
 
-                                # Provide more specific error messages
-                                if response.status_code == 400:
-                                    if "model" in error_detail.lower():
-                                        print(f"⚠️ Invalid model specified")
-                                    elif "message" in error_detail.lower():
-                                        print(f"⚠️ Invalid message format")
-                            except Exception as json_error:
-                                print(f"⚠️ Could not parse error response: {json_error}")
-                                print(f"Response text: {await response.aread()}")
+                            # Provide more specific error messages
+                            if response.status_code == 400:
+                                if "model" in error_detail.lower():
+                                    print(f"⚠️ Invalid model specified")
+                                elif "message" in error_detail.lower():
+                                    print(f"⚠️ Invalid message format")
+                        except Exception as json_error:
+                            print(f"⚠️ Could not parse error response: {json_error}")
+                            print(f"Response text: {await response.aread()}")
 
-                            raise HTTPException(
-                                status_code=response.status_code,
-                                detail=error_detail
-                            )
+                        raise HTTPException(
+                            status_code=response.status_code,
+                            detail=error_detail
+                        )
 
-                        print(f"✅ Connected to OpenRouter stream")
+                    print(f"✅ Connected to OpenRouter stream")
 
-                        full_content = ""
-                        usage_data = None
+                    full_content = ""
+                    usage_data = None
 
-                        async for line in response.aiter_lines():
-                            if line.strip():
-                                if line.startswith('data: '):
-                                    data = line[6:]  # Remove 'data: ' prefix
+                    async for line in response.aiter_lines():
+                        if line.strip():
+                            if line.startswith('data: '):
+                                data = line[6:]  # Remove 'data: ' prefix
 
-                                    if data == '[DONE]':
-                                        # Send final usage data if available
-                                        if usage_data:
-                                            yield f"data: {json.dumps({'type': 'usage', 'usage': usage_data})}\n\n"
-                                        yield f"data: {json.dumps({'type': 'done'})}\n\n"
-                                        break
+                                if data == '[DONE]':
+                                    # Send final usage data if available
+                                    if usage_data:
+                                        yield f"data: {json.dumps({'type': 'usage', 'usage': usage_data})}\n\n"
+                                    yield f"data: {json.dumps({'type': 'done'})}\n\n"
+                                    break
 
-                                    try:
-                                        chunk = json.loads(data)
-                                        delta = chunk.get('choices', [{}])[0].get('delta', {})
+                                try:
+                                    chunk = json.loads(data)
+                                    choice = chunk.get('choices', [{}])[0]
+                                    delta = choice.get('delta', {})
 
-                                        if 'content' in delta and delta['content']:
-                                            content = delta['content']
-                                            full_content += content
-                                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                                    if 'content' in delta and delta['content']:
+                                        content = delta['content']
+                                        full_content += content
+                                        yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
 
-                                        # Check for usage information
-                                        if 'usage' in chunk:
-                                            usage_data = chunk['usage']
+                                    # Note: We no longer truncate responses - users get full content
+                                    # Usage limits are enforced on subsequent requests, not current responses
 
-                                    except json.JSONDecodeError:
-                                        continue
+                                    # Check for usage information
+                                    if 'usage' in chunk:
+                                        usage_data = chunk['usage']
 
-                        print(f"📊 Stream completed: {len(full_content)} chars")
+                                except json.JSONDecodeError:
+                                    continue
 
-                        # ✅ Increment usage counter (important!)
-                        token_count = usage_data.get("total_tokens", 0) if usage_data else 0
-                        await increment_message_count(user_id, token_count)
+                    print(f"📊 Stream completed: {len(full_content)} chars")
+
+                    # ✅ Increment usage counter (important!)
+                    token_count = usage_data.get("total_tokens", 0) if usage_data else 0
+                    await increment_message_count(user_id, token_count)
+
+                    print(f"💰 Usage updated: +{token_count} tokens for user {user_id}")
+                    print(f"📈 Total tokens used in this response: {token_count}")
 
             except Exception as stream_error:
                 print(f"❌ Streaming error: {type(stream_error).__name__}: {str(stream_error)}")

@@ -472,7 +472,6 @@ function DashboardContent() {
       const pollInterval = setInterval(checkUserSubscription, 60000);
       
       const handlePaymentSuccess = () => {
-        console.log('💳 Payment success event received');
         setTimeout(forceRefreshSubscription, 2000);
       };
       
@@ -681,7 +680,6 @@ function DashboardContent() {
   };
 
   const forceRefreshSubscription = async () => {
-    console.log('🔄 Force refreshing subscription status...');
     await checkUserSubscription();
     
     if (user) {

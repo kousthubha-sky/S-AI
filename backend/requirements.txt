@@ -6,14 +6,13 @@ supabase
 razorpay
 redis[async]
 python-dotenv
-python-jose[cryptography]==3.3.0
+ python-jose[cryptography]==3.4.0
 python-multipart
 httpx
 passlib[bcrypt]
 websockets>=10.0
 slowapi==0.1.9
 bleach
-redis[async]
-python-jose[cryptography]
+ redis[async]
 cryptography
 gunicorn 

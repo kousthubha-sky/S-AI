@@ -6,13 +6,13 @@ from typing import List, Dict
 
 # Free Tier Models (Basic models only)
 FREE_MODELS = [
-    "nvidia/nemotron-nano-12b-v2-vl:free",
+    "x-ai/grok-4.1-fast:free",
     "openai/gpt-oss-20b:free",
+    "nvidia/nemotron-nano-12b-v2-vl:free",
     "z-ai/glm-4.5-air:free",
-    "moonshotai/kimi-k2:free",
     "tngtech/deepseek-r1t2-chimera:free",
     "cognitivecomputations/dolphin-mistral-24b-venice-edition:free",
-    "deepseek/deepseek-chat-v3.1:free",
+    "moonshotai/kimi-k2:free",
     "qwen/qwen3-30b-a3b:free",
     "qwen/qwen3-235b-a22b:free",
 ]
@@ -28,9 +28,8 @@ PRO_MODELS = STARTER_MODELS + [
     "google/gemini-2.5-flash-image",
 ]
 
-# Pro Plus Tier Models (All models - unlimited access)
+# Pro Plus Tier Models (Pro + additional premium models)
 PRO_PLUS_MODELS = PRO_MODELS + [
-    # Add any additional premium models here
     "anthropic/claude-3.5-sonnet",
     "openai/gpt-4-turbo",
 ]
@@ -89,7 +88,7 @@ def validate_model_access(model_id: str, tier: str = "free") -> bool:
     Returns:
         True if user can access the model, False otherwise
     """
-    print(f"🔍 validate_model_access called:")
+    print(f"validate_model_access called:")
     print(f"   - model_id: '{model_id}'")
     print(f"   - tier: '{tier}'")
     
@@ -107,11 +106,11 @@ def validate_model_access(model_id: str, tier: str = "free") -> bool:
     allowed_models = tier_models.get(tier, FREE_MODELS)
     
     print(f"   - Tier '{tier}' has access to {len(allowed_models)} models")
-    
+
     # Check if model is in allowed list
     has_access = model_id in allowed_models
-    
-    print(f"   - Access result: {'✅ GRANTED' if has_access else '❌ DENIED'}")
+
+    print(f"   - Access result: {'GRANTED' if has_access else 'DENIED'}")
     
     return has_access
 

@@ -20,11 +20,11 @@ def get_redis_client():
 
         # Test connection
         redis_client.ping()
-        print("✅ Redis connected successfully")
+        print("Redis connected successfully")
         return redis_client
 
     except Exception as e:
-        print(f"❌ Redis connection failed: {e}")
+        print(f"Redis connection failed: {e}")
         return None
 
 # Global Redis client instance

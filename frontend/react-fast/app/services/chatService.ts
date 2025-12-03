@@ -268,6 +268,7 @@ export class ChatService {
                     onToken(parsed.content);
                   } else if (parsed.type === 'usage') {
                     // Usage data will be handled in onComplete
+                  // Note: We no longer truncate responses - users get full content
                   } else if (parsed.type === 'done') {
                     isDone = true;
                     onComplete();
