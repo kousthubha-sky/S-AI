@@ -21,8 +21,8 @@
     "@radix-ui/react-separator": "^1.1.7",
     "@radix-ui/react-slot": "^1.2.4",
     "@radix-ui/react-tooltip": "^1.2.8",
-    "@react-router/node": "^7.9.2",
-    "@react-router/serve": "^7.9.2",
+    "@react-router/node": "^7.10.0",
+    "@react-router/serve": "^7.10.0",
     "@supabase/supabase-js": "^2.75.0",
     "@types/uuid": "^10.0.0",
     "axios": "^1.12.2",
@@ -47,7 +47,7 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
-    "@react-router/dev": "^7.9.2",
+    "@react-router/dev": "^7.10.0",
     "@tailwindcss/vite": "^4.1.13",
     "@types/node": "^22",
     "@types/react": "^19.1.13",
