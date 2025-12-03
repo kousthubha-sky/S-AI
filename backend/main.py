@@ -57,6 +57,8 @@ from web.webhook import router as webhook_router
 from web.chat import router as chat_router
 from web.news import router as news_router
 from web.auth_actions import router as auth_actions_router
+from web.github import router as github_router
+from web.githubOauth import router as github_oauth_router
 
 # Import Supabase state management
 from models.supabase_state import (
@@ -1020,6 +1022,8 @@ app.include_router(webhook_router)
 app.include_router(chat_router)
 app.include_router(news_router)
 app.include_router(auth_actions_router)
+app.include_router(github_router)
+app.include_router(github_oauth_router)
 
 @app.get("/api/health")
 async def health_check():

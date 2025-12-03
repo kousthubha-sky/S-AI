@@ -1,11 +1,11 @@
-import React from "react";
+import React, { useState } from "react";
 import * as TooltipPrimitive from "@radix-ui/react-tooltip";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { ArrowUp, Paperclip, Square, X, StopCircle, Mic, Globe, BrainCog, FolderCode } from "lucide-react";
+import { ArrowUp, Paperclip, Square, X, StopCircle, Mic, Globe, BrainCog, FolderCode, Github } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ModelSelector } from "./chat/model-selector";
 import { useNavigate } from "react-router";
-
+import { GitHubSelector } from "~/components/github/github-selector";
 // Utility function for className merging
 const cn = (...classes: (string | undefined | null | false)[]) => classes.filter(Boolean).join(" ");
 
@@ -452,16 +452,24 @@ const CustomDivider: React.FC = () => (
 );
 
 // Main PromptInputBox Component
+// REPLACE WITH:
 interface PromptInputBoxProps {
-  onSend?: (message: string, files?: File[]) => void;
+  onSend?: (message: string, files?: File[], githubFiles?: Array<{
+    repo: string;
+    owner: string;
+    path: string;
+    name: string;
+    size: number;
+  }>) => void;
   isLoading?: boolean;
   placeholder?: string;
   className?: string;
   selectedModel?: string;
   onModelChange?: (model: string) => void;
   userTier?: 'free' | 'starter' | 'pro' | 'pro_plus';
-  isAuthenticated?: boolean; // NEW: Added authentication prop
+  isAuthenticated?: boolean;
 }
+
 export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref: React.Ref<HTMLDivElement>) => {
   const { 
     onSend = () => {}, 
@@ -471,7 +479,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
     selectedModel = "",
     onModelChange = () => {},
     userTier = 'free',
-    isAuthenticated = false // NEW: Default to false
+    isAuthenticated = false
   } = props;
   
   const navigate = useNavigate();
@@ -485,11 +493,19 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   const [showSearch, setShowSearch] = React.useState(false);
   const [showThink, setShowThink] = React.useState(false);
   const [showCanvas, setShowCanvas] = React.useState(false);
-  const [showAuthTooltip, setShowAuthTooltip] = React.useState(false); // NEW: Tooltip state
+  const [showAuthTooltip, setShowAuthTooltip] = React.useState(false);
   const uploadInputRef = React.useRef<HTMLInputElement>(null);
   const promptBoxRef = React.useRef<HTMLDivElement>(null);
+// REPLACE WITH:
+const [showGithubSelector, setShowGithubSelector] = useState(false);
+const [githubFiles, setGithubFiles] = useState<Array<{
+  repo: string;
+  owner: string;
+  path: string;
+  name: string;
+  size: number;
+}>>([]);
 
-  // NEW: Handle click on disabled prompt box
   const handleDisabledClick = () => {
     if (!isAuthenticated) {
       navigate('/login');
@@ -507,6 +523,10 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
   };
 
   const handleCanvasToggle = () => setShowCanvas((prev) => !prev);
+  
+  const removeGithubFile = (index: number) => {
+  setGithubFiles(prev => prev.filter((_, i) => i !== index));
+};
 
   const isImageFile = (file: File) => file.type.startsWith("image/");
 
@@ -573,19 +593,34 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
     }
   }, [handlePaste]);
 
-  const handleSubmit = () => {
-    if (input.trim() || files.length > 0) {
-      let messagePrefix = "";
-      if (showSearch) messagePrefix = "[Search: ";
-      else if (showThink) messagePrefix = "[Think: ";
-      else if (showCanvas) messagePrefix = "[Canvas: ";
-      const formattedInput = messagePrefix ? `${messagePrefix}${input}]` : input;
-      onSend(formattedInput, files);
-      setInput("");
-      setFiles([]);
-      setFilePreviews({});
-    }
+  const handleGithubFilesSelected = (files: Array<{
+    repo: string;
+    owner: string;
+    path: string;
+    name: string;
+    size:number;
+  }>) => {
+    setGithubFiles(files);
   };
+
+// REPLACE WITH:
+const handleSubmit = () => {
+  if (input.trim() || files.length > 0 || githubFiles.length > 0) {
+    let messagePrefix = "";
+    if (showSearch) messagePrefix = "[Search: ";
+    else if (showThink) messagePrefix = "[Think: ";
+    else if (showCanvas) messagePrefix = "[Canvas: ";
+    const formattedInput = messagePrefix ? `${messagePrefix}${input}]` : input;
+    
+    // ✅ PASS GITHUB FILES TO PARENT
+    onSend(formattedInput, files, githubFiles);
+    
+    setInput("");
+    setFiles([]);
+    setFilePreviews({});
+    setGithubFiles([]); // ✅ Clear GitHub files
+  }
+};
 
   const handleStartRecording = () => console.log("Started recording");
 
@@ -595,9 +630,8 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
     onSend(`[Voice message - ${duration} seconds]`, []);
   };
 
-  const hasContent = input.trim() !== "" || files.length > 0;
+const hasContent = input.trim() !== "" || files.length > 0 || githubFiles.length > 0;
 
-  // NEW: Wrap in tooltip if not authenticated
   const PromptBoxContent = (
     <PromptInput
       value={input}
@@ -616,6 +650,7 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
+      {/* Image Files Preview */}
       {files.length > 0 && !isRecording && isAuthenticated && (
         <div className="flex flex-wrap gap-2 p-0 pb-1 transition-all duration-300">
           {files.map((file, index) => (
@@ -641,6 +676,38 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
                   </button>
                 </div>
               )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* GitHub Files Preview */}
+      {/* // REPLACE WITH: */}
+      {githubFiles.length > 0 && !isRecording && isAuthenticated && (
+        <div className="flex flex-wrap gap-2 p-0 pb-1 transition-all duration-300">
+          {githubFiles.map((file, index) => (
+            <div
+              key={`github-${index}`}
+              className="flex items-center gap-2 px-3 py-1.5 bg-blue-900/20 border border-blue-700/50 rounded-lg hover:bg-blue-900/30 transition-colors group"
+            >
+              <Github className="w-3.5 h-3.5 text-blue-400 flex-shrink-0" />
+              <div className="flex flex-col min-w-0">
+                <span className="text-xs text-blue-300 font-medium truncate max-w-[200px]">
+                  {file.name}
+                </span>
+                <span className="text-[10px] text-blue-500/70 truncate max-w-[200px]">
+                  {file.repo}
+                </span>
+              </div>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  removeGithubFile(index);
+                }}
+                className="ml-auto flex-shrink-0 hover:bg-blue-700/30 rounded p-0.5 transition-colors opacity-0 group-hover:opacity-100"
+              >
+                <X className="h-3 w-3 text-blue-400" />
+              </button>
             </div>
           ))}
         </div>
@@ -781,6 +848,25 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
             </button>
 
             <CustomDivider />
+            
+            <PromptInputAction tooltip="Add from GitHub">
+              <button
+                onClick={() => {
+                  console.log('GitHub button clicked');
+                  setShowGithubSelector(true);
+                }}
+                className={cn(
+                  "flex h-8 w-8 text-[#9CA3AF] cursor-pointer items-center justify-center rounded-full transition-colors hover:bg-gray-600/30 hover:text-[#D1D5DB]",
+                  !isAuthenticated && "opacity-40 cursor-not-allowed hover:bg-transparent",
+                  githubFiles.length > 0 && "text-blue-400 bg-blue-900/20"
+                )}
+                disabled={!isAuthenticated}
+              >
+                <Github className="h-5 w-5 transition-colors" />
+              </button>
+            </PromptInputAction>
+
+            <CustomDivider />
 
             <button
               type="button"
@@ -881,7 +967,6 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
     </PromptInput>
   );
 
-  // NEW: Add tooltip wrapper for unauthenticated users
   if (!isAuthenticated) {
     return (
       <TooltipProvider>
@@ -903,11 +988,19 @@ export const PromptInputBox = React.forwardRef((props: PromptInputBoxProps, ref:
       </TooltipProvider>
     );
   }
-
   return (
     <>
       {PromptBoxContent}
       <ImageViewDialog imageUrl={selectedImage} onClose={() => setSelectedImage(null)} />
+      
+      {/* GitHub Selector Modal */}
+      {showGithubSelector && (
+        <GitHubSelector
+          isOpen={showGithubSelector}
+          onClose={() => setShowGithubSelector(false)}
+          onFilesSelected={handleGithubFilesSelected}
+        />
+      )}
     </>
   );
 });

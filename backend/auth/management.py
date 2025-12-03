@@ -33,7 +33,7 @@ class Auth0ManagementAPI:
         try:
             auth0_domain = os.getenv("AUTH0_DOMAIN")
             url = f"https://{auth0_domain}/oauth/token"
-            
+
             payload = {
                 "client_id": os.getenv("AUTH0_CLIENT_ID"),
                 "client_secret": os.getenv("AUTH0_CLIENT_SECRET"),

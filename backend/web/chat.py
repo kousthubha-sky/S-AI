@@ -47,20 +47,81 @@ async def chat_stream(chat_request: ChatRequest, payload: dict = Depends(verify_
     print(f"{'='*80}\n")
 
     try:
-        # Sanitize chat messages
+        # ✅ ENHANCED: Detect and analyze code context
+        is_code_context = False
+        context_info = {}
+
+        # Analyze last message for code context
+        if chat_request.messages:
+            last_msg = chat_request.messages[-1]
+            last_content = last_msg.content if hasattr(last_msg, 'content') else last_msg.get('content', '')
+
+            if isinstance(last_content, str):
+                # Check for explicit code context marker
+                if last_content.startswith('[CODE_CONTEXT:true]'):
+                    is_code_context = True
+                    print(f"🔍 Explicit code context marker found")
+
+                # Analyze content for code patterns
+                is_likely_code, confidence = InputValidator._is_likely_code_content(last_content)
+                if is_likely_code and confidence > 0.5:
+                    is_code_context = True
+                    print(f"🔍 Auto-detected code content (confidence: {confidence:.2f})")
+
+                # Check for GitHub file markers
+                if '=== GitHub Files Context ===' in last_content:
+                    is_code_context = True
+                    print(f"🔍 GitHub files context detected")
+
+        print(f"📊 Code context analysis: {is_code_context}")
+
+        # Sanitize messages with context awareness
         sanitized_messages = []
-        for msg in chat_request.messages:
+        for i, msg in enumerate(chat_request.messages):
             try:
-                sanitized_content = InputValidator.sanitize_string(msg.content, max_length=500000)
+                msg_dict = msg if isinstance(msg, dict) else msg.dict()
+                content = msg_dict.get('content', '')
+                role = msg_dict.get('role', 'user')
+
+                # Prepare context for validation
+                validation_context = {
+                    'is_code_context': is_code_context and i == len(chat_request.messages) - 1,
+                    'role': role,
+                    'message_index': i,
+                    'total_messages': len(chat_request.messages)
+                }
+
+                # If this is the last message and has code context marker, clean it
+                if i == len(chat_request.messages) - 1 and is_code_context:
+                    if isinstance(content, str) and content.startswith('[CODE_CONTEXT:true]'):
+                        content = content.replace('[CODE_CONTEXT:true]', '', 1).strip()
+                        print(f"📝 Removed code context marker, length: {len(content)}")
+
+                # ✅ Use enhanced sanitization with context
+                sanitized_content = InputValidator.sanitize_string(
+                    content,
+                    max_length=500000,
+                    context=validation_context
+                )
+
                 sanitized_messages.append({
-                    "role": msg.role,
+                    "role": role,
                     "content": sanitized_content
                 })
-            except Exception as sanitize_error:
-                print(f"❌ Error sanitizing message: {sanitize_error}")
-                print(f"   Message content (first 200 chars): {msg.content[:200]}")
+
+                print(f"✅ Message {i} sanitized: {len(content)} -> {len(sanitized_content)} chars")
+
+            except HTTPException:
                 raise
-        print(f"✅ Messages sanitized")
+            except Exception as sanitize_error:
+                print(f"❌ Error sanitizing message {i}: {sanitize_error}")
+                print(f"   Content preview: {content[:200]}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Failed to sanitize message {i}: {str(sanitize_error)}"
+                )
+
+        print(f"✅ All messages sanitized successfully")
 
         # Get user usage
         usage = await get_user_usage(user_id)
@@ -424,11 +485,29 @@ async def chat(chat_request: ChatRequest, payload: dict = Depends(verify_token))
     print(f"{'='*80}\n")
     
     try:
+        # ✅ Detect code context from the last message
+        is_code_context = False
+        last_message_content = chat_request.messages[-1]['content'].strip()
+
+        if last_message_content.startswith('[CODE_CONTEXT:true]'):
+            is_code_context = True
+
         # Sanitize chat messages
         sanitized_messages = []
-        for msg in chat_request.messages:
+        for i, msg in enumerate(chat_request.messages):
             try:
-                sanitized_content = InputValidator.sanitize_string(msg.content, max_length=500000)
+                # For the last message in code context, use cleaned content for validation/generation
+                # but keep original for user display/storage
+                content_to_sanitize = msg.content
+                if i == len(chat_request.messages) - 1 and is_code_context:
+                    content_to_sanitize = last_message_content.replace('[CODE_CONTEXT:true]', '', 1).strip()
+
+                # ✅ Validate with code context flag
+                sanitized_content = InputValidator.sanitize_string(
+                    content_to_sanitize,
+                    max_length=500000,  # Allow large code files
+                    context={'is_code_context': is_code_context}
+                )
                 sanitized_messages.append({
                     "role": msg.role,
                     "content": sanitized_content
@@ -438,7 +517,7 @@ async def chat(chat_request: ChatRequest, payload: dict = Depends(verify_token))
                 print(f"   Message content (first 200 chars): {msg.content[:200]}")
                 raise
         print(f"✅ Messages sanitized")
-        
+
         # Get user usage
         usage = await get_user_usage(user_id)
        

@@ -202,7 +202,7 @@ export default function ProfileSettingsPage({
   ];
 
   return (
-    <div className="fixed inset-0 z-[999] backdrop-blur-sm flex items-center justify-center p-0 lg:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[999] bg-[#1a1a1a] backdrop-blur-sm flex items-center justify-center p-0 lg:p-4" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}

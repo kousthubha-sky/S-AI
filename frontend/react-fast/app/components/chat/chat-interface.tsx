@@ -1,9 +1,8 @@
-// components/chat/chat-interface.tsx - REDESIGNED VERSION
-// Clean document-style layout with centered content, horizontal rules, and distinctive typography
-// Removed Digital Serenity background for clean, professional appearance
+// components/chat/chat-interface.tsx - UPDATED VERSION
+// Added GitHub files integration for code context
 
 import { useState, useRef, useEffect, useCallback, type JSX } from "react"
-import { AlertCircle, Copy, Check, MessageSquare, Brain, AlertTriangle, Zap, ChevronDown } from "lucide-react"
+import { AlertCircle, Copy, Check, MessageSquare, Brain, AlertTriangle, Zap, ChevronDown, Github } from "lucide-react"
 import { Button } from "~/components/ui/button"
 import { Skeleton } from "~/components/ui/skeleton"
 import { cn } from "~/lib/utils"
@@ -42,6 +41,7 @@ interface ImageData {
   alt_text?: string;
 }
 
+// UPDATED: Added githubFiles to Message interface
 interface Message {
   id: string
   role: 'user' | 'assistant'
@@ -50,6 +50,12 @@ interface Message {
   attachments?: Attachment[]
   isLoading?: boolean
   images?: ImageData[]
+  githubFiles?: Array<{
+    repo: string;
+    path: string;
+    name: string;
+    owner?: string;
+  }>
 }
 
 interface ChatInterfaceProps {
@@ -593,7 +599,8 @@ export function ChatInterface({
         role: msg.role as 'user' | 'assistant',
         content: msg.content,
         timestamp: new Date(msg.created_at),
-        images: msg.images || undefined
+        images: msg.images || undefined,
+        githubFiles: msg.github_files || undefined
       }));
 
       setMessages(formattedMessages);
@@ -611,8 +618,19 @@ export function ChatInterface({
     }
   }
 
-  const handleSendMessage = async (messageText: string, files?: File[]) => {
-    if (!isAuthed || (!messageText.trim() && (!files || files.length === 0)) || isLoading) return;
+  // UPDATED: Added githubFiles parameter
+  const handleSendMessage = async (
+    messageText: string, 
+    files?: File[], 
+    githubFiles?: Array<{
+      repo: string;
+      owner: string;
+      path: string;
+      name: string;
+      size: number;
+    }>
+  ) => {
+    if (!isAuthed || (!messageText.trim() && (!files || files.length === 0) && (!githubFiles || githubFiles.length === 0)) || isLoading) return;
 
     setHasStartedChat(true);
     abortControllerRef.current = new AbortController();
@@ -626,6 +644,7 @@ export function ChatInterface({
     })) : [];
 
     let actualMessage = messageText;
+    let displayMessage = messageText; // Separate variable for display
     let modelToUse = selectedModel;
     let isSearchRequest = false;
     let isThinkingRequest = false;
@@ -633,20 +652,77 @@ export function ChatInterface({
     if (messageText.startsWith('[Search:')) {
       isSearchRequest = true;
       actualMessage = messageText.replace('[Search:', '').replace(/\]$/, '').trim();
+      displayMessage = actualMessage;
     } else if (messageText.startsWith('[Think:')) {
       isThinkingRequest = true;
       actualMessage = messageText.replace('[Think:', '').replace(/\]$/, '').trim();
+      displayMessage = actualMessage;
       modelToUse = 'qwen/qwen3-235b-a22b:free';
     } else if (messageText.startsWith('[Canvas:')) {
       actualMessage = messageText.replace('[Canvas:', '').replace(/\]$/, '').trim();
+      displayMessage = actualMessage;
     }
 
+    // ✅ FETCH GITHUB FILES CONTENT (for context only)
+    let isCodeContext = false;
+  let githubContext = '';
+  if (githubFiles && githubFiles.length > 0) {
+    isCodeContext = true;
+    try {
+      showToast('📂 Loading GitHub files...', 'info', 2000);
+      
+      const data = await fetchWithAuth(`${import.meta.env.VITE_API_BASE_URL}/api/github/files/fetch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          files: githubFiles.map(f => ({
+            owner: f.owner,
+            repo: f.repo.split('/')[1] || f.repo,
+            path: f.path
+          }))
+        })
+      });
+      
+      if (data.files && data.files.length > 0) {
+        // Build context for the AI using backend-processed content
+        githubContext = '\n\n=== GitHub Files Context ===\n\n';
+        
+        data.files.forEach((file: any) => {
+          githubContext += `📁 ${file.name} (${file.repo})\n`;
+          githubContext += `📂 ${file.path}\n`;
+          if (file.language) {
+            githubContext += `🏷️  Language: ${file.language}\n`;
+          }
+          githubContext += `📊 Size: ${file.sanitized_size} chars\n\n`;
+          
+          githubContext += '```' + (file.language || 'text') + '\n';
+          
+          // Use the pre-sanitized content from backend
+          githubContext += file.content + '\n```\n\n';
+        });
+
+        githubContext += '=== End Context ===\n\n';
+        showToast(`✅ Loaded ${data.files.length} file(s)`, 'success', 2000);
+      }
+    } catch (error: any) {
+      console.error('GitHub fetch error:', error);
+      showToast('⚠️ Failed to load some GitHub files', 'warning', 3000);
+      githubContext = `\n\n[Note: Failed to fetch GitHub files - ${error.message || 'Unknown error'}]\n\n`;
+    }
+  }
+    // Create user message for display (without GitHub content)
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: actualMessage,
+      content: displayMessage, // Use display message, not the full context
       timestamp: new Date(),
-      attachments: attachments.length > 0 ? attachments : undefined
+      attachments: attachments.length > 0 ? attachments : undefined,
+      githubFiles: githubFiles ? githubFiles.map(f => ({
+        repo: f.repo,
+        path: f.path,
+        name: f.name,
+        owner: f.owner
+      })) : undefined
     }
 
     setMessages(prev => [...prev, userMessage])
@@ -693,10 +769,22 @@ export function ChatInterface({
           messageContent = `Failed to fetch news: ${error instanceof Error ? error.message : 'Unknown error'}\n\nTry searching for different keywords or check your internet connection.`;
         }
       } else {
-        const apiMessages = [...messages, userMessage]
+        // Prepare API messages with GitHub context for AI only
+        let apiMessages = messages
           .filter(msg => msg.role !== 'assistant' || !msg.isLoading)
-          .map(msg => ({ role: msg.role, content: msg.content }))
+          .map(msg => ({ 
+            role: msg.role, 
+            content: msg.content 
+          }));
 
+        // Add the current user message with GitHub context
+        const messageWithContext = githubContext 
+          ? `[CODE_CONTEXT:true]\n${githubContext}${actualMessage}`
+          : actualMessage;
+        
+        apiMessages.push({ role: 'user', content: messageWithContext });
+
+        // Add attachments info if any
         if (attachments.length > 0) {
           apiMessages[apiMessages.length - 1].content += '\n' +
             attachments.map(a => `[Attachment: ${a.name}]`).join('\n')
@@ -781,7 +869,15 @@ export function ChatInterface({
               isSearchRequest ? 'live_news_api' : modelToUse, 
               undefined,
               undefined,
-              fetchWithAuth
+              fetchWithAuth,
+              {
+                github_files: githubFiles ? githubFiles.map(f => ({
+                  repo: f.repo,
+                  path: f.path,
+                  name: f.name,
+                  size: f.size,
+                })) : undefined
+              }
             )
             
             if (messages.length === 0) {
@@ -985,12 +1081,15 @@ export function ChatInterface({
                       <div className="space-y-0 max-w-5xl mx-auto w-full">
                         {messages.map((message, index) => (
                           <div key={message.id} className="w-full">
+
                             {message.role === 'user' && (
                               <div className="px-6">
                                 <div className="text-center space-y-2">
                                   <p className="text-xl md:text-3xl border-[#2a2a2a] border-t-1 ml-0 md:ml-10 slide-in-from-bottom-translate-full text-gray-200 leading-relaxed max-w-4xl flex justify-start">
                                     {message.content}
                                   </p>
+                                  
+                                  {/* Regular attachments */}
                                   {message.attachments && message.attachments.length > 0 && (
                                     <div className="mt-4 flex flex-wrap gap-2 justify-center">
                                       {message.attachments.map(att => (
@@ -998,6 +1097,37 @@ export function ChatInterface({
                                           📎 {att.name}
                                         </span>
                                       ))}
+                                    </div>
+                                  )}
+                                  
+                                  {/* GitHub files - show only names, not content */}
+                                  {message.githubFiles && message.githubFiles.length > 0 && (
+                                    <div className="mt-4">
+                                      <div className="flex items-center justify-start gap-2 mb-2 ml-0 md:ml-8">
+                                        <Github className="w-4 h-4 text-blue-400" />
+                                        <span className="text-xs text-blue-300">Attached</span>
+                                      </div>
+                                      <div className="flex flex-wrap gap-2 justify-start ml-0 md:ml-8">
+                                        {message.githubFiles.map((file, idx) => (
+                                          <div 
+                                            key={idx} 
+                                            className="group relative"
+                                          >
+                                            <span className="text-xs px-3 py-2 bg-black/50 border border-blue-700/50 rounded-lg text-blue-300 flex items-center gap-1 max-w-xs truncate">
+                                              
+                                              <span className="truncate">{file.name}</span>
+                                              <Github className="w-3 h-3 flex-shrink-0 text-white" />
+                                            </span>
+                                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:block z-10">
+                                              <div className="bg-gray-900 border border-gray-700 rounded-lg p-2 text-xs text-gray-300 whitespace-nowrap shadow-xl">
+                                                <div className="font-medium">{file.name}</div>
+                                                
+                                                <div className="text-gray-500 text-xs">{file.repo}</div>
+                                              </div>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
                                     </div>
                                   )}
                                 </div>
@@ -1019,7 +1149,6 @@ export function ChatInterface({
                                 </div>
                               </div>
                             )}
-
 
                           </div>
                         ))}

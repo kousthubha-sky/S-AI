@@ -46,6 +46,7 @@ import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
 
 import "@fontsource/inter"
+import Loader from "~/components/loader-12";
 
 // 🔧 SESSION STORAGE KEY
 const SESSION_STORAGE_KEY = 'xcore-ai_current_session';
@@ -415,6 +416,20 @@ function DashboardContent() {
     }
   }, [currentSessionId]);
 
+  // Add to dashboard.tsx useEffect
+  useEffect(() => {
+    // Handle GitHub OAuth callback
+    const params = new URLSearchParams(window.location.search);
+    
+    if (params.get('github_connected') === 'true') {
+      showToast('✅ GitHub connected successfully!', 'success', 3000);
+      window.history.replaceState({}, '', '/dashboard');
+    } else if (params.get('github_error')) {
+      const error = params.get('github_error');
+      showToast(`❌ Failed to connect GitHub: ${error}`, 'error', 5000);
+      window.history.replaceState({}, '', '/dashboard');
+    }
+  }, []);
   // CardNav configuration
   const cardNavItems = [
     {
@@ -779,8 +794,8 @@ function DashboardContent() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-b from-black to-blue-950">
-        <div className="text-lg">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#1a1a1a]">
+        <Loader />
       </div>
     );
   }

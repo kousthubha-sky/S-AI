@@ -1,7 +1,6 @@
-"""
-Utility modules for the SAAS application
-"""
+# backend/utils/__init__.py
 
 from .validators import InputValidator
+from .github_processor import GitHubContentProcessor
 
-__all__ = ['InputValidator']
+__all__ = ['InputValidator', 'GitHubContentProcessor']

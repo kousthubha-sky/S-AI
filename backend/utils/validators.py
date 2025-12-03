@@ -1,40 +1,187 @@
-# Create new file: backend/utils/validators.py
+# backend/utils/validators.py - FIXED VERSION
 
 import re
+import json
 from fastapi import HTTPException, status
-from typing import Optional
+from typing import Optional, Dict, Tuple, Any
 import bleach
 import hashlib
-from redis_config import redis_client
+
+# Import redis_client safely
+try:
+    from redis_config import redis_client
+except ImportError:
+    redis_client = None
+    print("⚠️ Redis not available, caching disabled")
 
 class InputValidator:
-    """Validate and sanitize user inputs"""
+    """Production-grade input validation and sanitization"""
     
-    # ✅ Email validation
+    # Email validation
     EMAIL_REGEX = re.compile(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$')
     
-    # ✅ Blocked email domains
+    # Blocked email domains
     BLOCKED_DOMAINS = [
         'tempmail.com', 'guerrillamail.com', '10minutemail.com',
         'throwaway.email', 'mailinator.com', 'temp-mail.org'
     ]
     
-    # ✅ SQL injection patterns - STRICT: Only flag if combined with injection indicators
+    # SQL injection patterns
     SQL_INJECTION_PATTERNS = [
-        # Only flag if SQL keyword + injection attempt (not just code asking about SQL)
-        r"(\bOR\b\s+\d+\s*=\s*\d+)",  # OR 1=1 style
-        r"(\bUNION\s+.*SELECT\b)",  # UNION based injection
-        r"(;\s*DROP\s+|;\s*DELETE\s+|;\s*TRUNCATE\s+)",  # Comment-based injection (strict - must have semicolon + keyword + space)
-        r"(xp_|sp_cmdshell)",  # Stored procedure injection
+        r"(?i)\b(?:union\s+select|select\s+union)\b.*?\bfrom\b",
+        r"(?i)\b(?:insert\s+into|update\s+.*?\s+set|delete\s+from)\b.*?\bwhere\b",
+        r"(?i)\bdrop\s+table\b|\btruncate\s+table\b",
+        r"(?i)\b(?:xp_cmdshell|sp_oacreate|sp_executesql)\b",
     ]
     
-    # ✅ XSS patterns - Only flag actual malicious script injection
-    # These patterns are designed to catch actual XSS attempts, not code discussions
+    # XSS patterns - RELAXED for code contexts
     XSS_PATTERNS = [
-        r"<script[^>]*>[^<]*</script>",  # Complete script tags with content
-        r"javascript:\s*\w+",  # JavaScript protocol with actual code (e.g., javascript:alert)
-        r"<\w+[^>]*\s+on(load|error|click|change|focus|blur|submit|mouseenter|mouseleave)\s*=\s*['\"]",  # Event handlers in HTML tags with quotes
+        # Only catch ACTUAL executable XSS, not code examples
+        r"<script[^>]*>\s*(?:document\.cookie|window\.location|fetch\(|XMLHttpRequest)",
+        r"on(?:load|error)=['\"]?\s*(?:document\.|window\.|location\.)",
+        r"javascript:\s*(?:document\.|window\.|location\.)\s*\(",
     ]
+    
+    @staticmethod
+    def _is_likely_code_content(text: str, min_code_lines: int = 3) -> Tuple[bool, float]:
+        """Determine if text is likely code content"""
+        if not text:
+            return False, 0.0
+        
+        lines = text.split('\n')
+        if len(lines) < min_code_lines:
+            return False, 0.0
+        
+        indicators = 0
+        total_lines = len(lines)
+        
+        # Check for code patterns
+        code_markers = [
+            'function ', 'const ', 'let ', 'var ', 'def ', 'class ',
+            'import ', 'export ', '<?php', '<!DOCTYPE', '<html', '{', '}',
+            '=>', '->', '==', '!=', '&&', '||', '#include', 'using namespace'
+        ]
+        
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+            
+            if any(marker in line for marker in code_markers):
+                indicators += 1
+        
+        confidence = indicators / total_lines if total_lines > 0 else 0.0
+        is_code = confidence > 0.2  # 20% threshold
+        
+        return is_code, confidence
+    
+    @staticmethod
+    def sanitize_string(
+        text: str, 
+        max_length: int = 500000,
+        context: Dict[str, Any] = None
+    ) -> str:
+        """
+        Production-grade sanitization with context awareness.
+        
+        Args:
+            text: The text to sanitize
+            max_length: Maximum allowed length
+            context: Additional context (e.g., {'is_code_context': True})
+        
+        Returns:
+            Sanitized text
+        """
+        if not text:
+            return ""
+        
+        # ✅ FIX: Create cache key safely
+        context_str = json.dumps(context or {}, sort_keys=True)
+        text_sample = text[:1000]  # Only hash first 1KB for performance
+        cache_key = f"sanitized:{hashlib.md5((context_str + text_sample).encode()).hexdigest()}"
+        
+        # ✅ FIX: Check Redis cache properly
+        if redis_client:
+            try:
+                cached = redis_client.get(cache_key)
+                if cached:
+                    # ✅ FIX: Handle both bytes and str
+                    if isinstance(cached, bytes):
+                        return cached.decode('utf-8')
+                    return str(cached)
+            except Exception as e:
+                print(f"⚠️ Cache read error: {e}")
+        
+        # Apply length limit
+        original_length = len(text)
+        if original_length > max_length:
+            print(f"⚠️ Text truncated: {original_length} -> {max_length}")
+            text = text[:max_length]
+        
+        # Extract context information
+        is_code_context = context and context.get('is_code_context', False)
+        
+        # Determine if this is code content
+        if not is_code_context:
+            is_code, code_confidence = InputValidator._is_likely_code_content(text)
+            if is_code and code_confidence > 0.3:
+                is_code_context = True
+                print(f"🔍 Auto-detected code: {code_confidence:.2f}")
+        
+        if is_code_context:
+            print(f"✅ Processing as code content (skipping XSS checks)")
+            
+            # For code content, apply minimal sanitization
+            # Only remove truly dangerous executable patterns
+            dangerous_patterns = [
+                r"<script[^>]*>\s*(?:eval|document\.cookie|window\.location)\s*\(",
+                r"javascript:\s*(?:document\.cookie|window\.location|eval)\s*\(",
+            ]
+            
+            for pattern in dangerous_patterns:
+                if re.search(pattern, text, re.IGNORECASE):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Dangerous executable code detected"
+                    )
+            
+            # Don't strip HTML for code - just clean whitespace
+            sanitized = text.strip()
+            
+        else:
+            # Non-code content: apply strict sanitization
+            print(f"✅ Processing as regular text")
+            
+            # Check for XSS
+            for pattern in InputValidator.XSS_PATTERNS:
+                if re.search(pattern, text, re.IGNORECASE):
+                    print(f"⚠️ XSS pattern detected")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid input detected - potential XSS attempt"
+                    )
+            
+            # Check for SQL injection
+            for pattern in InputValidator.SQL_INJECTION_PATTERNS:
+                if re.search(pattern, text, re.IGNORECASE):
+                    print(f"⚠️ SQL injection pattern detected")
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="Invalid input detected - potential SQL injection"
+                    )
+            
+            # Apply HTML sanitization
+            sanitized = bleach.clean(text, tags=[], strip=True).strip()
+        
+        # ✅ FIX: Cache result safely (only cache strings)
+        if redis_client and len(sanitized) < 100000:  # Don't cache huge strings
+            try:
+                redis_client.setex(cache_key, 3600, sanitized)
+            except Exception as e:
+                print(f"⚠️ Cache write error: {e}")
+        
+        print(f"✅ Sanitization complete: {original_length} -> {len(sanitized)} chars")
+        return sanitized
     
     @staticmethod
     def validate_email(email: str) -> str:
@@ -47,14 +194,12 @@ class InputValidator:
         
         email = email.lower().strip()
         
-        # Check format
         if not InputValidator.EMAIL_REGEX.match(email):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid email format"
             )
         
-        # Check blocked domains
         domain = email.split('@')[1]
         if domain in InputValidator.BLOCKED_DOMAINS:
             raise HTTPException(
@@ -63,99 +208,6 @@ class InputValidator:
             )
         
         return email
-    
-    @staticmethod
-    def sanitize_string(text: str, max_length: int = 1000) -> str:
-        """Sanitize text input with caching for performance"""
-        if not text:
-            return ""
-
-        # Create cache key from text hash
-        text_hash = hashlib.md5(text.encode()).hexdigest()
-        cache_key = f"sanitized_text:{text_hash}"
-
-        # Check Redis cache first
-        if redis_client:
-            cached_result = redis_client.get(cache_key)
-            if cached_result:
-                return cached_result
-
-        # Proceed with sanitization...
-        """
-        Sanitize text input with support for large inputs
-        ✅ UPDATED: Now supports up to 500KB of text (for large code blocks)
-        ✅ SMARTER: Only blocks actual injection attempts, allows legitimate code discussion
-        """
-        if not text:
-            return ""
-        
-        # ✅ INCREASED: Support for large code blocks (500,000 characters = ~500KB)
-        # This allows pasting entire source files for code review/correction
-        if len(text) > max_length:
-            text = text[:max_length]
-        
-        # ✅ Check for XSS attempts FIRST (before bleach removes tags)
-        for pattern in InputValidator.XSS_PATTERNS:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                print(f"⚠️ XSS pattern detected: {pattern}")
-                print(f"   Matched text: {match.group()}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid input detected - potential XSS attempt"
-                )
-        
-        # Remove HTML tags (but preserve content structure for code)
-        text = bleach.clean(text, tags=[], strip=True)
-        
-        # ✅ Check for SQL injection ONLY if there are actual injection indicators
-        # Don't block legitimate SQL keywords (like in code review or learning questions)
-        for pattern in InputValidator.SQL_INJECTION_PATTERNS:
-            match = re.search(pattern, text, re.IGNORECASE)
-            if match:
-                print(f"⚠️ SQL Injection pattern detected: {pattern}")
-                print(f"   Matched text: {match.group()}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid input detected - potential SQL injection attempt"
-                )
-
-        sanitized_text = text.strip()
-
-        # Cache the result for 1 hour
-        if redis_client:
-            try:
-                redis_client.setex(cache_key, 3600, sanitized_text)
-            except Exception as cache_error:
-                print(f"⚠️ Failed to cache sanitized text: {cache_error}")
-
-        return sanitized_text
-    
-    @staticmethod
-    def split_large_input(text: str, chunk_size: int = 100000) -> list:
-        """
-        Split very large inputs into manageable chunks
-        Useful for processing code files > 100KB
-        """
-        if len(text) <= chunk_size:
-            return [text]
-        
-        chunks = []
-        words = text.split()  # Split by words to avoid cutting mid-word
-        current_chunk = ""
-        
-        for word in words:
-            if len(current_chunk) + len(word) + 1 > chunk_size:
-                if current_chunk:
-                    chunks.append(current_chunk.strip())
-                current_chunk = word
-            else:
-                current_chunk += " " + word if current_chunk else word
-        
-        if current_chunk:
-            chunks.append(current_chunk.strip())
-        
-        return chunks
     
     @staticmethod
     def validate_filename(filename: str) -> str:
@@ -176,7 +228,7 @@ class InputValidator:
         filename = filename[:255]
         
         # Check for executable extensions
-        dangerous_extensions = ['.exe', '.bat', '.cmd', '.sh', '.ps1', '.jar']
+        dangerous_extensions = ['.exe', '.bat', '.cmd', '.sh', '.ps1']
         if any(filename.lower().endswith(ext) for ext in dangerous_extensions):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -200,4 +252,3 @@ class InputValidator:
             )
         
         return session_id
-

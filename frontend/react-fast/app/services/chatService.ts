@@ -1,14 +1,14 @@
 // frontend/react-fast/app/services/chatService.ts
-// REPLACE ENTIRE FILE with image support
+// FIXED VERSION WITH PROPER TYPING
 
-interface ChatSession {
+export interface ChatSession {
   id: string;
   title: string;
   created_at: string;
   updated_at: string;
 }
 
-interface ImageData {
+export interface ImageData {
   url: string;
   type: string;
   width?: number;
@@ -16,18 +16,42 @@ interface ImageData {
   alt_text?: string;
 }
 
-interface ChatMessage {
+// ✅ UPDATED: Added optional github_files field
+export interface ChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
-  images?: ImageData[];  // ✅ NEW: Images field
+  images?: ImageData[];
+  github_files?: Array<{
+    repo: string;
+    path: string;
+    name: string;
+  }>;
+}
+
+// Type for message metadata
+export interface MessageMetadata {
+  github_files?: Array<{
+    repo: string;
+    path: string;
+    name: string;
+  }>;
+  [key: string]: any;
 }
 
 // Type for the fetchWithAuth function
-type FetchWithAuth = (url: string, options?: RequestInit) => Promise<any>;
+export type FetchWithAuth = (url: string, options?: RequestInit) => Promise<any>;
+
+// Streaming callbacks interface
+export interface StreamCallbacks {
+  onToken: (token: string) => void;
+  onComplete: (usage?: any, images?: ImageData[]) => void;
+  onError: (error: string) => void;
+}
 
 export class ChatService {
+  // ✅ PUBLIC: Get user chat sessions
   static async getUserChatSessions(
     userId: string,
     fetchWithAuth: FetchWithAuth
@@ -43,6 +67,7 @@ export class ChatService {
     }
   }
 
+  // ✅ PUBLIC: Get chat messages
   static async getChatMessages(
     sessionId: string,
     fetchWithAuth: FetchWithAuth
@@ -52,17 +77,15 @@ export class ChatService {
         `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${sessionId}/messages`
       );
       
-      // ✅ Ensure images are properly parsed
-      return (messages || []).map((msg: any) => ({
-        ...msg,
-        images: this.parseImages(msg.images)
-      }));
+      // ✅ Use parseMessageData which handles both images and metadata
+      return (messages || []).map((msg: any) => this.parseMessageData(msg));
     } catch (error) {
       console.error('Failed to fetch chat messages:', error);
       return [];
     }
   }
 
+  // ✅ PUBLIC: Delete chat session
   static async deleteChatSession(
     sessionId: string,
     fetchWithAuth: FetchWithAuth
@@ -80,34 +103,39 @@ export class ChatService {
     }
   }
 
+  // ✅ PUBLIC: Create chat session
   static async createChatSession(
     title: string,
     fetchWithAuth: FetchWithAuth
   ): Promise<ChatSession> {
     try {
-      const session = await fetchWithAuth(
+      const response = await fetchWithAuth(
         `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions`,
         {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({ title }),
         }
       );
-      return session;
+      return response;
     } catch (error) {
       console.error('Failed to create chat session:', error);
       throw error;
     }
   }
 
-  // ✅ UPDATED: Save message with optional images
+  // ✅ PUBLIC: Save message with optional images and metadata
   static async saveMessage(
     sessionId: string,
     role: 'user' | 'assistant',
     content: string,
     model: string,
     tokens?: number,
-    images?: ImageData[],  // ✅ NEW: Optional images parameter
-    fetchWithAuth?: FetchWithAuth
+    images?: ImageData[],
+    fetchWithAuth?: FetchWithAuth,
+    metadata?: MessageMetadata
   ): Promise<void> {
     if (!fetchWithAuth) {
       console.error('fetchWithAuth is required but not provided');
@@ -119,12 +147,16 @@ export class ChatService {
         `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${sessionId}/messages`,
         {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({
             role,
             content,
             model,
             tokens,
-            images: images || []  // ✅ Include images in save
+            images: images || [],
+            metadata: metadata || {}
           }),
         }
       );
@@ -134,6 +166,7 @@ export class ChatService {
     }
   }
 
+  // ✅ PUBLIC: Update session title
   static async updateSessionTitle(
     sessionId: string,
     title: string,
@@ -144,6 +177,9 @@ export class ChatService {
         `${import.meta.env.VITE_API_BASE_URL}/api/chat/sessions/${sessionId}`,
         {
           method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json'
+          },
           body: JSON.stringify({ title }),
         }
       );
@@ -153,110 +189,7 @@ export class ChatService {
     }
   }
 
-  // ✅ NEW: Helper to parse images from database
-  private static parseImages(images: any): ImageData[] | undefined {
-    if (!images) return undefined;
-    
-    try {
-      // If it's already an array, return it
-      if (Array.isArray(images)) {
-        return images;
-      }
-      
-      // If it's a string, try to parse it as JSON
-      if (typeof images === 'string') {
-        return JSON.parse(images);
-      }
-      
-      return undefined;
-    } catch (error) {
-      console.error('Failed to parse images:', error);
-      return undefined;
-    }
-  }
-
-  // ✅ NEW: Get session statistics including image count
-  static async getSessionStats(
-    sessionId: string,
-    fetchWithAuth: FetchWithAuth
-  ): Promise<{
-    messageCount: number;
-    imageCount: number;
-    lastActivity: string;
-  } | null> {
-    try {
-      const messages = await this.getChatMessages(sessionId, fetchWithAuth);
-      
-      const imageCount = messages.reduce((count, msg) => {
-        return count + (msg.images?.length || 0);
-      }, 0);
-
-      return {
-        messageCount: messages.length,
-        imageCount,
-        lastActivity: messages.length > 0 
-          ? messages[messages.length - 1].created_at 
-          : new Date().toISOString()
-      };
-    } catch (error) {
-      console.error('Failed to get session stats:', error);
-      return null;
-    }
-  }
-
-  // ✅ NEW: Get all images from a session
-  static async getSessionImages(
-    sessionId: string,
-    fetchWithAuth: FetchWithAuth
-  ): Promise<ImageData[]> {
-    try {
-      const messages = await this.getChatMessages(sessionId, fetchWithAuth);
-      
-      const allImages: ImageData[] = [];
-      messages.forEach(msg => {
-        if (msg.images && msg.images.length > 0) {
-          allImages.push(...msg.images);
-        }
-      });
-
-      return allImages;
-    } catch (error) {
-      console.error('Failed to get session images:', error);
-      return [];
-    }
-  }
-
-  // ✅ NEW: Export chat with images
-  static async exportChatWithImages(
-    sessionId: string,
-    fetchWithAuth: FetchWithAuth
-  ): Promise<string> {
-    try {
-      const messages = await this.getChatMessages(sessionId, fetchWithAuth);
-
-      let exportContent = '# Chat Export\n\n';
-
-      messages.forEach((msg, index) => {
-        exportContent += `## Message ${index + 1} (${msg.role})\n`;
-        exportContent += `${msg.content}\n\n`;
-
-        if (msg.images && msg.images.length > 0) {
-          exportContent += `### Generated Images (${msg.images.length})\n`;
-          msg.images.forEach((img, imgIndex) => {
-            exportContent += `![Image ${imgIndex + 1}](${img.url})\n`;
-          });
-          exportContent += '\n';
-        }
-      });
-
-      return exportContent;
-    } catch (error) {
-      console.error('Failed to export chat:', error);
-      throw error;
-    }
-  }
-
-  // ✅ NEW: Streaming chat method
+  // ✅ PUBLIC: Streaming chat method
   static async streamChat(
     messages: Array<{ role: string; content: string }>,
     model: string,
@@ -367,6 +300,132 @@ export class ChatService {
       console.error('Failed to start streaming chat:', error);
       onError(error instanceof Error ? error.message : 'Failed to start streaming');
       return () => {}; // Return empty cleanup function
+    }
+  }
+
+  // ✅ PUBLIC: Get session statistics including image count
+  static async getSessionStats(
+    sessionId: string,
+    fetchWithAuth: FetchWithAuth
+  ): Promise<{
+    messageCount: number;
+    imageCount: number;
+    lastActivity: string;
+  } | null> {
+    try {
+      const messages = await this.getChatMessages(sessionId, fetchWithAuth);
+      
+      const imageCount = messages.reduce((count, msg) => {
+        return count + (msg.images?.length || 0);
+      }, 0);
+
+      return {
+        messageCount: messages.length,
+        imageCount,
+        lastActivity: messages.length > 0 
+          ? messages[messages.length - 1].created_at 
+          : new Date().toISOString()
+      };
+    } catch (error) {
+      console.error('Failed to get session stats:', error);
+      return null;
+    }
+  }
+
+  // ✅ PUBLIC: Get all images from a session
+  static async getSessionImages(
+    sessionId: string,
+    fetchWithAuth: FetchWithAuth
+  ): Promise<ImageData[]> {
+    try {
+      const messages = await this.getChatMessages(sessionId, fetchWithAuth);
+      
+      const allImages: ImageData[] = [];
+      messages.forEach(msg => {
+        if (msg.images && msg.images.length > 0) {
+          allImages.push(...msg.images);
+        }
+      });
+
+      return allImages;
+    } catch (error) {
+      console.error('Failed to get session images:', error);
+      return [];
+    }
+  }
+
+  // ✅ PUBLIC: Export chat with images
+  static async exportChatWithImages(
+    sessionId: string,
+    fetchWithAuth: FetchWithAuth
+  ): Promise<string> {
+    try {
+      const messages = await this.getChatMessages(sessionId, fetchWithAuth);
+
+      let exportContent = '# Chat Export\n\n';
+
+      messages.forEach((msg, index) => {
+        exportContent += `## Message ${index + 1} (${msg.role})\n`;
+        exportContent += `${msg.content}\n\n`;
+
+        if (msg.images && msg.images.length > 0) {
+          exportContent += `### Generated Images (${msg.images.length})\n`;
+          msg.images.forEach((img, imgIndex) => {
+            exportContent += `![Image ${imgIndex + 1}](${img.url})\n`;
+          });
+          exportContent += '\n';
+        }
+      });
+
+      return exportContent;
+    } catch (error) {
+      console.error('Failed to export chat:', error);
+      throw error;
+    }
+  }
+
+  // ✅ PRIVATE: Helper to parse message data from database
+  private static parseMessageData(message: any): ChatMessage {
+    try {
+      const parsed: ChatMessage = {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        created_at: message.created_at
+      };
+
+      // Parse images
+      if (message.images) {
+        if (Array.isArray(message.images)) {
+          parsed.images = message.images;
+        } else if (typeof message.images === 'string') {
+          parsed.images = JSON.parse(message.images);
+        }
+      }
+
+      // Parse metadata for github_files
+      if (message.metadata) {
+        let metadata: MessageMetadata;
+        if (typeof message.metadata === 'string') {
+          metadata = JSON.parse(message.metadata);
+        } else {
+          metadata = message.metadata;
+        }
+
+        if (metadata.github_files) {
+          parsed.github_files = metadata.github_files;
+        }
+      }
+
+      return parsed;
+    } catch (error) {
+      console.error('Failed to parse message data:', error);
+      return {
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        created_at: message.created_at
+      };
     }
   }
 }
