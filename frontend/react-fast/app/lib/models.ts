@@ -11,13 +11,6 @@ export interface AIModel {
 export const AI_MODELS: AIModel[] = [
   // ==================== FREE TIER ====================
     {
-    id: "x-ai/grok-4.1-fast:free",
-    name: "xAI",
-    provider: "xAI",
-    description: "Grok 4.1 Fast is xAI's best agentic tool calling model that shines in real-world use cases like customer support and deep research. 2M context window.",
-    tier: "free"
-  },
-    {
     id: "openai/gpt-oss-20b:free",
     name: "GPT OSS",
     provider: "OpenAI",
