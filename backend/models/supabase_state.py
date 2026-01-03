@@ -120,7 +120,16 @@ async def get_user_usage(user_id: str) -> UserUsage:
         # Cache the result in Redis for 5 minutes
         if redis_client:
             try:
-                redis_client.setex(cache_key, 300, json.dumps(result.__dict__))
+                # Convert datetime objects to strings for JSON serialization
+                cache_data = result.__dict__.copy()
+                if cache_data.get('last_reset_date'):
+                    cache_data['last_reset_date'] = cache_data['last_reset_date'].isoformat()
+                if cache_data.get('subscription_end_date'):
+                    cache_data['subscription_end_date'] = cache_data['subscription_end_date'].isoformat() if cache_data['subscription_end_date'] else None
+                if cache_data.get('last_payment_date'):
+                    cache_data['last_payment_date'] = cache_data['last_payment_date'].isoformat() if cache_data['last_payment_date'] else None
+                
+                redis_client.setex(cache_key, 300, json.dumps(cache_data))
                 print(f"💾 Cached usage for user: {user_id}")
             except Exception as cache_error:
                 print(f"⚠️ Failed to cache usage: {cache_error}")
