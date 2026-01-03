@@ -1,6 +1,7 @@
 // routes/home.tsx
 import type { Route } from "./+types/home";
-import { Navigate } from "react-router";
+import { useNavigate } from "react-router";
+import { useEffect } from "react";
 
 export function meta({}: Route.MetaArgs) {
   return [
@@ -10,6 +11,11 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export default function Home() {
-  // Always redirect to dashboard regardless of authentication
-  return <Navigate to="/dashboard" />;
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    navigate('/dashboard', { replace: true });
+  }, [navigate]);
+
+  return null;
 }

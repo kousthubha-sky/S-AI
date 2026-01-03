@@ -83,64 +83,36 @@ limiter = Limiter(key_func=get_remote_address, default_limits=["200/hour"])
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-@app.middleware("http")
-async def filter_invalid_requests(request: Request, call_next):
-    """
-    Filter out invalid requests that are causing warnings
-    """
-    # Check if it's a valid HTTP request
-    if not request.headers.get("host"):
-        return JSONResponse(
-            status_code=400,
-            content={"detail": "Invalid HTTP request"}
-        )
-    
-    # Check for common bot/user-agent patterns that cause issues
-    user_agent = request.headers.get("user-agent", "").lower()
-    
-    # # Block common malicious patterns
-    blocked_patterns = [
-         r"python", r"curl", r"wget", r"scanner", r"bot",
-         r"zgrab", r"masscan", r"nmap", r"sqlmap"
-    ]
-    
-    if any(re.search(pattern, user_agent) for pattern in blocked_patterns):
-        return JSONResponse(
-            status_code=403,
-            content={"detail": "Forbidden"}
-        )
-    
-    try:
-        response = await call_next(request)
-        return response
-    except Exception as e:
-        print(f"Request processing error: {e}")
-        return JSONResponse(
-            status_code=500,
-            content={"detail": "Internal server error"}
-        )
-
 # CORS middleware
-ALLOWED_ORIGINS = []
-frontend_url = os.getenv("FRONTEND_URL")
-if frontend_url:
-    ALLOWED_ORIGINS.append(frontend_url)
+environment = os.getenv("ENVIRONMENT", "development").lower()
+print(f"Environment: {environment}")
 
-# Only add localhost in development
-if os.getenv("ENVIRONMENT", "development") == "development":
-    ALLOWED_ORIGINS.extend([
+if environment == "development":
+    ALLOWED_ORIGINS = [
         "http://localhost:5173",
-    ])
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
+    frontend_url = os.getenv("FRONTEND_URL")
+    if frontend_url:
+        ALLOWED_ORIGINS.append(frontend_url)
+else:
+    ALLOWED_ORIGINS = []
+    frontend_url = os.getenv("FRONTEND_URL")
+    if frontend_url:
+        ALLOWED_ORIGINS.append(frontend_url)
+    else:
+        raise ValueError("No CORS origins configured. Set FRONTEND_URL environment variable.")
 
-if not ALLOWED_ORIGINS:
-    raise ValueError("No CORS origins configured. Set FRONTEND_URL environment variable.")
+print(f"Allowed CORS origins: {ALLOWED_ORIGINS}")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,  # ✅ Explicit list
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],  # ✅ Specific methods
-    allow_headers=[  # ✅ Specific headers only
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=[
         "Content-Type",
         "Authorization",
         "Accept",
@@ -150,7 +122,7 @@ app.add_middleware(
         "Cache-Control",
         "X-Requested-With",
     ],
-    max_age=600,  # ✅ Cache preflight for 10 minutes
+    max_age=600,
 )
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

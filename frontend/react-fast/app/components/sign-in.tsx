@@ -1,10 +1,10 @@
 // sign-in.tsx
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth0 } from "@auth0/auth0-react";
-import { Navigate } from "react-router";
+import { useNavigate } from "react-router";
 import { Link } from "react-router";
 import {
   AppleIcon,
@@ -17,10 +17,13 @@ import {
 export function SignInPage() {
   const [email, setEmail] = useState('');
   const { loginWithRedirect, isAuthenticated } = useAuth0();
+  const navigate = useNavigate();
 
-  if (isAuthenticated) {
-    return <Navigate to="/dashboard" />;
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [isAuthenticated, navigate]);
 
   // Handle email authentication (handles both login AND signup)
   const handleEmailAuth = async (e: React.FormEvent) => {

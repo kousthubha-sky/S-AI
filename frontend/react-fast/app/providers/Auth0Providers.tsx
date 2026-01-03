@@ -29,11 +29,9 @@ return (
     authorizationParams={{
       redirect_uri: `${window.location.origin}/callback`,
       audience: import.meta.env.VITE_AUTH0_API_AUDIENCE,
-      scope: 'openid profile email offline_access'
+      scope: 'openid profile email'
     }}
-    cacheLocation="localstorage"         // <-- PERSIST authentication state across refreshes
-    useRefreshTokens={true}
-    useRefreshTokensFallback={false}    // <-- prefer real refresh tokens; fallback off
+    cacheLocation="localstorage"
     onRedirectCallback={onRedirectCallback}
   >
     <AuthInitializer>

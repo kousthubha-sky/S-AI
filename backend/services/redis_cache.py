@@ -21,11 +21,11 @@ class RedisCache:
             )
             # Test connection
             self.redis.ping()
-            print("✅ Redis connected successfully")
+            print("[OK] Redis connected successfully")
             self.enabled = True
         except Exception as e:
-            print(f"⚠️ Redis not available: {e}")
-            print("⚠️ Running without cache")
+            print(f"[WARNING] Redis not available: {e}")
+            print("[WARNING] Running without cache")
             self.enabled = False
             self.redis = None
             self.memory_cache = {}
@@ -200,7 +200,7 @@ class RedisCache:
             return False
     
     async def invalidate_user_tier_cache(self, user_id: str):
-        """✅ CRITICAL: Invalidate subscription tier cache for user"""
+        """[OK] CRITICAL: Invalidate subscription tier cache for user"""
         if not self.enabled:
             return False
         
@@ -216,7 +216,7 @@ class RedisCache:
             for key in cache_keys:
                 self.redis.delete(key)
             
-            print(f"🗑️ Subscription tier cache invalidated for user {user_id}")
+            print(f"[DELETED] Subscription tier cache invalidated for user {user_id}")
             return True
         except Exception as e:
             print(f"Redis invalidate_user_tier_cache error: {e}")
